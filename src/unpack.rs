@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use rattler_package_streaming::fs::{extract_conda, extract_tar_bz2};
+use rattler_package_streaming::fs::extract;
 
 /* ------------------------------------------- UNPACK ------------------------------------------ */
 
 /// Options for unpacking a pixi environment.
+#[derive(Debug)]
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
     pub target_dir: PathBuf,
@@ -16,17 +17,11 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
     std::fs::create_dir_all(&unpack_dir).expect("Could not create unpack directory");
     unarchive(&options.pack_file, &unpack_dir);
 
-    // TODO: Parallelize unpacking.
-    let packages = collect_packages(&unpack_dir).unwrap();
-    let _ = packages.into_iter().map(|package| {
-        let file_extension = package.extension().unwrap();
-        let results = match file_extension.to_str().unwrap() {
-            "bz2" => extract_tar_bz2(package.as_path(), &options.target_dir),
-            "conda" => extract_conda(package.as_path(), &options.target_dir),
-            _ => panic!("Unsupported file extension"),
-        };
-        results
-    });
+    // TODO: Parallelize installation.
+    let packages = collect_packages(&unpack_dir.join("environment")).unwrap();
+    for package in &packages {
+        extract(&package, &options.target_dir)?;
+    }
 
     std::fs::remove_dir_all(unpack_dir).expect("Could not remove unpack directory");
 
@@ -40,12 +35,17 @@ fn collect_packages(channel: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::
     let subdirs = channel.read_dir()?;
     let packages = subdirs
         .into_iter()
+        .filter(|subdir| subdir.as_ref().is_ok_and(|subdir| subdir.path().is_dir()))
         .flat_map(|subdir| {
             let subdir = subdir.unwrap().path();
             let packages = subdir.read_dir().unwrap();
             packages
                 .into_iter()
                 .map(|package| package.unwrap().path())
+                .filter(|package| {
+                    package.extension().unwrap() == "conda"
+                        || package.extension().unwrap() == "tar.bz2"
+                })
                 .collect::<Vec<PathBuf>>()
         })
         .collect();

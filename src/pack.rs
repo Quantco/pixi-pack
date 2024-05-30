@@ -21,6 +21,7 @@ use crate::PixiPackMetadata;
 /* -------------------------------------------- PACK ------------------------------------------- */
 
 /// Options for packing a pixi environment.
+#[derive(Debug)]
 pub struct PackOptions {
     pub environment: String,
     pub platform: Platform,

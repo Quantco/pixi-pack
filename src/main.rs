@@ -4,6 +4,8 @@ use clap::{Parser, Subcommand};
 use rattler_conda_types::Platform;
 
 use pixi_pack::{pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions};
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
@@ -62,6 +64,11 @@ enum Commands {
 /// The main entrypoint for the pixi-pack CLI.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    tracing::subscriber::set_global_default(subscriber)?;
+
+    tracing::info!("Starting pixi-pack CLI");
+
     let cli = Cli::parse();
     let result = match &cli.command {
         Some(Commands::Pack {
@@ -79,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     version: cli.pack_version.clone(),
                 },
             };
+            tracing::info!("Running pack command with options: {:?}", options);
             pack(options).await
         }
         Some(Commands::Unpack { pack_file }) => {
@@ -86,11 +94,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pack_file: pack_file.clone(),
                 target_dir: cli.output_dir.clone(),
             };
+            tracing::info!("Running unpack command with options: {:?}", options);
             unpack(options).await
         }
         None => {
             panic!("No subcommand provided")
         }
     };
+    tracing::info!("Finished running pixi-pack");
     result
 }
