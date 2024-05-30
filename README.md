@@ -1,1 +1,1 @@
-# pixi-pack
+# `pixi-pack` 📦
