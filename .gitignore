@@ -1,0 +1,5 @@
+/target
+
+# pixi environments
+.pixi
+*.egg-info
