@@ -3,16 +3,21 @@ name = "pixi-pack"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-clap = { version = "4.5.4", default-features = false, features = ["derive"] }
-pixi = { git = "https://github.com/prefix-dev/pixi", tag = "v0.23.0" }
-rattler = "0.26.0"
-
 [features]
-default = ["native-tls"]
-native-tls = [
-    "pixi/native-tls",
-]
-rustls-tls = [
-    "pixi/rustls-tls",
-]
+default = ["tokio/rt-multi-thread"]
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+futures = "0.3.30"
+rattler = "0.26.0"
+rattler_conda_types = "0.25.0" # todo needed?
+rattler_index = "0.19.14"
+rattler_lock = "0.22.9"
+rattler_networking = "0.20.8"
+rattler_package_streaming = "0.21.1"
+reqwest = "0.12.4"
+reqwest-middleware = "0.3.1"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_yaml = "0.9.34"
+tokio = "1.37.0"
+tracing = "0.1.40"
