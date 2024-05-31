@@ -8,7 +8,7 @@ use rattler_package_streaming::{fs::extract, ExtractError};
 use rattler_shell::{activation::{ActivationVariables, Activator, PathModificationBehavior}, shell::{Shell, ShellEnum}};
 use url::Url;
 
-use crate::{PixiPackMetadata, DEFAULT_PIXI_PACK_VERSION, TARBALL_DIRECTORY_NAME};
+use crate::{PixiPackMetadata, DEFAULT_PIXI_PACK_VERSION, CHANNEL_DIRECTORY_NAME};
 
 /* ------------------------------------------- UNPACK ------------------------------------------ */
 
@@ -54,7 +54,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
     unarchive(&options.pack_file, &unpack_dir);
 
     // Read pixi-pack.json metadata file
-    let metadata_file = unpack_dir.join(TARBALL_DIRECTORY_NAME).join("pixi-pack.json");
+    let metadata_file = unpack_dir.join("pixi-pack.json");
     let metadata_contents = std::fs::read_to_string(&metadata_file).expect("Could not read metadata file");
     let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
     if metadata.version != DEFAULT_PIXI_PACK_VERSION {
@@ -64,7 +64,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
         panic!("The pack was created for a different platform");
     }
 
-    let channel = unpack_dir.join(TARBALL_DIRECTORY_NAME);
+    let channel = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
     let packages = collect_packages(&channel).unwrap();
 
     // extract packages to cache
@@ -109,10 +109,10 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
         iter.push(result);
     }
     try_join_all(iter).await?;
-    
+
     let history_path = prefix.join("conda-meta").join(HISTORY_FILE);
     std::fs::write(history_path, "// not relevant for pixi but for `conda run -p`").expect("Could not write history file");
-    
+
     tracing::debug!("Cleaning up unpack directory");
     std::fs::remove_dir_all(unpack_dir).expect("Could not remove unpack directory");
 
@@ -237,5 +237,5 @@ fn unarchive(archive_path: &Path, target_dir: &Path) {
     let decoder = zstd::Decoder::new(file).expect("could not instantiate zstd decoder");
     tar::Archive::new(decoder)
         .unpack(target_dir)
-        .expect("could not unpack archive");
+        .expect("could not unpack archive")
 }

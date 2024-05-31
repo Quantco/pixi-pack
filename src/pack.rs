@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+
 use futures::future::try_join_all;
 use indicatif::ProgressStyle;
 use rattler_conda_types::Platform;
@@ -16,7 +17,7 @@ use rattler_networking::{
 };
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::{PixiPackMetadata, TARBALL_DIRECTORY_NAME};
+use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME};
 
 /* -------------------------------------------- PACK ------------------------------------------- */
 
@@ -65,19 +66,23 @@ pub async fn pack(options: PackOptions) -> Result<(), Box<dyn std::error::Error>
     rattler_index::index(download_dir.as_path(), None)?;
 
     // Add pixi-pack.json containing metadata.
-    let metadata_file = File::create(download_dir.join("pixi-pack.json"))?;
+    let metadata_path = temp_dir.join("pixi-pack.json");
+    let metadata_file = File::create(metadata_path.clone())?;
     serde_json::to_writer(metadata_file, &options.metadata)?;
+    // todo: move one layer above
 
     // Pack = archive + compress the contents.
     archive_directory(
         &download_dir,
         File::create(options.output_file)?,
+        &metadata_path,
     );
 
     // Clean up temporary download directory.
     std::fs::remove_dir_all(download_dir).expect("Could not remove temporary directory");
 
     // TODO: copy extra-files (parsed from pixi.toml), different compression algorithms, levels
+    // todo: fail on pypi deps
 
     Ok(())
 }
@@ -147,14 +152,15 @@ async fn download_package(
 /* ------------------------------------- COMPRESS + ARCHIVE ------------------------------------ */
 
 /// Archive a directory into a compressed tarball.
-fn archive_directory(input_dir: &PathBuf, archive_target: File) {
+fn archive_directory(input_dir: &PathBuf, archive_target: File, pixi_pack_metadata_path: &PathBuf) {
     // TODO: Allow different compression algorithms and levels.
     let compressor = zstd::stream::write::Encoder::new(archive_target, 0)
         .expect("could not create zstd encoder");
 
     let mut archive = tar::Builder::new(compressor);
+    archive.append_path_with_name(pixi_pack_metadata_path, "pixi-pack.json").unwrap();
     archive
-        .append_dir_all(TARBALL_DIRECTORY_NAME, input_dir)
+        .append_dir_all(CHANNEL_DIRECTORY_NAME, input_dir)
         .expect("could not append directory to archive");
 
     let compressor = archive.into_inner().expect("could not write this archive");

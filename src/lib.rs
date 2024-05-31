@@ -6,7 +6,7 @@ use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
 pub use unpack::{unpack, UnpackOptions};
 
-const TARBALL_DIRECTORY_NAME: &str = "environment";
+const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
 
 /// The metadata for a "pixi-pack".
