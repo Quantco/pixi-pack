@@ -9,6 +9,8 @@ use tracing_subscriber::layer::SubscriberExt;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
+const DEFAULT_PACK_VERSION: &str = "1";
+
 fn cwd() -> PathBuf {
     std::env::current_dir().unwrap()
 }
@@ -19,18 +21,6 @@ fn cwd() -> PathBuf {
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-
-    /// Working directory (i.e., where the pixi.toml/pixi.lock files are located)
-    #[arg(short, long, default_value = cwd().into_os_string())]
-    working_directory: PathBuf,
-
-    /// Output (pack) or target (unpack) directory
-    #[arg(short, long, default_value = cwd().into_os_string())]
-    output_dir: PathBuf,
-
-    /// The pack format version
-    #[arg(short, long, default_value = "v1")]
-    pack_version: String,
 }
 
 /// The subcommands for the pixi-pack CLI.
@@ -49,12 +39,24 @@ enum Commands {
         /// Authentication file for fetching packages
         #[arg(short, long)] // TODO: Read from environment variable?
         auth_file: Option<PathBuf>,
+
+        /// The path to 'pixi.toml' or 'pyproject.toml'
+        #[arg(short, long, default_value = cwd().join("pixi.toml").into_os_string())]
+        manifest_path: PathBuf,
+
+        /// Output file to write the pack to
+        #[arg(short, long, default_value = cwd().join("environment.tar.zstd").into_os_string())]
+        output_file: PathBuf,
     },
 
     /// Unpack a pixi environment
     Unpack {
-        /// Input file ("pack")
-        #[arg(short, long)]
+        /// Prefix to unpack to
+        #[arg(short, long, default_value = cwd().join("env").into_os_string())]
+        prefix: PathBuf,
+
+        /// Path to the pack file
+        #[arg()]
         pack_file: PathBuf,
     },
 }
@@ -75,24 +77,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             environment,
             platform,
             auth_file,
+            manifest_path,
+            output_file,
         }) => {
             let options = PackOptions {
                 environment: environment.clone(),
                 platform: platform.clone(),
                 auth_file: auth_file.clone(),
-                output_dir: cli.output_dir.clone(),
-                input_dir: cli.working_directory.clone(),
+                output_file: output_file.clone(),
+                manifest_path: manifest_path.clone(),
                 metadata: PixiPackMetadata {
-                    version: cli.pack_version.clone(),
+                    version: DEFAULT_PACK_VERSION.to_string(),
                 },
             };
             tracing::info!("Running pack command with options: {:?}", options);
             pack(options).await
         }
-        Some(Commands::Unpack { pack_file }) => {
+        Some(Commands::Unpack { prefix, pack_file }) => {
             let options = UnpackOptions {
                 pack_file: pack_file.clone(),
-                target_dir: cli.output_dir.clone(),
+                prefix: prefix.clone(),
             };
             tracing::info!("Running unpack command with options: {:?}", options);
             unpack(options).await

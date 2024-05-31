@@ -26,14 +26,14 @@ pub struct PackOptions {
     pub environment: String,
     pub platform: Platform,
     pub auth_file: Option<PathBuf>,
-    pub output_dir: PathBuf,
-    pub input_dir: PathBuf,
+    pub output_file: PathBuf,
+    pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
 }
 
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let lockfile = LockFile::from_path(options.input_dir.join("pixi.lock").as_path()).unwrap();
+    let lockfile = LockFile::from_path(options.manifest_path.parent().unwrap().join("pixi.lock").as_path()).unwrap();
     let client = reqwest_client_from_auth_storage(options.auth_file).unwrap();
     let env = lockfile.environment(&options.environment).unwrap();
     let packages = env.packages(options.platform).unwrap();
@@ -71,7 +71,7 @@ pub async fn pack(options: PackOptions) -> Result<(), Box<dyn std::error::Error>
     // Pack = archive + compress the contents.
     archive_directory(
         &download_dir,
-        File::create(options.output_dir.join("environment.tar.zstd"))?,
+        File::create(options.output_file)?,
     );
 
     // Clean up temporary download directory.

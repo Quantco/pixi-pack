@@ -8,19 +8,19 @@ use rattler_package_streaming::fs::extract;
 #[derive(Debug)]
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
-    pub target_dir: PathBuf,
+    pub prefix: PathBuf,
 }
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let unpack_dir = options.target_dir.join("unpack");
+    let unpack_dir = options.prefix.parent().unwrap().join("unpack");
     std::fs::create_dir_all(&unpack_dir).expect("Could not create unpack directory");
     unarchive(&options.pack_file, &unpack_dir);
 
     // TODO: Parallelize installation.
     let packages = collect_packages(&unpack_dir.join("environment")).unwrap();
     for package in &packages {
-        extract(&package, &options.target_dir)?;
+        extract(&package, &options.prefix)?;
     }
 
     std::fs::remove_dir_all(unpack_dir).expect("Could not remove unpack directory");
@@ -44,7 +44,7 @@ fn collect_packages(channel: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::
                 .map(|package| package.unwrap().path())
                 .filter(|package| {
                     package.extension().unwrap() == "conda"
-                        || package.extension().unwrap() == "tar.bz2"
+                        || package.extension().unwrap() == "bz2"
                 })
                 .collect::<Vec<PathBuf>>()
         })
