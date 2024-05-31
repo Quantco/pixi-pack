@@ -1,9 +1,9 @@
 use core::fmt;
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::Arc};
 
-use futures::future::try_join_all;
-use rattler::{install::{link_package, InstallDriver, InstallOptions}, package_cache::{CacheKey, PackageCache}};
-use rattler_conda_types::{PackageRecord, Platform, PrefixRecord, RepoData, RepoDataRecord};
+use futures::stream::{self, StreamExt};
+use rattler::package_cache::{CacheKey, PackageCache};
+use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
 use rattler_package_streaming::{fs::extract, ExtractError};
 use rattler_shell::{activation::{ActivationVariables, Activator, PathModificationBehavior}, shell::{Shell, ShellEnum}};
 use url::Url;
@@ -70,45 +70,32 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
     // extract packages to cache
     let package_cache = PackageCache::new(cache_dir);
 
-    let mut repodata_records = vec![];
-    for (filename, package_record) in &packages {
+    let installer = rattler::install::Installer::default();
+
+    let prefix = options.output_directory.join("env");
+
+    let iter = packages.into_iter().map(|(filename, pkg_record)| async {
+        let cache_key = CacheKey::from(&pkg_record);
+        let channel = channel.clone();
+
         let repodata_record = RepoDataRecord {
-            package_record: package_record.clone(),
+            package_record: pkg_record.clone(),
             file_name: filename.clone(),
             url: Url::parse("http://nonexistent").unwrap(),
             channel: "local".to_string()
         };
-        repodata_records.push(repodata_record);
-    }
-    let mut iter = vec![];
-    for (filename, pkg_record) in packages {
-        let cache_key = CacheKey::from(&pkg_record);
-        let channel = channel.clone();
-        let result = package_cache.get_or_fetch(cache_key, |destination| async move {
+        
+        package_cache.get_or_fetch(cache_key, move |destination| {
             let package_path = channel.join(pkg_record.subdir).join(filename);
-            extract(&package_path, &destination)?;
-            Ok::<(), UnpackError>(())
-        }, None);
-        iter.push(result);
-    }
-    let extracted_packages = try_join_all(iter).await?;
-    let prefix = options.output_directory.join("env");
+            extract(&package_path, &destination).expect("add error handling");
+            async { Ok::<(), UnpackError>(()) }
+        }, None).await.expect("i will surely add error handling");
 
-    let install_driver = InstallDriver::default();
-    let install_options = InstallOptions::default();
-    let mut iter = vec![];
-    for (package_path, repodata_record) in extracted_packages.iter().zip(repodata_records) {
-        // install packages from cache
-        let result = install_package_to_environment(
-            &prefix,
-            package_path.clone(),
-            repodata_record,
-            &install_driver,
-            &install_options,
-        );
-        iter.push(result);
-    }
-    try_join_all(iter).await?;
+        repodata_record
+    });
+
+    let repodata_records: Vec<_> = stream::iter(iter).buffer_unordered(50).collect().await;
+    let installation_result = installer.with_package_cache(package_cache).install(&prefix, repodata_records).await.expect("do good error handling here");
 
     let history_path = prefix.join("conda-meta").join(HISTORY_FILE);
     std::fs::write(history_path, "// not relevant for pixi but for `conda run -p`").expect("Could not write history file");
@@ -166,68 +153,68 @@ fn collect_packages(channel: &Path) -> Result<HashMap<String, PackageRecord>, Bo
 
 /// Install a package into the environment and write a `conda-meta` file that contains information
 /// about how the file was linked.
-async fn install_package_to_environment(
-    target_prefix: &Path,
-    package_dir: PathBuf,
-    repodata_record: RepoDataRecord,
-    install_driver: &InstallDriver,
-    install_options: &InstallOptions,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Link the contents of the package into our environment. This returns all the paths that were
-    // linked.
-    let paths = link_package(
-        &package_dir,
-        target_prefix,
-        install_driver,
-        install_options.clone(),
-    )
-    .await?;
+// async fn install_package_to_environment(
+//     target_prefix: &Path,
+//     package_dir: PathBuf,
+//     repodata_record: RepoDataRecord,
+//     install_driver: &InstallDriver,
+//     install_options: &InstallOptions,
+// ) -> Result<(), Box<dyn std::error::Error>> {
+//     // Link the contents of the package into our environment. This returns all the paths that were
+//     // linked.
+//     let paths = link_package(
+//         &package_dir,
+//         target_prefix,
+//         install_driver,
+//         install_options.clone(),
+//     )
+//     .await?;
 
-    // Construct a PrefixRecord for the package
-    let prefix_record = PrefixRecord {
-        repodata_record,
-        package_tarball_full_path: None,
-        extracted_package_dir: Some(package_dir),
-        files: paths
-            .iter()
-            .map(|entry| entry.relative_path.clone())
-            .collect(),
-        paths_data: paths.into(),
-        requested_spec: None,
-        link: None,
-    };
+//     // Construct a PrefixRecord for the package
+//     let prefix_record = PrefixRecord {
+//         repodata_record,
+//         package_tarball_full_path: None,
+//         extracted_package_dir: Some(package_dir),
+//         files: paths
+//             .iter()
+//             .map(|entry| entry.relative_path.clone())
+//             .collect(),
+//         paths_data: paths.into(),
+//         requested_spec: None,
+//         link: None,
+//     };
 
-    // Create the conda-meta directory if it doesn't exist yet.
-    let target_prefix = target_prefix.to_path_buf();
-    match tokio::task::spawn_blocking(move || {
-        let conda_meta_path = target_prefix.join("conda-meta");
-        std::fs::create_dir_all(&conda_meta_path)?;
+//     // Create the conda-meta directory if it doesn't exist yet.
+//     let target_prefix = target_prefix.to_path_buf();
+//     match tokio::task::spawn_blocking(move || {
+//         let conda_meta_path = target_prefix.join("conda-meta");
+//         std::fs::create_dir_all(&conda_meta_path)?;
 
-        // Write the conda-meta information
-        let pkg_meta_path = conda_meta_path.join(format!(
-            "{}-{}-{}.json",
-            prefix_record
-                .repodata_record
-                .package_record
-                .name
-                .as_normalized(),
-            prefix_record.repodata_record.package_record.version,
-            prefix_record.repodata_record.package_record.build
-        ));
-        prefix_record.write_to_path(pkg_meta_path, true)
-    })
-    .await
-    {
-        Ok(result) => Ok(result?),
-        Err(err) => {
-            if let Ok(panic) = err.try_into_panic() {
-                std::panic::resume_unwind(panic);
-            }
-            // The operation has been cancelled, so we can also just ignore everything.
-            Ok(())
-        }
-    }
-}
+//         // Write the conda-meta information
+//         let pkg_meta_path = conda_meta_path.join(format!(
+//             "{}-{}-{}.json",
+//             prefix_record
+//                 .repodata_record
+//                 .package_record
+//                 .name
+//                 .as_normalized(),
+//             prefix_record.repodata_record.package_record.version,
+//             prefix_record.repodata_record.package_record.build
+//         ));
+//         prefix_record.write_to_path(pkg_meta_path, true)
+//     })
+//     .await
+//     {
+//         Ok(result) => Ok(result?),
+//         Err(err) => {
+//             if let Ok(panic) = err.try_into_panic() {
+//                 std::panic::resume_unwind(panic);
+//             }
+//             // The operation has been cancelled, so we can also just ignore everything.
+//             Ok(())
+//         }
+//     }
+// }
 
 /* ----------------------------------- UNARCHIVE + DECOMPRESS ---------------------------------- */
 
