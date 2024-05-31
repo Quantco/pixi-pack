@@ -113,3 +113,5 @@ $RECYCLE.BIN/
 *.egg-info
 environment.tar.zstd
 env/
+unpack/
+cache/

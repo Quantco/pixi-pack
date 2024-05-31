@@ -16,7 +16,7 @@ use rattler_networking::{
 };
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::PixiPackMetadata;
+use crate::{PixiPackMetadata, TARBALL_DIRECTORY_NAME};
 
 /* -------------------------------------------- PACK ------------------------------------------- */
 
@@ -154,7 +154,7 @@ fn archive_directory(input_dir: &PathBuf, archive_target: File) {
 
     let mut archive = tar::Builder::new(compressor);
     archive
-        .append_dir_all("environment", input_dir)
+        .append_dir_all(TARBALL_DIRECTORY_NAME, input_dir)
         .expect("could not append directory to archive");
 
     let compressor = archive.into_inner().expect("could not write this archive");

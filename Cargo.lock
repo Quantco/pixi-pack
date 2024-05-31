@@ -2117,6 +2117,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
  "zstd",
 ]
 

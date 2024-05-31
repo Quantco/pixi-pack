@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber)?;
 
-    tracing::info!("Starting pixi-pack CLI");
+    tracing::debug!("Starting pixi-pack CLI");
 
     let cli = Cli::parse();
     let result = match &cli.command {
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     version: DEFAULT_PACK_VERSION.to_string(),
                 },
             };
-            tracing::info!("Running pack command with options: {:?}", options);
+            tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await
         }
         Some(Commands::Unpack { prefix, pack_file }) => {
@@ -98,13 +98,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pack_file: pack_file.clone(),
                 prefix: prefix.clone(),
             };
-            tracing::info!("Running unpack command with options: {:?}", options);
+            tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await
         }
         None => {
             panic!("No subcommand provided")
         }
     };
-    tracing::info!("Finished running pixi-pack");
+    tracing::debug!("Finished running pixi-pack");
     result
 }
