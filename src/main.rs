@@ -3,13 +3,10 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use rattler_conda_types::Platform;
 
-use pixi_pack::{pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions};
-use tracing::level_filters::LevelFilter;
-use tracing_subscriber::layer::SubscriberExt;
+use pixi_pack::{pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION};
+use rattler_shell::shell::ShellEnum;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
-
-const DEFAULT_PACK_VERSION: &str = "1";
 
 fn cwd() -> PathBuf {
     std::env::current_dir().unwrap()
@@ -29,11 +26,11 @@ enum Commands {
     /// Pack a pixi environment
     Pack {
         /// Environment to pack
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "default")]
         environment: String,
 
         /// Platform to pack
-        #[arg(short, long)]
+        #[arg(short, long, default_value = Platform::current().as_str())]
         platform: Platform,
 
         /// Authentication file for fetching packages
@@ -51,13 +48,19 @@ enum Commands {
 
     /// Unpack a pixi environment
     Unpack {
-        /// Prefix to unpack to
-        #[arg(short, long, default_value = cwd().join("env").into_os_string())]
-        prefix: PathBuf,
+        /// Where to unpack the environment.
+        /// The environment will be unpacked into a `env` subdirectory of this path.
+        /// The activation script will be written to the root of this path.
+        #[arg(short, long, default_value = cwd().into_os_string())]
+        output_directory: PathBuf,
 
         /// Path to the pack file
         #[arg()]
         pack_file: PathBuf,
+
+        /// Sets the shell, options: [`bash`, `zsh`, `xonsh`, `cmd`, `powershell`, `fish`, `nushell`]
+        #[arg(short, long)]
+        shell: Option<ShellEnum>
     },
 }
 
@@ -87,16 +90,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 output_file: output_file.clone(),
                 manifest_path: manifest_path.clone(),
                 metadata: PixiPackMetadata {
-                    version: DEFAULT_PACK_VERSION.to_string(),
+                    version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+                    platform: platform.clone(),
                 },
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await
         }
-        Some(Commands::Unpack { prefix, pack_file }) => {
+        Some(Commands::Unpack { output_directory, pack_file, shell }) => {
             let options = UnpackOptions {
                 pack_file: pack_file.clone(),
-                prefix: prefix.clone(),
+                output_directory: output_directory.clone(),
+                shell: shell.clone()
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await

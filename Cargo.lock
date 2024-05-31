@@ -2108,6 +2108,7 @@ dependencies = [
  "rattler_lock",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_shell",
  "reqwest 0.12.4",
  "reqwest-middleware",
  "serde",

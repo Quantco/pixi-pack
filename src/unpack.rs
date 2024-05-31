@@ -3,11 +3,12 @@ use std::{collections::HashMap, path::{Path, PathBuf}, sync::Arc};
 
 use futures::future::try_join_all;
 use rattler::{install::{link_package, InstallDriver, InstallOptions}, package_cache::{CacheKey, PackageCache}};
-use rattler_conda_types::{PackageRecord, PrefixRecord, RepoData, RepoDataRecord};
+use rattler_conda_types::{PackageRecord, Platform, PrefixRecord, RepoData, RepoDataRecord};
 use rattler_package_streaming::{fs::extract, ExtractError};
+use rattler_shell::{activation::{ActivationVariables, Activator, PathModificationBehavior}, shell::{Shell, ShellEnum}};
 use url::Url;
 
-use crate::TARBALL_DIRECTORY_NAME;
+use crate::{PixiPackMetadata, DEFAULT_PIXI_PACK_VERSION, TARBALL_DIRECTORY_NAME};
 
 /* ------------------------------------------- UNPACK ------------------------------------------ */
 
@@ -15,7 +16,8 @@ use crate::TARBALL_DIRECTORY_NAME;
 #[derive(Debug)]
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
-    pub prefix: PathBuf,
+    pub output_directory: PathBuf,
+    pub shell: Option<ShellEnum>,
 }
 
 const CACHE_DIR: &str = "cache";
@@ -45,11 +47,22 @@ impl From<ExtractError> for UnpackError {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let unpack_dir = Arc::from(options.prefix.parent().unwrap().join("unpack"));
+    let unpack_dir = Arc::from(options.output_directory.join("unpack"));
     std::fs::create_dir_all(&unpack_dir).expect("Could not create unpack directory");
     let cache_dir = Path::new(CACHE_DIR);
     std::fs::create_dir_all(&cache_dir).expect("Could not create cache directory");
     unarchive(&options.pack_file, &unpack_dir);
+
+    // Read pixi-pack.json metadata file
+    let metadata_file = unpack_dir.join(TARBALL_DIRECTORY_NAME).join("pixi-pack.json");
+    let metadata_contents = std::fs::read_to_string(&metadata_file).expect("Could not read metadata file");
+    let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
+    if metadata.version != DEFAULT_PIXI_PACK_VERSION {
+        panic!("Unsupported pixi-pack version: {}", metadata.version);
+    }
+    if metadata.platform != Platform::current() {
+        panic!("The pack was created for a different platform");
+    }
 
     let channel = unpack_dir.join(TARBALL_DIRECTORY_NAME);
     let packages = collect_packages(&channel).unwrap();
@@ -79,6 +92,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
         iter.push(result);
     }
     let extracted_packages = try_join_all(iter).await?;
+    let prefix = options.output_directory.join("env");
 
     let install_driver = InstallDriver::default();
     let install_options = InstallOptions::default();
@@ -86,7 +100,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
     for (package_path, repodata_record) in extracted_packages.iter().zip(repodata_records) {
         // install packages from cache
         let result = install_package_to_environment(
-            &options.prefix,
+            &prefix,
             package_path.clone(),
             repodata_record,
             &install_driver,
@@ -96,9 +110,35 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
     }
     try_join_all(iter).await?;
     
-    let history_path = options.prefix.join("conda-meta").join(HISTORY_FILE);
+    let history_path = prefix.join("conda-meta").join(HISTORY_FILE);
     std::fs::write(history_path, "// not relevant for pixi but for `conda run -p`").expect("Could not write history file");
-    // std::fs::remove_dir_all(unpack_dir).expect("Could not remove unpack directory");
+    
+    tracing::debug!("Cleaning up unpack directory");
+    std::fs::remove_dir_all(unpack_dir).expect("Could not remove unpack directory");
+
+    let shell = match options.shell {
+        Some(shell) => shell,
+        None => ShellEnum::default(),
+    };
+    let file_extension = shell.extension();
+    let activate_path = options.output_directory.join(format!("activate.{}", file_extension));
+    let activator = Activator::from_path(prefix.as_path(), shell, Platform::current())?;
+    
+    let path = std::env::var("PATH")
+    .ok()
+    .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
+
+    // If we are in a conda environment, we need to deactivate it before activating the host / build prefix
+    let conda_prefix = std::env::var("CONDA_PREFIX").ok().map(|p| p.into());
+    let result = activator
+        .activation(ActivationVariables {
+            conda_prefix,
+            path,
+            path_modification_behavior: PathModificationBehavior::default(),
+        })?;
+
+    let contents = result.script.contents()?;
+    std::fs::write(activate_path, contents).unwrap();
 
     Ok(())
 }

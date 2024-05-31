@@ -115,3 +115,4 @@ environment.tar.zstd
 env/
 unpack/
 cache/
+activate.*
