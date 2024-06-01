@@ -1,92 +1,30 @@
-use core::fmt;
-use derive_more::From;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
-use tempdir::TempDir;
+use std::path::{Path, PathBuf};
 
-use futures::stream::{self, StreamExt};
-use rattler::package_cache::{CacheKey, PackageCache};
+use anyhow::{anyhow, Result};
+use async_compression::tokio::bufread::ZstdDecoder;
+use futures::{
+    stream::{self, StreamExt},
+    TryFutureExt, TryStreamExt,
+};
+use fxhash::FxHashMap;
+use rattler::{
+    install::Installer,
+    package_cache::{CacheKey, PackageCache},
+};
 use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
-use rattler_package_streaming::{fs::extract, ExtractError};
+use rattler_package_streaming::fs::extract;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell::{Shell, ShellEnum},
 };
+use tokio::fs;
+use tokio_stream::wrappers::ReadDirStream;
+use tokio_tar::Archive;
 use url::Url;
 
-use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION};
-
-/* ------------------------------------------- TYPE ALIASES -------------------------------------- */
-pub type Result<T> = std::result::Result<T, UnpackError>;
-
-#[derive(Debug, From)]
-pub enum UnpackError {
-    UnsupportedPlatform(Platform),
-    UnsupportedPixiPackVersion(String),
-    #[from]
-    ExtractError(ExtractError),
-    #[from]
-    Io(std::io::Error),
-    InvalidPixiPackMetadata(serde_json::Error),
-    #[from]
-    InstallerError(rattler::install::InstallerError),
-    #[from]
-    Activation(rattler_shell::activation::ActivationError),
-    ActivationContents(std::fmt::Error),
-}
-impl fmt::Display for UnpackError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UnpackError::UnsupportedPlatform(platform) => {
-                write!(
-                    f,
-                    "The pack was created for an unsupported platform: {}",
-                    platform
-                )
-            }
-            UnpackError::UnsupportedPixiPackVersion(version) => {
-                write!(
-                    f,
-                    "Unsupported pack version `{}`. Please upgrade pixi-pack.",
-                    version
-                )
-            }
-            UnpackError::ExtractError(e) => {
-                write!(f, "An error occurred while extracting the package: {}", e)
-            }
-            UnpackError::Io(e) => write!(f, "An I/O error occurred: {}", e),
-            UnpackError::InvalidPixiPackMetadata(e) => {
-                write!(
-                    f,
-                    "An error occurred while parsing the pixi-pack metadata: {}",
-                    e
-                )
-            }
-            UnpackError::InstallerError(e) => {
-                write!(f, "An error occurred during installation: {}", e)
-            }
-            UnpackError::Activation(e) => {
-                write!(
-                    f,
-                    "An error occurred while creating the activation script: {}",
-                    e
-                )
-            }
-            UnpackError::ActivationContents(e) => {
-                write!(
-                    f,
-                    "An error occurred while writing the activation script: {}",
-                    e
-                )
-            }
-        }
-    }
-}
-impl std::error::Error for UnpackError {}
-
-/* ------------------------------------------- UNPACK ------------------------------------------ */
+use crate::{
+    PixiPackMetadata, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+};
 
 /// Options for unpacking a pixi environment.
 #[derive(Debug)]
@@ -96,146 +34,214 @@ pub struct UnpackOptions {
     pub shell: Option<ShellEnum>,
 }
 
-const CACHE_DIR: &str = "cache";
-const ENV_DIR: &str = "env";
-
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
-    // unarchive the pack file
-    let unpack_dir = TempDir::new("pixi-pack-unpack")?.into_path();
-    let cache_dir = Path::new(CACHE_DIR);
-    std::fs::create_dir_all(cache_dir)?;
-    tracing::debug!(
-        "Unpacking {} to {}",
-        options.pack_file.display(),
-        unpack_dir.display()
-    );
-    unarchive(&options.pack_file, &unpack_dir)?;
+    // TODO: Dont use static dir here but a temp dir
+    let unpack_dir = tempfile::tempdir()
+        .map_err(|e| anyhow!("Could not create temporary directory: {}", e))?
+        .into_path();
 
-    // Read pixi-pack.json metadata file
-    let metadata_file = unpack_dir.join("pixi-pack.json");
-    let metadata_contents = std::fs::read_to_string(&metadata_file)?;
-    let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)
-        .map_err(UnpackError::InvalidPixiPackMetadata)?;
-    if metadata.version != DEFAULT_PIXI_PACK_VERSION {
-        return Err(UnpackError::UnsupportedPixiPackVersion(metadata.version));
-    }
-    if metadata.platform != Platform::current() {
-        return Err(UnpackError::UnsupportedPlatform(metadata.platform));
-    }
+    let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
 
-    // collect packages from pack
-    let channel = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
-    let packages = collect_packages(&channel)?;
+    unarchive(&options.pack_file, &unpack_dir)
+        .await
+        .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
 
-    // extract packages to cache
-    let package_cache = PackageCache::new(cache_dir);
-    let iter = packages.into_iter().map(|(filename, pkg_record)| async {
-        let cache_key = CacheKey::from(&pkg_record);
-        let channel = channel.clone();
+    validate_metadata_file(&unpack_dir).await?;
 
-        let repodata_record = RepoDataRecord {
-            package_record: pkg_record.clone(),
-            file_name: filename.clone(),
-            url: Url::parse("http://nonexistent").unwrap(),
-            channel: "local".to_string(),
-        };
+    let target_prefix = options.output_directory.join("env");
 
-        package_cache
-            .get_or_fetch(
-                cache_key,
-                move |destination| {
-                    let package_path = channel.join(pkg_record.subdir).join(filename);
-                    extract(&package_path, &destination).expect("TODO error handling");
-                    async { Ok::<(), UnpackError>(()) }
-                },
-                None,
-            )
-            .await
-            .expect("HOW TO ERROR HANDLING?");
-        repodata_record
-    });
-    let repodata_records = stream::iter(iter)
-        .buffer_unordered(50)
-        .collect::<Vec<_>>()
-        .await;
+    create_prefix(&channel_directory, &target_prefix)
+        .await
+        .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
 
-    let installer = rattler::install::Installer::default();
-    let prefix = options.output_directory.join(ENV_DIR);
-    // This uses the side-effect that the package cache is populated from before with all our packages.
-    // Thus, no need to fetch anything from the internet here.
-    installer
-        .with_package_cache(package_cache)
-        .install(&prefix, repodata_records)
-        .await?;
+    create_activation_script(
+        &options.output_directory,
+        &target_prefix,
+        options.shell.unwrap_or_default(),
+    )
+    .await
+    .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
 
-    let history_path = prefix.join("conda-meta").join("history");
-    std::fs::write(
-        history_path,
-        "// not relevant for pixi but for `conda run -p`",
-    )?;
-
-    tracing::debug!("Cleaning up unpack directory {}", unpack_dir.display());
-    std::fs::remove_dir_all(unpack_dir)?;
-
-    tracing::debug!("Creating activation script");
-    let shell = match options.shell {
-        Some(shell) => shell,
-        None => ShellEnum::default(),
-    };
-    let file_extension = shell.extension();
-    let activate_path = options
-        .output_directory
-        .join(format!("activate.{}", file_extension));
-    let activator = Activator::from_path(prefix.as_path(), shell, Platform::current())?;
-
-    let path = std::env::var("PATH")
-        .ok()
-        .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
-
-    // If we are in a conda environment, we need to deactivate it before activating the host / build prefix
-    let conda_prefix = std::env::var("CONDA_PREFIX").ok().map(|p| p.into());
-    let result = activator.activation(ActivationVariables {
-        conda_prefix,
-        path,
-        path_modification_behavior: PathModificationBehavior::default(),
-    })?;
-
-    let contents = result
-        .script
-        .contents()
-        .map_err(UnpackError::ActivationContents)?;
-    std::fs::write(activate_path, contents)?;
     Ok(())
 }
 
-/* -------------------------------------- INSTALL PACKAGES ------------------------------------- */
+async fn collect_packages_in_subdir(subdir: PathBuf) -> Result<FxHashMap<String, PackageRecord>> {
+    let repodata = subdir.join("repodata.json");
+
+    let raw_repodata_json = fs::read_to_string(repodata)
+        .await
+        .map_err(|e| anyhow!("could not read repodata in subdir: {}", e))?;
+
+    let repodata: RepoData = serde_json::from_str(&raw_repodata_json).map_err(|e| {
+        anyhow!(
+            "could not parse repodata in subdir {}: {}",
+            subdir.display(),
+            e
+        )
+    })?;
+
+    let mut conda_packages = repodata.conda_packages;
+    let packages = repodata.packages;
+    conda_packages.extend(packages);
+    Ok(conda_packages)
+}
+
+async fn validate_metadata_file(unpack_dir: &Path) -> Result<()> {
+    let metadata_file = unpack_dir.join(PIXI_PACK_METADATA_PATH);
+
+    let metadata_contents = fs::read_to_string(&metadata_file)
+        .await
+        .map_err(|e| anyhow!("Could not read metadata file: {}", e))?;
+
+    let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
+
+    if metadata.version != DEFAULT_PIXI_PACK_VERSION {
+        anyhow::bail!("Unsupported pixi-pack version: {}", metadata.version);
+    }
+    if metadata.platform != Platform::current() {
+        anyhow::bail!("The pack was created for a different platform");
+    }
+
+    Ok(())
+}
 
 /// Collect all packages in a directory.
-fn collect_packages(channel: &Path) -> Result<HashMap<String, PackageRecord>> {
-    let subdirs = channel.read_dir()?;
-    let packages = subdirs
-        .into_iter()
-        .map(|subdir| subdir.expect("todo error handling"))
-        .filter(|subdir| subdir.path().is_dir())
-        .flat_map(|subdir| {
-            let repodata = subdir.path().join("repodata.json");
-            let repodata = RepoData::from_path(repodata).expect("TODO error handling");
-            let mut conda_packages = repodata.conda_packages;
-            let packages = repodata.packages;
-            conda_packages.extend(packages);
-            conda_packages
+async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, PackageRecord>> {
+    let subdirs = fs::read_dir(channel_dir)
+        .await
+        .map_err(|e| anyhow!("could not read channel directory: {}", e))?;
+
+    let stream = ReadDirStream::new(subdirs);
+
+    let packages = stream
+        .try_filter_map(|entry| async move {
+            let path = entry.path();
+
+            if path.is_dir() {
+                Ok(Some(path))
+            } else {
+                Ok(None) // Ignore non-directory entries
+            }
         })
-        .collect::<HashMap<_, _>>();
+        .map_ok(collect_packages_in_subdir)
+        .map_err(|e| anyhow!("could not read channel directory: {}", e))
+        .try_buffer_unordered(10)
+        .try_concat()
+        .await?;
+
     Ok(packages)
 }
 
-/* ----------------------------------- UNARCHIVE + DECOMPRESS ---------------------------------- */
-
 /// Unarchive a compressed tarball.
-fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
-    let file = std::fs::File::open(archive_path)?;
-    let decoder = zstd::Decoder::new(file)?;
-    tar::Archive::new(decoder).unpack(target_dir)?;
+async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+    let file = fs::File::open(archive_path)
+        .await
+        .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
+
+    let reader = tokio::io::BufReader::new(file);
+
+    let decocder = ZstdDecoder::new(reader);
+
+    let mut archive = Archive::new(decocder);
+
+    archive
+        .unpack(target_dir)
+        .await
+        .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
+
+    Ok(())
+}
+
+async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
+    let packages = collect_packages(channel_dir)
+        .await
+        .map_err(|e| anyhow!("could not collect packages: {}", e))?;
+
+    let cache_dir = tempfile::tempdir()
+        .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
+        .into_path();
+
+    // extract packages to cache
+    let package_cache = PackageCache::new(cache_dir);
+
+    let installer = Installer::default();
+
+    let repodata_records: Vec<RepoDataRecord> = stream::iter(packages)
+        .map(|(file_name, package_record)| {
+            let cache_key = CacheKey::from(&package_record);
+
+            let package_path = channel_dir.join(&package_record.subdir).join(&file_name);
+
+            let url = Url::parse(&format!("file:///{}", file_name)).unwrap();
+
+            let repodata_record = RepoDataRecord {
+                package_record,
+                file_name,
+                url,
+                channel: "local".to_string(),
+            };
+
+            async {
+                // We have to prepare the package cache by inserting all packages into it.
+                // We can only do so by calling `get_or_fetch` on each package, which will
+                // use the provided closure to fetch the package and insert it into the cache.
+                package_cache
+                    .get_or_fetch(
+                        cache_key,
+                        |destination| async move {
+                            extract(&package_path, &destination).map(|_| ())
+                        },
+                        None,
+                    )
+                    .await
+                    .map_err(|e| anyhow!("could not extract package: {}", e))?;
+
+                Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
+            }
+        })
+        .buffer_unordered(50)
+        .try_collect()
+        .await?;
+
+    // Invariant: all packages are in the cache
+    installer
+        .with_package_cache(package_cache)
+        .install(&target_prefix, repodata_records)
+        .await
+        .map_err(|e| anyhow!("could not install packages: {}", e))?;
+
+    let history_path = target_prefix.join("conda-meta").join("history");
+
+    fs::write(
+        history_path,
+        "// not relevant for pixi but for `conda run -p`",
+    )
+    .map_err(|e| anyhow!("Could not write history file: {}", e))
+    .await?;
+
+    Ok(())
+}
+
+async fn create_activation_script(
+    destination: &Path,
+    prefix: &Path,
+    shell: ShellEnum,
+) -> Result<()> {
+    let file_extension = shell.extension();
+    let activate_path = destination.join(format!("activate.{}", file_extension));
+    let activator = Activator::from_path(prefix, shell, Platform::current())?;
+
+    let result = activator.activation(ActivationVariables {
+        conda_prefix: None,
+        path: None,
+        path_modification_behavior: PathModificationBehavior::Prepend,
+    })?;
+
+    let contents = result.script.contents()?;
+    fs::write(activate_path, contents)
+        .await
+        .map_err(|e| anyhow!("Could not write activate script: {}", e))?;
+
     Ok(())
 }

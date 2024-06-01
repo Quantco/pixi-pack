@@ -112,6 +112,8 @@ $RECYCLE.BIN/
 .pixi
 *.egg-info
 environment.tar.zstd
+environment.tar
+environment
 env/
 unpack/
 cache/

@@ -1,92 +1,28 @@
-use core::fmt;
 use std::{
-    fs::{create_dir_all, File},
-    io::copy,
-    path::{self, PathBuf},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
-use derive_more::From;
+use tokio::{
+    fs::{self, create_dir_all, File},
+    io::AsyncWriteExt,
+};
 
-use futures::future::try_join_all;
+use anyhow::Result;
+use async_compression::{tokio::write::ZstdEncoder, Level};
+use futures::{
+    stream::{self},
+    StreamExt, TryStreamExt,
+};
 use indicatif::ProgressStyle;
 use rattler_conda_types::Platform;
 use rattler_lock::{LockFile, Package};
-use rattler_networking::{
-    authentication_storage::{self, backends::file::FileStorageError},
-    AuthenticationMiddleware, AuthenticationStorage,
-};
+use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
-use tempdir::TempDir;
-use url::Url;
+use tokio_tar::Builder;
 
-use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME};
-
-pub type Result<T> = std::result::Result<T, PackError>;
-
-#[derive(Debug, From)]
-pub enum PackError {
-    #[from]
-    ParseCondaLockError(rattler_lock::ParseCondaLockError),
-    EnvironmentNotAvailable(String),
-    PlatformNotAvailable(Platform),
-    IncorrectCondaPackageUrl(Url),
-    IncorrectManifestPath,
-    #[from]
-    AuthStoreError(FileStorageError),
-    #[from]
-    Io(std::io::Error),
-    PixiMetadataSerialization(serde_json::Error),
-    CreateClient(reqwest::Error),
-    SendRequestError(reqwest_middleware::Error),
-    CollectRequestError(reqwest::Error),
-}
-impl fmt::Display for PackError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PackError::ParseCondaLockError(e) => write!(
-                f,
-                "An error occurred while parsing the pixi.lock file: {}",
-                e
-            ),
-            PackError::IncorrectCondaPackageUrl(url) => {
-                write!(f, "Incorrect conda package URL: {}", url)
-            }
-            PackError::EnvironmentNotAvailable(env) => {
-                write!(f, "The environment {} is not available", env)
-            }
-            PackError::PlatformNotAvailable(platform) => {
-                write!(f, "The platform {} is not available", platform)
-            }
-            PackError::IncorrectManifestPath => write!(f, "The manifest path is incorrect"),
-            PackError::AuthStoreError(e) => write!(
-                f,
-                "An error occurred while getting the authentication storage: {}",
-                e
-            ),
-            PackError::Io(e) => write!(f, "An I/O error occurred: {}", e),
-            PackError::PixiMetadataSerialization(e) => write!(
-                f,
-                "An error occurred while serializing pixi-pack.json: {}",
-                e
-            ),
-            PackError::CreateClient(e) => {
-                write!(f, "An error occurred while creating the client: {}", e)
-            }
-            PackError::SendRequestError(e) => {
-                write!(f, "An error occurred while sending the request: {}", e)
-            }
-            PackError::CollectRequestError(e) => write!(
-                f,
-                "An error occurred while collecting the data for the request: {}",
-                e
-            ),
-        }
-    }
-}
-impl std::error::Error for PackError {}
-
-/* -------------------------------------------- PACK ------------------------------------------- */
+use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH};
+use anyhow::anyhow;
 
 /// Options for packing a pixi environment.
 #[derive(Debug)]
@@ -97,25 +33,37 @@ pub struct PackOptions {
     pub output_file: PathBuf,
     pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
+    pub level: Option<Level>,
 }
 
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<()> {
-    let lockfile = LockFile::from_path(
-        options
-            .manifest_path
-            .parent()
-            .ok_or(PackError::IncorrectManifestPath)?
-            .join("pixi.lock")
-            .as_path(),
-    )?;
-    let client = reqwest_client_from_auth_storage(options.auth_file)?;
-    let env = lockfile
-        .environment(&options.environment)
-        .ok_or(PackError::EnvironmentNotAvailable(options.environment))?;
-    let packages = env
-        .packages(options.platform)
-        .ok_or(PackError::PlatformNotAvailable(options.platform))?;
+    let lockfile_path = options
+        .manifest_path
+        .parent()
+        .ok_or(anyhow!("could not get parent directory"))?
+        .join("pixi.lock");
+
+    let lockfile = LockFile::from_path(&lockfile_path).map_err(|e| {
+        anyhow!(
+            "could not read lockfile at {}: {}",
+            lockfile_path.display(),
+            e
+        )
+    })?;
+
+    let client = reqwest_client_from_auth_storage(options.auth_file)
+        .map_err(|e| anyhow!("could not create reqwest client from auth storage: {e}"))?;
+
+    let env = lockfile.environment(&options.environment).ok_or(anyhow!(
+        "environment not found in lockfile: {}",
+        options.environment
+    ))?;
+
+    let packages = env.packages(options.platform).ok_or(anyhow!(
+        "platform not found in lockfile: {}",
+        options.platform.as_str()
+    ))?;
 
     // Download packages to temporary directory.
     tracing::info!("Downloading {} packages", packages.len());
@@ -124,56 +72,54 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         ProgressStyle::with_template(
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
         )
-        .unwrap()
+        .expect("could not set progress style")
         .progress_chars("##-"),
     );
-    let download_dir = TempDir::new("pixi-pack-download")?.into_path();
-    try_join_all(packages.into_iter().map(|package| {
-        download_package(
-            client.clone(),
-            package,
-            download_dir.clone(),
-            Some(|| bar.inc(1)),
-        )
-    }))
-    .await?;
+
+    let output_folder =
+        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
+
+    let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
+
+    stream::iter(packages)
+        .map(Ok)
+        .try_for_each_concurrent(50, |package| async {
+            download_package(&client, package, &channel_dir).await?;
+
+            bar.inc(1);
+
+            Ok(())
+        })
+        .await
+        .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;
+
     bar.finish();
 
     // Create `repodata.json` files.
-    rattler_index::index(download_dir.as_path(), None)?;
+    rattler_index::index(&channel_dir, None)?;
 
     // Add pixi-pack.json containing metadata.
-    let metadata_path = download_dir.join("pixi-pack.json");
-    let metadata_file = File::create(metadata_path.clone())?;
-    serde_json::to_writer(metadata_file, &options.metadata)
-        .map_err(PackError::PixiMetadataSerialization)?;
+    let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
+    let mut metadata_file = File::create(&metadata_path).await?;
+
+    let metadata = serde_json::to_string_pretty(&options.metadata)?;
+    metadata_file.write_all(metadata.as_bytes()).await?;
 
     // Pack = archive + compress the contents.
-    archive_directory(
-        &download_dir,
-        File::create(options.output_file)?,
-        &metadata_path,
-    )?;
+    archive_directory(output_folder.path(), &options.output_file, options.level)
+        .await
+        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
-    // Clean up temporary download directory.
-    std::fs::remove_dir_all(download_dir)?;
+    // TODO: copy extra-files (parsed from pixi.toml), different compression algorithms, levels
+    // todo: fail on pypi deps
 
-    // TODO: different compression algorithms, levels
     Ok(())
 }
-
-/* -------------------------------------- PACKAGE DOWNLOAD ------------------------------------- */
 
 /// Get the authentication storage from the given auth file path.
 fn get_auth_store(auth_file: Option<PathBuf>) -> Result<AuthenticationStorage> {
     match auth_file {
-        Some(auth_file) => {
-            let mut store = AuthenticationStorage::new();
-            store.add_backend(Arc::from(
-                authentication_storage::backends::file::FileStorage::new(auth_file)?,
-            ));
-            Ok(store)
-        }
+        Some(auth_file) => Ok(AuthenticationStorage::from_file(&auth_file)?),
         None => Ok(rattler_networking::AuthenticationStorage::default()),
     }
 }
@@ -190,7 +136,7 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
             .user_agent("pixi-pack")
             .timeout(std::time::Duration::from_secs(timeout))
             .build()
-            .map_err(PackError::CreateClient)?,
+            .map_err(|e| anyhow!("could not create download client: {}", e))?,
     )
     .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
     .build();
@@ -199,70 +145,69 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
 
 /// Download a conda package to a given output directory.
 async fn download_package(
-    client: ClientWithMiddleware,
+    client: &ClientWithMiddleware,
     package: Package,
-    output_dir: PathBuf,
-    cb: Option<impl Fn()>,
+    output_dir: &Path,
 ) -> Result<()> {
-    let conda_package = match package {
-        Package::Conda(package) => package,
-        Package::Pypi(package) => {
-            let package_name = &package.data().package.name;
-            tracing::warn!("Skipping pypi package: {:?}", package_name);
-            return Ok(());
-        }
-    };
+    let conda_package = package
+        .as_conda()
+        .ok_or(anyhow!("package is not a conda package"))?; // TODO: we might want to skip here
 
-    let output_dir = path::Path::new(&output_dir).join(&conda_package.package_record().subdir);
-    create_dir_all(&output_dir)?;
-    let conda_package_url = conda_package.url();
-    let file_name = output_dir.join(
-        conda_package_url
-            .path_segments()
-            .ok_or(PackError::IncorrectCondaPackageUrl(
-                conda_package_url.clone(),
-            ))?
-            .last()
-            .ok_or(PackError::IncorrectCondaPackageUrl(
-                conda_package_url.clone(),
-            ))?,
-    );
-    let mut dest = File::create(file_name)?;
+    let output_dir = output_dir.join(&conda_package.package_record().subdir);
+    create_dir_all(&output_dir)
+        .await
+        .map_err(|e| anyhow!("could not create download directory: {}", e))?;
+
+    let file_name = conda_package
+        .file_name()
+        .ok_or(anyhow!("could not get file name"))?;
+    let mut dest = File::create(output_dir.join(file_name)).await?;
 
     tracing::debug!("Fetching package {}", conda_package.url());
-    let response = client
-        .get(conda_package.url().to_string())
-        .send()
-        .await
-        .map_err(PackError::SendRequestError)?;
-    let content = response
-        .bytes()
-        .await
-        .map_err(PackError::CollectRequestError)?;
+    let mut response = client.get(conda_package.url().to_string()).send().await?;
 
-    copy(&mut content.as_ref(), &mut dest)?;
-    if let Some(callback) = cb {
-        callback();
+    while let Some(chunk) = response.chunk().await? {
+        dest.write_all(&chunk).await?;
     }
 
     Ok(())
 }
 
-/* ------------------------------------- COMPRESS + ARCHIVE ------------------------------------ */
-
 /// Archive a directory into a compressed tarball.
-fn archive_directory(
-    input_dir: &PathBuf,
-    archive_target: File,
-    pixi_pack_metadata_path: &PathBuf,
-) -> std::io::Result<File> {
-    // TODO: Allow different compression algorithms and levels.
-    let compressor = zstd::stream::write::Encoder::new(archive_target, 0)?;
+async fn archive_directory(
+    input_dir: &Path,
+    archive_target: &Path,
+    level: Option<Level>,
+) -> Result<()> {
+    let outfile = fs::File::create(archive_target).await.map_err(|e| {
+        anyhow!(
+            "could not create archive file at {}: {}",
+            archive_target.display(),
+            e
+        )
+    })?;
 
-    let mut archive = tar::Builder::new(compressor);
-    archive.append_path_with_name(pixi_pack_metadata_path, "pixi-pack.json")?;
-    archive.append_dir_all(CHANNEL_DIRECTORY_NAME, input_dir)?;
+    let writer = tokio::io::BufWriter::new(outfile);
 
-    let compressor = archive.into_inner()?;
-    compressor.finish()
+    let level = level.unwrap_or(Level::Default);
+    let compressor = ZstdEncoder::with_quality(writer, level);
+
+    let mut archive = Builder::new(compressor);
+
+    archive
+        .append_dir_all(".", input_dir)
+        .await
+        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+
+    let mut compressor = archive
+        .into_inner()
+        .await
+        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
+
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    Ok(())
 }
