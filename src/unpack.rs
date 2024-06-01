@@ -1,9 +1,9 @@
 use core::fmt;
+use derive_more::From;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-
 use tempdir::TempDir;
 
 use futures::stream::{self, StreamExt};
@@ -18,6 +18,66 @@ use url::Url;
 
 use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION};
 
+/* ------------------------------------------- TYPE ALIASES -------------------------------------- */
+pub type Result<T> = std::result::Result<T, UnpackError>;
+
+#[derive(Debug, From)]
+pub enum UnpackError {
+    UnsupportedPlatform(Platform),
+    UnsupportedPixiPackVersion(String),
+    #[from]
+    ExtractError(ExtractError),
+    #[from]
+    Io(std::io::Error),
+    InvalidPixiPackMetadata(serde_json::Error),
+    #[from]
+    InstallerError(rattler::install::InstallerError),
+    #[from]
+    Activation(rattler_shell::activation::ActivationError),
+    ActivationContents(std::fmt::Error),
+}
+impl fmt::Display for UnpackError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnpackError::UnsupportedPlatform(platform) => {
+                write!(f, "The pack was created for an unsupported platform: {}", platform)
+            }
+            UnpackError::UnsupportedPixiPackVersion(version) => {
+                write!(f, "Unsupported pack version `{}`. Please upgrade pixi-pack.", version)
+            }
+            UnpackError::ExtractError(e) => {
+                write!(f, "An error occurred while extracting the package: {}", e)
+            }
+            UnpackError::Io(e) => write!(f, "An I/O error occurred: {}", e),
+            UnpackError::InvalidPixiPackMetadata(e) => {
+                write!(
+                    f,
+                    "An error occurred while parsing the pixi-pack metadata: {}",
+                    e
+                )
+            }
+            UnpackError::InstallerError(e) => {
+                write!(f, "An error occurred during installation: {}", e)
+            }
+            UnpackError::Activation(e) => {
+                write!(
+                    f,
+                    "An error occurred while creating the activation script: {}",
+                    e
+                )
+            }
+            UnpackError::ActivationContents(e) => {
+                write!(
+                    f,
+                    "An error occurred while writing the activation script: {}",
+                    e
+                )
+            }
+        }
+    }
+}
+impl std::error::Error for UnpackError {}
+
 /* ------------------------------------------- UNPACK ------------------------------------------ */
 
 /// Options for unpacking a pixi environment.
@@ -31,35 +91,10 @@ pub struct UnpackOptions {
 const CACHE_DIR: &str = "cache";
 const ENV_DIR: &str = "env";
 
-#[derive(Debug)]
-enum UnpackError {
-    ExtractError(ExtractError),
-}
-
-impl fmt::Display for UnpackError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UnpackError::ExtractError(e) => {
-                write!(f, "An error occurred while extracting the package: {}", e)
-            }
-        }
-    }
-}
-
-impl std::error::Error for UnpackError {}
-
-impl From<ExtractError> for UnpackError {
-    fn from(e: ExtractError) -> Self {
-        UnpackError::ExtractError(e)
-    }
-}
-
 /// Unpack a pixi environment.
-pub async fn unpack(options: UnpackOptions) -> crate::Result<()> {
+pub async fn unpack(options: UnpackOptions) -> Result<()> {
     // unarchive the pack file
-    let unpack_dir = TempDir::new("pixi-pack-unpack")
-        .expect("Could not create temporary unpack directory")
-        .into_path();
+    let unpack_dir = TempDir::new("pixi-pack-unpack")?.into_path();
     let cache_dir = Path::new(CACHE_DIR);
     std::fs::create_dir_all(cache_dir)?;
     tracing::debug!(
@@ -72,12 +107,13 @@ pub async fn unpack(options: UnpackOptions) -> crate::Result<()> {
     // Read pixi-pack.json metadata file
     let metadata_file = unpack_dir.join("pixi-pack.json");
     let metadata_contents = std::fs::read_to_string(&metadata_file)?;
-    let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
+    let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)
+        .map_err(|e| UnpackError::InvalidPixiPackMetadata(e))?;
     if metadata.version != DEFAULT_PIXI_PACK_VERSION {
-        panic!("Unsupported pixi-pack version: {}", metadata.version);
+        return Err(UnpackError::UnsupportedPixiPackVersion(metadata.version));
     }
     if metadata.platform != Platform::current() {
-        panic!("The pack was created for a different platform");
+        return Err(UnpackError::UnsupportedPlatform(metadata.platform));
     }
 
     // collect packages from pack
@@ -102,29 +138,22 @@ pub async fn unpack(options: UnpackOptions) -> crate::Result<()> {
                 cache_key,
                 move |destination| {
                     let package_path = channel.join(pkg_record.subdir).join(filename);
-                    extract(&package_path, &destination).expect(
-                        format!(
-                            "Could not extract package {} to {}",
-                            package_path.display(),
-                            destination.display()
-                        )
-                        .as_str(),
-                    );
+                    extract(&package_path, &destination).expect("TODO error handling");
                     async { Ok::<(), UnpackError>(()) }
                 },
                 None,
             )
             .await
-            .unwrap(); // error was already handled in extract part
+            .expect("HOW TO ERROR HANDLING?");
         repodata_record
     });
-
-    let installer = rattler::install::Installer::default();
-    let prefix = options.output_directory.join(ENV_DIR);
     let repodata_records = stream::iter(iter)
         .buffer_unordered(50)
         .collect::<Vec<_>>()
         .await;
+
+    let installer = rattler::install::Installer::default();
+    let prefix = options.output_directory.join(ENV_DIR);
     // This uses the side-effect that the package cache is populated from before with all our packages.
     // Thus, no need to fetch anything from the internet here.
     installer
@@ -164,7 +193,10 @@ pub async fn unpack(options: UnpackOptions) -> crate::Result<()> {
         path_modification_behavior: PathModificationBehavior::default(),
     })?;
 
-    let contents = result.script.contents()?;
+    let contents = result
+        .script
+        .contents()
+        .map_err(|e| UnpackError::ActivationContents(e))?;
     std::fs::write(activate_path, contents)?;
     Ok(())
 }
@@ -172,7 +204,7 @@ pub async fn unpack(options: UnpackOptions) -> crate::Result<()> {
 /* -------------------------------------- INSTALL PACKAGES ------------------------------------- */
 
 /// Collect all packages in a directory.
-fn collect_packages(channel: &Path) -> crate::Result<HashMap<String, PackageRecord>> {
+fn collect_packages(channel: &Path) -> Result<HashMap<String, PackageRecord>> {
     let subdirs = channel.read_dir()?;
     let packages = subdirs
         .into_iter()
@@ -193,9 +225,9 @@ fn collect_packages(channel: &Path) -> crate::Result<HashMap<String, PackageReco
 /* ----------------------------------- UNARCHIVE + DECOMPRESS ---------------------------------- */
 
 /// Unarchive a compressed tarball.
-fn unarchive(archive_path: &Path, target_dir: &Path) -> crate::Result<()> {
+fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     let file = std::fs::File::open(archive_path)?;
-    let decoder = zstd::Decoder::new(file).expect("Could not instantiate zstd decoder");
+    let decoder = zstd::Decoder::new(file)?;
     tar::Archive::new(decoder).unpack(target_dir)?;
     Ok(())
 }

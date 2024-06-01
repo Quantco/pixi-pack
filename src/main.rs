@@ -1,17 +1,37 @@
+use core::fmt;
+use derive_more::From;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use rattler_conda_types::Platform;
 
 use pixi_pack::{
-    pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
+    pack, unpack, PackError, PackOptions, PixiPackMetadata, UnpackError, UnpackOptions,
+    DEFAULT_PIXI_PACK_VERSION,
 };
 use rattler_shell::shell::ShellEnum;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
 fn cwd() -> PathBuf {
-    std::env::current_dir().unwrap()
+    std::env::current_dir().expect("todo: error handling")
+}
+
+#[derive(Debug, From)]
+pub enum PixiPackError {
+    NoSubcommandProvided,
+    UnpackError(UnpackError),
+    PackError(PackError),
+}
+impl std::error::Error for PixiPackError {}
+impl fmt::Display for PixiPackError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PixiPackError::UnpackError(e) => e.fmt(f),
+            PixiPackError::PackError(e) => e.fmt(f),
+            PixiPackError::NoSubcommandProvided => write!(f, "No subcommand provided"),
+        }
+    }
 }
 
 /// The pixi-pack CLI.
@@ -70,14 +90,14 @@ enum Commands {
 
 /// The main entrypoint for the pixi-pack CLI.
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber)?;
+    tracing::subscriber::set_global_default(subscriber).expect("TODO: error handling");
 
     tracing::debug!("Starting pixi-pack CLI");
 
     let cli = Cli::parse();
-    let result = match &cli.command {
+    let result: Result<(), PixiPackError> = match &cli.command {
         Some(Commands::Pack {
             environment,
             platform,
@@ -97,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             };
             tracing::debug!("Running pack command with options: {:?}", options);
-            pack(options).await
+            pack(options).await.map_err(|e| e.into())
         }
         Some(Commands::Unpack {
             output_directory,
@@ -110,12 +130,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 shell: shell.clone(),
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
-            unpack(options).await
+            unpack(options).await.map_err(|e| e.into())
         }
         None => {
-            panic!("No subcommand provided")
+            Err(PixiPackError::NoSubcommandProvided)
         }
     };
     tracing::debug!("Finished running pixi-pack");
-    result
+    if let Err(e) = result {
+        tracing::error!("{}", e);
+        std::process::exit(1);
+    }
 }

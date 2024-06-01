@@ -9,6 +9,7 @@ default = ["tokio/rt-multi-thread"]
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive", "string"] }
+derive_more = "0.99.17"
 futures = "0.3.30"
 indicatif = "0.17.8"
 rattler = "0.26.0"
