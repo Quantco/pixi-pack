@@ -40,10 +40,18 @@ impl fmt::Display for UnpackError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnpackError::UnsupportedPlatform(platform) => {
-                write!(f, "The pack was created for an unsupported platform: {}", platform)
+                write!(
+                    f,
+                    "The pack was created for an unsupported platform: {}",
+                    platform
+                )
             }
             UnpackError::UnsupportedPixiPackVersion(version) => {
-                write!(f, "Unsupported pack version `{}`. Please upgrade pixi-pack.", version)
+                write!(
+                    f,
+                    "Unsupported pack version `{}`. Please upgrade pixi-pack.",
+                    version
+                )
             }
             UnpackError::ExtractError(e) => {
                 write!(f, "An error occurred while extracting the package: {}", e)
@@ -108,7 +116,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let metadata_file = unpack_dir.join("pixi-pack.json");
     let metadata_contents = std::fs::read_to_string(&metadata_file)?;
     let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)
-        .map_err(|e| UnpackError::InvalidPixiPackMetadata(e))?;
+        .map_err(UnpackError::InvalidPixiPackMetadata)?;
     if metadata.version != DEFAULT_PIXI_PACK_VERSION {
         return Err(UnpackError::UnsupportedPixiPackVersion(metadata.version));
     }
@@ -196,7 +204,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let contents = result
         .script
         .contents()
-        .map_err(|e| UnpackError::ActivationContents(e))?;
+        .map_err(UnpackError::ActivationContents)?;
     std::fs::write(activate_path, contents)?;
     Ok(())
 }

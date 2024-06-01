@@ -1,6 +1,5 @@
 use core::fmt;
 use std::{
-    env,
     fs::{create_dir_all, File},
     io::copy,
     path::{self, PathBuf},
@@ -18,6 +17,7 @@ use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage,
 };
 use reqwest_middleware::ClientWithMiddleware;
+use tempdir::TempDir;
 use url::Url;
 
 use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME};
@@ -127,8 +127,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .unwrap()
         .progress_chars("##-"),
     );
-    let temp_dir = env::temp_dir();
-    let download_dir = temp_dir.join("pixi-pack-tmp");
+    let download_dir = TempDir::new("pixi-pack-download")?.into_path();
     try_join_all(packages.into_iter().map(|package| {
         download_package(
             client.clone(),
@@ -144,10 +143,10 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     rattler_index::index(download_dir.as_path(), None)?;
 
     // Add pixi-pack.json containing metadata.
-    let metadata_path = temp_dir.join("pixi-pack.json");
+    let metadata_path = download_dir.join("pixi-pack.json");
     let metadata_file = File::create(metadata_path.clone())?;
     serde_json::to_writer(metadata_file, &options.metadata)
-        .map_err(|e| PackError::PixiMetadataSerialization(e))?;
+        .map_err(PackError::PixiMetadataSerialization)?;
 
     // Pack = archive + compress the contents.
     archive_directory(
@@ -191,7 +190,7 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
             .user_agent("pixi-pack")
             .timeout(std::time::Duration::from_secs(timeout))
             .build()
-            .map_err(|e| PackError::CreateClient(e))?,
+            .map_err(PackError::CreateClient)?,
     )
     .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
     .build();
@@ -235,11 +234,11 @@ async fn download_package(
         .get(conda_package.url().to_string())
         .send()
         .await
-        .map_err(|e| PackError::SendRequestError(e))?;
+        .map_err(PackError::SendRequestError)?;
     let content = response
         .bytes()
         .await
-        .map_err(|e| PackError::CollectRequestError(e))?;
+        .map_err(PackError::CollectRequestError)?;
 
     copy(&mut content.as_ref(), &mut dest)?;
     if let Some(callback) = cb {
@@ -265,5 +264,5 @@ fn archive_directory(
     archive.append_dir_all(CHANNEL_DIRECTORY_NAME, input_dir)?;
 
     let compressor = archive.into_inner()?;
-    compressor.finish().map_err(|e| e.into())
+    compressor.finish()
 }

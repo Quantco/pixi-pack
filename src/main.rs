@@ -56,7 +56,7 @@ enum Commands {
         platform: Platform,
 
         /// Authentication file for fetching packages
-        #[arg(short, long)] // TODO: Read from environment variable?
+        #[arg(short, long)]
         auth_file: Option<PathBuf>,
 
         /// The path to 'pixi.toml' or 'pyproject.toml'
@@ -132,9 +132,7 @@ async fn main() {
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await.map_err(|e| e.into())
         }
-        None => {
-            Err(PixiPackError::NoSubcommandProvided)
-        }
+        None => Err(PixiPackError::NoSubcommandProvided),
     };
     tracing::debug!("Finished running pixi-pack");
     if let Err(e) = result {
