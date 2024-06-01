@@ -38,15 +38,19 @@ pub struct PackOptions {
 
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<()> {
-    let lockfile = LockFile::from_path(
-        options
-            .manifest_path
-            .parent()
-            .ok_or(anyhow!("could not get parent directory"))?
-            .join("pixi.lock")
-            .as_path(),
-    )
-    .map_err(|e| anyhow!("could not read lockfile: {e}"))?;
+    let lockfile_path = options
+        .manifest_path
+        .parent()
+        .ok_or(anyhow!("could not get parent directory"))?
+        .join("pixi.lock");
+
+    let lockfile = LockFile::from_path(&lockfile_path).map_err(|e| {
+        anyhow!(
+            "could not read lockfile at {}: {}",
+            lockfile_path.display(),
+            e
+        )
+    })?;
 
     let client = reqwest_client_from_auth_storage(options.auth_file)
         .map_err(|e| anyhow!("could not create reqwest client from auth storage: {e}"))?;
@@ -102,21 +106,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     metadata_file.write_all(metadata.as_bytes()).await?;
 
     // Pack = archive + compress the contents.
-    archive_directory(
-        output_folder.path(),
-        &options.output_file,
-        options.level,
-    )
-    .await
-    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    archive_directory(output_folder.path(), &options.output_file, options.level)
+        .await
+        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
     // TODO: copy extra-files (parsed from pixi.toml), different compression algorithms, levels
     // todo: fail on pypi deps
 
-    // TODO: different compression algorithms, levels
     Ok(())
 }
-
 
 /// Get the authentication storage from the given auth file path.
 fn get_auth_store(auth_file: Option<PathBuf>) -> Result<AuthenticationStorage> {
@@ -196,7 +194,8 @@ async fn archive_directory(
 
     let mut archive = Builder::new(compressor);
 
-    archive.append_dir_all(".", input_dir)
+    archive
+        .append_dir_all(".", input_dir)
         .await
         .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
 
@@ -205,7 +204,10 @@ async fn archive_directory(
         .await
         .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
 
-    compressor.shutdown().await.map_err(|e| anyhow!("could not flush output: {}", e))?;
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
 
     Ok(())
 }
