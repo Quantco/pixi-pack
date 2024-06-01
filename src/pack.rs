@@ -3,10 +3,8 @@ use std::{
     sync::Arc,
 };
 
-use tokio::{
-    fs::{create_dir_all, File},
-    io::AsyncWriteExt,
-};
+use tempfile::NamedTempFile;
+use tokio::{fs::create_dir_all, fs::File, io::AsyncWriteExt};
 
 use anyhow::Result;
 use async_compression::{tokio::write::ZstdEncoder, Level};
@@ -21,7 +19,7 @@ use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
 
-use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME};
+use crate::{PixiPackMetadata, PIXI_PACK_METADATA_PATH, PKGS_DIR};
 use anyhow::anyhow;
 
 /* -------------------------------------------- PACK ------------------------------------------- */
@@ -74,14 +72,16 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .progress_chars("##-"),
     );
 
-    let temp_dir =
+    let output_pack_path =
         tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
-    let download_dir = temp_dir.path().join("pixi-pack-tmp");
+    let pkg_download_dir = output_pack_path.path();
+
+    create_dir_all(&pkg_download_dir).await?;
 
     stream::iter(packages)
         .map(Ok)
         .try_for_each_concurrent(50, |package| async {
-            download_package(&client, package, &download_dir).await?;
+            download_package(&client, package, pkg_download_dir).await?;
 
             bar.inc(1);
 
@@ -92,21 +92,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     bar.finish();
 
-    // Create `repodata.json` files.
-    rattler_index::index(download_dir.as_path(), None)?;
-
     // Add pixi-pack.json containing metadata.
-    let metadata_path = temp_dir.path().join("pixi-pack.json");
-    let mut metadata_file = File::create(&metadata_path).await?;
-
-    let metadata = serde_json::to_string_pretty(&options.metadata)?;
-    metadata_file.write_all(metadata.as_bytes()).await?;
+    let mut metadata_file = NamedTempFile::new()?;
+    serde_json::to_writer(&mut metadata_file, &options.metadata)?;
 
     // Pack = archive + compress the contents.
     archive_directory(
-        &download_dir,
+        output_pack_path.path(),
         File::create(options.output_file).await?,
-        &metadata_path,
+        metadata_file.path(),
         options.level,
     )
     .await
@@ -156,11 +150,6 @@ async fn download_package(
         .as_conda()
         .ok_or(anyhow!("package is not a conda package"))?;
 
-    let output_dir = output_dir.join(&conda_package.package_record().subdir);
-    create_dir_all(&output_dir)
-        .await
-        .map_err(|e| anyhow!("could not create download directory: {}", e))?;
-
     let file_name = conda_package
         .file_name()
         .ok_or(anyhow!("could not get file name"))?;
@@ -180,9 +169,9 @@ async fn download_package(
 
 /// Archive a directory into a compressed tarball.
 async fn archive_directory(
-    input_dir: &PathBuf,
+    package_dir: &Path,
     archive_target: File,
-    pixi_pack_metadata_path: &PathBuf,
+    pixi_pack_metadata_path: &Path,
     level: Option<Level>,
 ) -> Result<()> {
     let writer = tokio::io::BufWriter::new(archive_target);
@@ -193,12 +182,12 @@ async fn archive_directory(
     let mut archive = Builder::new(compressor);
 
     archive
-        .append_path_with_name(pixi_pack_metadata_path, "pixi-pack.json")
+        .append_path_with_name(pixi_pack_metadata_path, PIXI_PACK_METADATA_PATH)
         .await
         .map_err(|e| anyhow!("could not append metadata file to archive: {}", e))?;
 
     archive
-        .append_dir_all(CHANNEL_DIRECTORY_NAME, input_dir)
+        .append_dir_all(PKGS_DIR, package_dir)
         .await
         .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
 
@@ -207,7 +196,10 @@ async fn archive_directory(
         .await
         .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
 
-    compressor.shutdown().await.map_err(|e| anyhow!("could not flush output: {}", e))?;
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
 
     Ok(())
 }

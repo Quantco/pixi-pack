@@ -1,11 +1,15 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 
-use pixi_pack::{pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION};
-use rattler_shell::shell::ShellEnum;
 use anyhow::Result;
+use pixi_pack::{
+    pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
+};
+use rattler_shell::shell::ShellEnum;
+use tracing_log::AsTrace;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
@@ -19,6 +23,9 @@ fn cwd() -> PathBuf {
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    #[command(flatten)]
+    verbose: Verbosity,
 }
 
 /// The subcommands for the pixi-pack CLI.
@@ -61,7 +68,7 @@ enum Commands {
 
         /// Sets the shell, options: [`bash`, `zsh`, `xonsh`, `cmd`, `powershell`, `fish`, `nushell`]
         #[arg(short, long)]
-        shell: Option<ShellEnum>
+        shell: ShellEnum,
     },
 }
 
@@ -70,12 +77,15 @@ enum Commands {
 /// The main entrypoint for the pixi-pack CLI.
 #[tokio::main]
 async fn main() -> Result<()> {
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber)?;
+    let cli = Cli::parse();
+
+    tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(cli.verbose.log_level_filter().as_trace())
+        .init();
+
 
     tracing::debug!("Starting pixi-pack CLI");
 
-    let cli = Cli::parse();
     let result = match cli.command {
         Commands::Pack {
             environment,
@@ -99,11 +109,15 @@ async fn main() -> Result<()> {
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await
         }
-        Commands::Unpack { output_directory, pack_file, shell } => {
+        Commands::Unpack {
+            output_directory,
+            pack_file,
+            shell,
+        } => {
             let options = UnpackOptions {
                 pack_file,
                 output_directory,
-                shell
+                shell,
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await
