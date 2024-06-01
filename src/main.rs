@@ -14,7 +14,7 @@ use tracing_log::AsTrace;
 /* -------------------------------------------- CLI -------------------------------------------- */
 
 fn cwd() -> PathBuf {
-    std::env::current_dir().unwrap()
+    std::env::current_dir().expect("todo: error handling")
 }
 
 /// The pixi-pack CLI.
@@ -86,7 +86,7 @@ async fn main() -> Result<()> {
 
     tracing::debug!("Starting pixi-pack CLI");
 
-    let result = match cli.command {
+    match cli.command {
         Commands::Pack {
             environment,
             platform,
@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
                 level: None,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
-            pack(options).await
+            pack(options).await?
         }
         Commands::Unpack {
             output_directory,
@@ -120,9 +120,10 @@ async fn main() -> Result<()> {
                 shell,
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
-            unpack(options).await
+            unpack(options).await?
         }
     };
     tracing::debug!("Finished running pixi-pack");
-    result
+
+    Ok(())
 }

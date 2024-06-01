@@ -109,6 +109,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // TODO: copy extra-files (parsed from pixi.toml), different compression algorithms, levels
     // todo: fail on pypi deps
 
+    // TODO: different compression algorithms, levels
     Ok(())
 }
 
@@ -127,17 +128,18 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
     let auth_storage = get_auth_store(auth_file)?;
 
     let timeout = 5 * 60;
-    Ok(reqwest_middleware::ClientBuilder::new(
+    let client = reqwest_middleware::ClientBuilder::new(
         reqwest::Client::builder()
             .no_gzip()
             .pool_max_idle_per_host(20)
             .user_agent("pixi-pack")
             .timeout(std::time::Duration::from_secs(timeout))
             .build()
-            .expect("failed to create client"),
+            .map_err(|e| anyhow!("could not create download client: {}", e))?,
     )
     .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
-    .build())
+    .build();
+    Ok(client)
 }
 
 /// Download a conda package to a given output directory.
@@ -148,7 +150,7 @@ async fn download_package(
 ) -> Result<()> {
     let conda_package = package
         .as_conda()
-        .ok_or(anyhow!("package is not a conda package"))?;
+        .ok_or(anyhow!("package is not a conda package"))?; // TODO: we might want to skip here
 
     let file_name = conda_package
         .file_name()
