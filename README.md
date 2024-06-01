@@ -98,9 +98,9 @@ You can then install the environment using `conda` or `micromamba`:
 
 ```bash
 unzstd -c environment.tar.zstd | tar -xf -
-micromamba create -p ./env --file environment.yml --override-channels -c file://$(pwd)/channel
+micromamba create -p ./env --file environment.yml --override-channels -c "file://$(pwd)/channel"
 # or
-conda create -p ./env --file environment.yml --override-channels -c file://$(pwd)/channel
+conda create -p ./env --file environment.yml --override-channels -c "file://$(pwd)/channel"
 ```
 
 > [!NOTE]
