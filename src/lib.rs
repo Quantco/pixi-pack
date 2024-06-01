@@ -6,6 +6,9 @@ use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
 pub use unpack::{unpack, UnpackOptions};
 
+pub type Result<T> = std::result::Result<T, Error>;
+pub type Error = Box<dyn std::error::Error>;
+
 const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
 

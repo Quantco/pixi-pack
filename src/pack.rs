@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-
 use futures::future::try_join_all;
 use indicatif::ProgressStyle;
 use rattler_conda_types::Platform;
@@ -34,7 +33,15 @@ pub struct PackOptions {
 
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let lockfile = LockFile::from_path(options.manifest_path.parent().unwrap().join("pixi.lock").as_path()).unwrap();
+    let lockfile = LockFile::from_path(
+        options
+            .manifest_path
+            .parent()
+            .unwrap()
+            .join("pixi.lock")
+            .as_path(),
+    )
+    .unwrap();
     let client = reqwest_client_from_auth_storage(options.auth_file).unwrap();
     let env = lockfile.environment(&options.environment).unwrap();
     let packages = env.packages(options.platform).unwrap();
@@ -128,7 +135,7 @@ async fn download_package(
     client: ClientWithMiddleware,
     package: Package,
     output_dir: PathBuf,
-    cb: Option<impl Fn() -> ()>,
+    cb: Option<impl Fn()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let conda_package = package.as_conda().unwrap();
 
@@ -158,7 +165,9 @@ fn archive_directory(input_dir: &PathBuf, archive_target: File, pixi_pack_metada
         .expect("could not create zstd encoder");
 
     let mut archive = tar::Builder::new(compressor);
-    archive.append_path_with_name(pixi_pack_metadata_path, "pixi-pack.json").unwrap();
+    archive
+        .append_path_with_name(pixi_pack_metadata_path, "pixi-pack.json")
+        .unwrap();
     archive
         .append_dir_all(CHANNEL_DIRECTORY_NAME, input_dir)
         .expect("could not append directory to archive");

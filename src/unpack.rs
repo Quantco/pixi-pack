@@ -1,14 +1,22 @@
 use core::fmt;
-use std::{collections::HashMap, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
+
+use tempdir::TempDir;
 
 use futures::stream::{self, StreamExt};
 use rattler::package_cache::{CacheKey, PackageCache};
 use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
 use rattler_package_streaming::{fs::extract, ExtractError};
-use rattler_shell::{activation::{ActivationVariables, Activator, PathModificationBehavior}, shell::{Shell, ShellEnum}};
+use rattler_shell::{
+    activation::{ActivationVariables, Activator, PathModificationBehavior},
+    shell::{Shell, ShellEnum},
+};
 use url::Url;
 
-use crate::{PixiPackMetadata, DEFAULT_PIXI_PACK_VERSION, CHANNEL_DIRECTORY_NAME};
+use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION};
 
 /* ------------------------------------------- UNPACK ------------------------------------------ */
 
@@ -21,22 +29,24 @@ pub struct UnpackOptions {
 }
 
 const CACHE_DIR: &str = "cache";
-const HISTORY_FILE: &str = "history";
+const ENV_DIR: &str = "env";
 
 #[derive(Debug)]
-enum UnpackError { 
+enum UnpackError {
     ExtractError(ExtractError),
 }
 
 impl fmt::Display for UnpackError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UnpackError::ExtractError(e) => write!(f, "An error occurred while extracting the package: {}", e),
+            UnpackError::ExtractError(e) => {
+                write!(f, "An error occurred while extracting the package: {}", e)
+            }
         }
     }
 }
 
-impl std::error::Error for UnpackError { }
+impl std::error::Error for UnpackError {}
 
 impl From<ExtractError> for UnpackError {
     fn from(e: ExtractError) -> Self {
@@ -44,18 +54,24 @@ impl From<ExtractError> for UnpackError {
     }
 }
 
-
 /// Unpack a pixi environment.
-pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let unpack_dir = Arc::from(options.output_directory.join("unpack"));
-    std::fs::create_dir_all(&unpack_dir).expect("Could not create unpack directory");
+pub async fn unpack(options: UnpackOptions) -> crate::Result<()> {
+    // unarchive the pack file
+    let unpack_dir = TempDir::new("pixi-pack-unpack")
+        .expect("Could not create temporary unpack directory")
+        .into_path();
     let cache_dir = Path::new(CACHE_DIR);
-    std::fs::create_dir_all(&cache_dir).expect("Could not create cache directory");
-    unarchive(&options.pack_file, &unpack_dir);
+    std::fs::create_dir_all(cache_dir)?;
+    tracing::debug!(
+        "Unpacking {} to {}",
+        options.pack_file.display(),
+        unpack_dir.display()
+    );
+    unarchive(&options.pack_file, &unpack_dir)?;
 
     // Read pixi-pack.json metadata file
     let metadata_file = unpack_dir.join("pixi-pack.json");
-    let metadata_contents = std::fs::read_to_string(&metadata_file).expect("Could not read metadata file");
+    let metadata_contents = std::fs::read_to_string(&metadata_file)?;
     let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
     if metadata.version != DEFAULT_PIXI_PACK_VERSION {
         panic!("Unsupported pixi-pack version: {}", metadata.version);
@@ -64,16 +80,12 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
         panic!("The pack was created for a different platform");
     }
 
+    // collect packages from pack
     let channel = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
-    let packages = collect_packages(&channel).unwrap();
+    let packages = collect_packages(&channel)?;
 
     // extract packages to cache
     let package_cache = PackageCache::new(cache_dir);
-
-    let installer = rattler::install::Installer::default();
-
-    let prefix = options.output_directory.join("env");
-
     let iter = packages.into_iter().map(|(filename, pkg_record)| async {
         let cache_key = CacheKey::from(&pkg_record);
         let channel = channel.clone();
@@ -82,147 +94,108 @@ pub async fn unpack(options: UnpackOptions) -> Result<(), Box<dyn std::error::Er
             package_record: pkg_record.clone(),
             file_name: filename.clone(),
             url: Url::parse("http://nonexistent").unwrap(),
-            channel: "local".to_string()
+            channel: "local".to_string(),
         };
-        
-        package_cache.get_or_fetch(cache_key, move |destination| {
-            let package_path = channel.join(pkg_record.subdir).join(filename);
-            extract(&package_path, &destination).expect("add error handling");
-            async { Ok::<(), UnpackError>(()) }
-        }, None).await.expect("i will surely add error handling");
 
+        package_cache
+            .get_or_fetch(
+                cache_key,
+                move |destination| {
+                    let package_path = channel.join(pkg_record.subdir).join(filename);
+                    extract(&package_path, &destination).expect(
+                        format!(
+                            "Could not extract package {} to {}",
+                            package_path.display(),
+                            destination.display()
+                        )
+                        .as_str(),
+                    );
+                    async { Ok::<(), UnpackError>(()) }
+                },
+                None,
+            )
+            .await
+            .unwrap(); // error was already handled in extract part
         repodata_record
     });
 
-    let repodata_records: Vec<_> = stream::iter(iter).buffer_unordered(50).collect().await;
-    let installation_result = installer.with_package_cache(package_cache).install(&prefix, repodata_records).await.expect("do good error handling here");
+    let installer = rattler::install::Installer::default();
+    let prefix = options.output_directory.join(ENV_DIR);
+    let repodata_records = stream::iter(iter)
+        .buffer_unordered(50)
+        .collect::<Vec<_>>()
+        .await;
+    // This uses the side-effect that the package cache is populated from before with all our packages.
+    // Thus, no need to fetch anything from the internet here.
+    installer
+        .with_package_cache(package_cache)
+        .install(&prefix, repodata_records)
+        .await?;
 
-    let history_path = prefix.join("conda-meta").join(HISTORY_FILE);
-    std::fs::write(history_path, "// not relevant for pixi but for `conda run -p`").expect("Could not write history file");
+    let history_path = prefix.join("conda-meta").join("history");
+    std::fs::write(
+        history_path,
+        "// not relevant for pixi but for `conda run -p`",
+    )?;
 
-    tracing::debug!("Cleaning up unpack directory");
-    std::fs::remove_dir_all(unpack_dir).expect("Could not remove unpack directory");
+    tracing::debug!("Cleaning up unpack directory {}", unpack_dir.display());
+    std::fs::remove_dir_all(unpack_dir)?;
 
+    tracing::debug!("Creating activation script");
     let shell = match options.shell {
         Some(shell) => shell,
         None => ShellEnum::default(),
     };
     let file_extension = shell.extension();
-    let activate_path = options.output_directory.join(format!("activate.{}", file_extension));
+    let activate_path = options
+        .output_directory
+        .join(format!("activate.{}", file_extension));
     let activator = Activator::from_path(prefix.as_path(), shell, Platform::current())?;
-    
+
     let path = std::env::var("PATH")
-    .ok()
-    .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
+        .ok()
+        .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
 
     // If we are in a conda environment, we need to deactivate it before activating the host / build prefix
     let conda_prefix = std::env::var("CONDA_PREFIX").ok().map(|p| p.into());
-    let result = activator
-        .activation(ActivationVariables {
-            conda_prefix,
-            path,
-            path_modification_behavior: PathModificationBehavior::default(),
-        })?;
+    let result = activator.activation(ActivationVariables {
+        conda_prefix,
+        path,
+        path_modification_behavior: PathModificationBehavior::default(),
+    })?;
 
     let contents = result.script.contents()?;
-    std::fs::write(activate_path, contents).unwrap();
-
+    std::fs::write(activate_path, contents)?;
     Ok(())
 }
 
 /* -------------------------------------- INSTALL PACKAGES ------------------------------------- */
 
 /// Collect all packages in a directory.
-fn collect_packages(channel: &Path) -> Result<HashMap<String, PackageRecord>, Box<dyn std::error::Error>> {
+fn collect_packages(channel: &Path) -> crate::Result<HashMap<String, PackageRecord>> {
     let subdirs = channel.read_dir()?;
     let packages = subdirs
         .into_iter()
-        .filter(|subdir| subdir.as_ref().is_ok_and(|subdir| subdir.path().is_dir()))
+        .map(|subdir| subdir.expect("todo error handling"))
+        .filter(|subdir| subdir.path().is_dir())
         .flat_map(|subdir| {
-            let subdir = subdir.unwrap().path();
-            let repodata = subdir.join("repodata.json");
-            let repodata = RepoData::from_path(repodata).unwrap();
+            let repodata = subdir.path().join("repodata.json");
+            let repodata = RepoData::from_path(repodata).expect("TODO error handling");
             let mut conda_packages = repodata.conda_packages;
             let packages = repodata.packages;
-            conda_packages.extend(packages.into_iter());
+            conda_packages.extend(packages);
             conda_packages
         })
-        .collect();
+        .collect::<HashMap<_, _>>();
     Ok(packages)
 }
-
-/// Install a package into the environment and write a `conda-meta` file that contains information
-/// about how the file was linked.
-// async fn install_package_to_environment(
-//     target_prefix: &Path,
-//     package_dir: PathBuf,
-//     repodata_record: RepoDataRecord,
-//     install_driver: &InstallDriver,
-//     install_options: &InstallOptions,
-// ) -> Result<(), Box<dyn std::error::Error>> {
-//     // Link the contents of the package into our environment. This returns all the paths that were
-//     // linked.
-//     let paths = link_package(
-//         &package_dir,
-//         target_prefix,
-//         install_driver,
-//         install_options.clone(),
-//     )
-//     .await?;
-
-//     // Construct a PrefixRecord for the package
-//     let prefix_record = PrefixRecord {
-//         repodata_record,
-//         package_tarball_full_path: None,
-//         extracted_package_dir: Some(package_dir),
-//         files: paths
-//             .iter()
-//             .map(|entry| entry.relative_path.clone())
-//             .collect(),
-//         paths_data: paths.into(),
-//         requested_spec: None,
-//         link: None,
-//     };
-
-//     // Create the conda-meta directory if it doesn't exist yet.
-//     let target_prefix = target_prefix.to_path_buf();
-//     match tokio::task::spawn_blocking(move || {
-//         let conda_meta_path = target_prefix.join("conda-meta");
-//         std::fs::create_dir_all(&conda_meta_path)?;
-
-//         // Write the conda-meta information
-//         let pkg_meta_path = conda_meta_path.join(format!(
-//             "{}-{}-{}.json",
-//             prefix_record
-//                 .repodata_record
-//                 .package_record
-//                 .name
-//                 .as_normalized(),
-//             prefix_record.repodata_record.package_record.version,
-//             prefix_record.repodata_record.package_record.build
-//         ));
-//         prefix_record.write_to_path(pkg_meta_path, true)
-//     })
-//     .await
-//     {
-//         Ok(result) => Ok(result?),
-//         Err(err) => {
-//             if let Ok(panic) = err.try_into_panic() {
-//                 std::panic::resume_unwind(panic);
-//             }
-//             // The operation has been cancelled, so we can also just ignore everything.
-//             Ok(())
-//         }
-//     }
-// }
 
 /* ----------------------------------- UNARCHIVE + DECOMPRESS ---------------------------------- */
 
 /// Unarchive a compressed tarball.
-fn unarchive(archive_path: &Path, target_dir: &Path) {
-    let file = std::fs::File::open(&archive_path).expect("could not open archive");
-    let decoder = zstd::Decoder::new(file).expect("could not instantiate zstd decoder");
-    tar::Archive::new(decoder)
-        .unpack(target_dir)
-        .expect("could not unpack archive")
+fn unarchive(archive_path: &Path, target_dir: &Path) -> crate::Result<()> {
+    let file = std::fs::File::open(archive_path)?;
+    let decoder = zstd::Decoder::new(file).expect("Could not instantiate zstd decoder");
+    tar::Archive::new(decoder).unpack(target_dir)?;
+    Ok(())
 }

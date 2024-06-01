@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use rattler_conda_types::Platform;
 
-use pixi_pack::{pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION};
+use pixi_pack::{
+    pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
+};
 use rattler_shell::shell::ShellEnum;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
@@ -60,7 +62,7 @@ enum Commands {
 
         /// Sets the shell, options: [`bash`, `zsh`, `xonsh`, `cmd`, `powershell`, `fish`, `nushell`]
         #[arg(short, long)]
-        shell: Option<ShellEnum>
+        shell: Option<ShellEnum>,
     },
 }
 
@@ -85,23 +87,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }) => {
             let options = PackOptions {
                 environment: environment.clone(),
-                platform: platform.clone(),
+                platform: *platform,
                 auth_file: auth_file.clone(),
                 output_file: output_file.clone(),
                 manifest_path: manifest_path.clone(),
                 metadata: PixiPackMetadata {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
-                    platform: platform.clone(),
+                    platform: *platform,
                 },
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await
         }
-        Some(Commands::Unpack { output_directory, pack_file, shell }) => {
+        Some(Commands::Unpack {
+            output_directory,
+            pack_file,
+            shell,
+        }) => {
             let options = UnpackOptions {
                 pack_file: pack_file.clone(),
                 output_directory: output_directory.clone(),
-                shell: shell.clone()
+                shell: shell.clone(),
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await
