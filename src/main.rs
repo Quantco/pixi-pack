@@ -68,7 +68,7 @@ enum Commands {
 
         /// Sets the shell, options: [`bash`, `zsh`, `xonsh`, `cmd`, `powershell`, `fish`, `nushell`]
         #[arg(short, long)]
-        shell: ShellEnum,
+        shell: Option<ShellEnum>,
     },
 }
 
@@ -82,7 +82,6 @@ async fn main() -> Result<()> {
     tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(cli.verbose.log_level_filter().as_trace())
         .init();
-
 
     tracing::debug!("Starting pixi-pack CLI");
 

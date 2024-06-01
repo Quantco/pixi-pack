@@ -2,55 +2,95 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use async_compression::tokio::bufread::ZstdDecoder;
-use rattler_conda_types::Platform;
-use rattler_shell::shell::ShellEnum;
-use tokio::fs::{self, create_dir_all};
+use futures::{
+    stream::{self, StreamExt},
+    TryFutureExt, TryStreamExt,
+};
+use fxhash::FxHashMap;
+use rattler::{
+    install::Installer,
+    package_cache::{CacheKey, PackageCache},
+};
+use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
+use rattler_package_streaming::fs::extract;
+use rattler_shell::{
+    activation::{ActivationVariables, Activator, PathModificationBehavior},
+    shell::{Shell, ShellEnum},
+};
+use tokio::fs;
+use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use url::Url;
 
-use std::borrow::Borrow;
-
-use futures::{stream, StreamExt, TryStreamExt};
-use rattler::install::{link_package, Transaction};
-use rattler::install::{InstallDriver, InstallOptions};
-use rattler_conda_types::package::{IndexJson, PackageFile};
-use rattler_conda_types::{PackageRecord, PrefixRecord, RepoDataRecord};
-use rattler_package_streaming::tokio::fs::extract;
-use rattler_shell::activation::ActivationVariables;
-use rattler_shell::activation::Activator;
-use rattler_shell::activation::PathModificationBehavior;
-use rattler_shell::shell::Shell;
-use tokio_stream::wrappers::ReadDirStream;
-
-use crate::{PixiPackMetadata, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH};
-
-/* ------------------------------------------- UNPACK ------------------------------------------ */
+use crate::{
+    PixiPackMetadata, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+};
 
 /// Options for unpacking a pixi environment.
 #[derive(Debug)]
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
     pub output_directory: PathBuf,
-    pub shell: ShellEnum,
+    pub shell: Option<ShellEnum>,
 }
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
     // TODO: Dont use static dir here but a temp dir
-    let unpack_dir =
-        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {e}"))?;
-    create_dir_all(&unpack_dir)
-        .await
-        .map_err(|e| anyhow!("Could not create unpack directory: {}", e))?;
+    let unpack_dir = tempfile::tempdir()
+        .map_err(|e| anyhow!("Could not create temporary directory: {}", e))?
+        .into_path();
 
-    unarchive(&options.pack_file, &unpack_dir.path())
+    let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
+
+    unarchive(&options.pack_file, &unpack_dir)
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
 
-    // Read pixi-pack metadata file
-    let metadata_file = unpack_dir.path().join(PIXI_PACK_METADATA_PATH);
+    validate_metadata_file(&unpack_dir).await?;
 
-    let metadata_contents = tokio::fs::read_to_string(&metadata_file)
+    let target_prefix = options.output_directory.join("env");
+
+    create_prefix(&channel_directory, &target_prefix)
+        .await
+        .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
+
+    create_activation_script(
+        &options.output_directory,
+        &target_prefix,
+        options.shell.unwrap_or_default(),
+    )
+    .await
+    .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
+
+    Ok(())
+}
+
+async fn collect_packages_in_subdir(subdir: PathBuf) -> Result<FxHashMap<String, PackageRecord>> {
+    let repodata = subdir.join("repodata.json");
+
+    let raw_repodata_json = fs::read_to_string(repodata)
+        .await
+        .map_err(|e| anyhow!("could not read repodata in subdir: {}", e))?;
+
+    let repodata: RepoData = serde_json::from_str(&raw_repodata_json).map_err(|e| {
+        anyhow!(
+            "could not parse repodata in subdir {}: {}",
+            subdir.display(),
+            e
+        )
+    })?;
+
+    let mut conda_packages = repodata.conda_packages;
+    let packages = repodata.packages;
+    conda_packages.extend(packages);
+    Ok(conda_packages)
+}
+
+async fn validate_metadata_file(unpack_dir: &Path) -> Result<()> {
+    let metadata_file = unpack_dir.join(PIXI_PACK_METADATA_PATH);
+
+    let metadata_contents = fs::read_to_string(&metadata_file)
         .await
         .map_err(|e| anyhow!("Could not read metadata file: {}", e))?;
 
@@ -63,15 +103,34 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
         anyhow::bail!("The pack was created for a different platform");
     }
 
-    let target_prefix = options.output_directory.join("env");
-
-    install(&target_prefix, &unpack_dir.path().join("pkgs")).await?;
-
-    create_activation_script(&options.output_directory, &target_prefix, options.shell)
-        .await
-        .map_err(|e| anyhow!("could not create activation script: {}", e))?;
-
     Ok(())
+}
+
+/// Collect all packages in a directory.
+async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, PackageRecord>> {
+    let subdirs = fs::read_dir(channel_dir)
+        .await
+        .map_err(|e| anyhow!("could not read channel directory: {}", e))?;
+
+    let stream = ReadDirStream::new(subdirs);
+
+    let packages = stream
+        .try_filter_map(|entry| async move {
+            let path = entry.path();
+
+            if path.is_dir() {
+                Ok(Some(path))
+            } else {
+                Ok(None) // Ignore non-directory entries
+            }
+        })
+        .map_ok(collect_packages_in_subdir)
+        .map_err(|e| anyhow!("could not read channel directory: {}", e))
+        .try_buffer_unordered(10)
+        .try_concat()
+        .await?;
+
+    Ok(packages)
 }
 
 /// Unarchive a compressed tarball.
@@ -94,157 +153,72 @@ async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-// Transaction::from_current_and_desired requires New to implement AsRef<PackageRecord>
-// but PackageRecord does not implement AsRef<PackageRecord>, so we need to wrap it
-// in a struct that does as we can't implement traits for types we don't own.
-struct WrappedPackageRecord(PackageRecord);
-
-impl AsRef<PackageRecord> for WrappedPackageRecord {
-    fn as_ref(&self) -> &PackageRecord {
-        &self.0
-    }
-}
-
-// We just need a type to make the compiler happy
-// this is actually never constructed
-struct WrappedOld {}
-
-impl AsRef<WrappedPackageRecord> for WrappedOld {
-    fn as_ref(&self) -> &WrappedPackageRecord {
-        unimplemented!()
-    }
-}
-
-impl<'a> Borrow<PrefixRecord> for &'a WrappedOld {
-    fn borrow(&self) -> &PrefixRecord {
-        unimplemented!()
-    }
-}
-
-impl<'a> AsRef<PackageRecord> for &'a WrappedOld {
-    fn as_ref(&self) -> &PackageRecord {
-        unimplemented!()
-    }
-}
-
-async fn install(target_prefix: &Path, archived_package_dir: &Path) -> Result<()> {
-    // TODO: this will not execute link scripts
-    let target_platform = Platform::current();
-
-    let driver = InstallDriver::default();
-
-    let package_dir =
-        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {e}"))?;
-
-    let package_dir_path = package_dir.path().to_owned();
-
-    let packages = fs::read_dir(archived_package_dir)
+async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
+    let packages = collect_packages(channel_dir)
         .await
-        .map_err(|e| anyhow!("could not read directory: {e}"))?;
+        .map_err(|e| anyhow!("could not collect packages: {}", e))?;
 
-    let stream = ReadDirStream::new(packages);
+    let cache_dir = tempfile::tempdir()
+        .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
+        .into_path();
 
-    // Step 1: Extract all packages and collect the PackageRecords
-    let package_records: Vec<(PackageRecord, PathBuf)> = stream
-        .map_err(|e| anyhow!("could not read directory: {e}"))
-        .map_ok(|package_file| {
-            let package_dir_path = package_dir_path.clone();
-            async move {
-                let filename = package_file.file_name();
+    // extract packages to cache
+    let package_cache = PackageCache::new(cache_dir);
 
-                let package_dir = package_dir_path.join(filename);
+    let installer = Installer::default();
 
-                tracing::debug!("Extracting package: {:?}", package_file.path());
+    let repodata_records: Vec<RepoDataRecord> = stream::iter(packages)
+        .map(|(file_name, package_record)| {
+            let cache_key = CacheKey::from(&package_record);
 
-                extract(&package_file.path(), &package_dir).await?;
+            let package_path = channel_dir.join(&package_record.subdir).join(&file_name);
 
-                let index_json = IndexJson::from_package_directory(&package_dir)
-                    .map_err(|e| anyhow!("could not read index.json: {e}"))?;
-
-                let package_record =
-                    PackageRecord::from_index_json(index_json, None, None, None)
-                        .map_err(|e| anyhow!("could not create package record: {e}"))?;
-
-                Ok::<(PackageRecord, PathBuf), anyhow::Error>((package_record, package_dir))
-            }
-        })
-        .try_buffer_unordered(50)
-        .try_collect()
-        .await?;
-
-    // Step 2: Build up the transaction
-    let transaction: Transaction<&WrappedOld, WrappedPackageRecord> =
-        Transaction::from_current_and_desired(
-            &[],
-            package_records
-                .iter()
-                .map(|(p, _)| WrappedPackageRecord(p.clone())),
-            target_platform,
-        )
-        .map_err(|e| anyhow!("could not create transaction: {e}"))?;
-
-    // Step 3: Preprocess, at the moment this is a no-op as there are no packages installed and so there are no spre-unlink scripts
-    driver
-        .pre_process(&transaction, target_prefix)
-        .map_err(|e| anyhow!("preprocessing failed: {e}"))?;
-
-    let python_info = &transaction.python_info;
-
-    // Step 4: Link packages
-    stream::iter(package_records.into_iter())
-        .map(Ok) // Lift to TryStreamExt
-        .try_for_each_concurrent(150, |(record, dir)| async {
-            let dir = dir;
-            let options = InstallOptions {
-                python_info: python_info.clone(),
-                ..Default::default()
-            };
-
-            let file_name = dir.file_name().unwrap().to_str().unwrap().to_string();
-
-            let paths = link_package(&dir, target_prefix, &driver, options)
-                .await
-                .map_err(|e| anyhow!("could not link package {}: {}", &file_name, e))?;
-
-            let conda_meta_path = target_prefix.join("conda-meta");
-            create_dir_all(&conda_meta_path)
-                .await
-                .map_err(|e| anyhow!("could not create conda-meta directory: {e}"))?;
-
-            let url = Url::parse(&format!("file:///{}", &file_name)).expect("could not create url");
+            let url = Url::parse(&format!("file:///{}", file_name)).unwrap();
 
             let repodata_record = RepoDataRecord {
-                package_record: record,
+                package_record,
                 file_name,
                 url,
                 channel: "local".to_string(),
             };
 
-            let prefix_record =
-                PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None);
+            async {
+                // We have to prepare the package cache by inserting all packages into it.
+                // We can only do so by calling `get_or_fetch` on each package, which will
+                // use the provided closure to fetch the package and insert it into the cache.
+                package_cache
+                    .get_or_fetch(
+                        cache_key,
+                        |destination| async move {
+                            extract(&package_path, &destination).map(|_| ())
+                        },
+                        None,
+                    )
+                    .await
+                    .map_err(|e| anyhow!("could not extract package: {}", e))?;
 
-            prefix_record
-                .write_to_path(conda_meta_path.join(prefix_record.file_name()), true)
-                .map_err(|e| anyhow!("could not write package record: {e}"))?;
-
-            Ok::<(), anyhow::Error>(())
+                Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
+            }
         })
+        .buffer_unordered(50)
+        .try_collect()
         .await?;
 
-    // Step 5: Postprocess, this will run the post-link scripts
-    driver
-        .post_process(&transaction, target_prefix)
-        .map_err(|e| anyhow!("postprocessing failed: {e}"))?;
+    // Invariant: all packages are in the cache
+    installer
+        .with_package_cache(package_cache)
+        .install(&target_prefix, repodata_records)
+        .await
+        .map_err(|e| anyhow!("could not install packages: {}", e))?;
 
-    // Step 7: Create conda-meta/history
-    let history_path = target_prefix.join("conda-meta");
+    let history_path = target_prefix.join("conda-meta").join("history");
 
     fs::write(
-        history_path.join("history"),
+        history_path,
         "// not relevant for pixi but for `conda run -p`",
     )
-    .await
-    .map_err(|e| anyhow!("Could not write history file: {}", e))?;
+    .map_err(|e| anyhow!("Could not write history file: {}", e))
+    .await?;
 
     Ok(())
 }
