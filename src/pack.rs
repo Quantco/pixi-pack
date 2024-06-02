@@ -241,12 +241,10 @@ async fn create_environment_file(
 
     for package in packages {
         let match_spec_str = format!(
-            "./{}/{}::{}={}={}",
-            CHANNEL_DIRECTORY_NAME,
-            package.subdir,
+            "{}={}={}",
             package.name.as_normalized(),
             package.version,
-            package.build
+            package.build,
         );
 
         environment.push_str(&format!("  - {}\n", match_spec_str));
