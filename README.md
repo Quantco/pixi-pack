@@ -53,6 +53,8 @@ This will create a `environment.tar.zstd` file that contains all conda packages 
 |    |    | repodata.json
 ```
 
+### `pixi-pack unpack`: Unpacking an environment
+
 With `pixi-pack unpack environment.tar.zstd`, you can unpack the environment on your target system.
 This will create a new conda environment in `./env` that contains all packages specified in your `pixi.toml`.
 It also creates an `activate.sh` (or `activate.bat` on Windows) file that lets you activate the environment
