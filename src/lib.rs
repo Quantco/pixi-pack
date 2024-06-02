@@ -7,14 +7,23 @@ use serde::{Deserialize, Serialize};
 pub use unpack::{unpack, UnpackOptions};
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
-pub const PIXI_PACK_METADATA_PATH : &str = "pixi-pack.json";
+pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";
 pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
 
 /// The metadata for a "pixi-pack".
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PixiPackMetadata {
     /// The pack format version.
     pub version: String,
     /// The platform the pack was created for.
     pub platform: Platform,
+}
+
+impl Default for PixiPackMetadata {
+    fn default() -> Self {
+        Self {
+            version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+            platform: Platform::current(),
+        }
+    }
 }
