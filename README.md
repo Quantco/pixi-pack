@@ -43,14 +43,14 @@ This will create a `environment.tar.zstd` file that contains all conda packages 
 | pixi-pack.json
 | environment.yml
 | channel
-|    | noarch
-|    |    | tzdata-2024a-h0c530f3_0.conda
-|    |    | ...
-|    |    | repodata.json
-|    | linux-64
-|    |    | ca-certificates-2024.2.2-hbcca054_0.conda
-|    |    | ...
-|    |    | repodata.json
+|    ├── noarch
+|    |    ├── tzdata-2024a-h0c530f3_0.conda
+|    |    ├── ...
+|    |    └── repodata.json
+|    └── linux-64
+|         ├── ca-certificates-2024.2.2-hbcca054_0.conda
+|         ├── ...
+|         └── repodata.json
 ```
 
 ### `pixi-pack unpack`: Unpacking an environment
