@@ -28,6 +28,8 @@ cargo install --locked --git https://github.com/quantco/pixi-pack.git
 
 ## Usage
 
+### `pixi-pack pack`: Packing an environment
+
 With `pixi-pack pack`, you can pack a conda environment into a `environment.tar.zstd` file:
 
 ```bash
