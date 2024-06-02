@@ -118,3 +118,6 @@ env/
 unpack/
 cache/
 activate.*
+# pixi environments
+.pixi
+*.egg-info

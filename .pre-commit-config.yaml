@@ -1,0 +1,55 @@
+repos:
+  - repo: local
+    hooks:
+      # prettier
+      - id: prettier
+        name: prettier
+        entry: pixi run -e lint prettier --write --list-different --ignore-unknown
+        language: system
+        types: [text]
+        files: \.(md|yml|yaml)$
+      # pre-commit-hooks
+      - id: trailing-whitespace-fixer
+        name: trailing-whitespace-fixer
+        entry: pixi run -e lint trailing-whitespace-fixer
+        language: system
+        types: [text]
+      - id: end-of-file-fixer
+        name: end-of-file-fixer
+        entry: pixi run -e lint end-of-file-fixer
+        language: system
+        types: [text]
+      - id: check-merge-conflict
+        name: check-merge-conflict
+        entry: pixi run -e lint check-merge-conflict --assume-in-merge
+        language: system
+        types: [text]
+      # typos
+      - id: typos
+        name: typos
+        entry: pixi run -e lint typos --force-exclude
+        language: system
+        types: [text]
+        require_serial: true
+      # cargo fmt and clippy
+      - id: cargo-fmt-conda
+        name: cargo-fmt-conda
+        description: "Run `cargo fmt` for formatting rust sources."
+        entry: cargo fmt --
+        language: system
+        require_serial: false
+        types: [rust]
+      - id: clippy-conda
+        name: clippy-conda
+        description: "Run `clippy` to lint rust sources."
+        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        pass_filenames: false
+        language: system
+        require_serial: false
+        types: [rust]
+      # taplo
+      - id: taplo
+        name: taplo
+        entry: pixi run -e lint taplo format
+        language: system
+        types: [toml]

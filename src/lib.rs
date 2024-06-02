@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub use unpack::{unpack, UnpackOptions};
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
-pub const PIXI_PACK_METADATA_PATH : &str = "pixi-pack.json";
+pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";
 pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
 
 /// The metadata for a "pixi-pack".
