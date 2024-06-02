@@ -35,14 +35,14 @@ repos:
       - id: cargo-fmt-conda
         name: cargo-fmt-conda
         description: "Run `cargo fmt` for formatting rust sources."
-        entry: cargo fmt --
+        entry: pixi run -e default cargo fmt --
         language: system
         require_serial: false
         types: [rust]
       - id: clippy-conda
         name: clippy-conda
         description: "Run `clippy` to lint rust sources."
-        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        entry: pixi run -e default cargo clippy --all-targets --all-features --workspace -- -D warnings
         pass_filenames: false
         language: system
         require_serial: false
