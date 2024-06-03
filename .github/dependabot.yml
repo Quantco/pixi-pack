@@ -6,8 +6,6 @@ updates:
       interval: monthly
     reviewers:
       - quantco/ci
-    registries:
-      - github
     groups:
       gh-actions:
         patterns:
