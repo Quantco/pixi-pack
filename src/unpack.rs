@@ -268,10 +268,7 @@ mod tests {
         #[default(Platform::current())] platform: Platform,
     ) -> NamedTempFile {
         let mut metadata_file = NamedTempFile::new().unwrap();
-        let metadata = PixiPackMetadata {
-            version: version,
-            platform: platform,
-        };
+        let metadata = PixiPackMetadata { version, platform };
         let buffer = metadata_file.as_file_mut();
         buffer
             .write_all(json!(metadata).to_string().as_bytes())
@@ -290,18 +287,17 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_metadata_file_empty() {
-        assert_eq!(
+        assert!(
             validate_metadata_file(NamedTempFile::new().unwrap().path().to_path_buf())
                 .await
-                .is_ok(),
-            false
+                .is_err()
         )
     }
 
     #[rstest]
     #[tokio::test]
     async fn test_metadata_file_non_existent() {
-        assert_eq!(validate_metadata_file(PathBuf::new()).await.is_ok(), false)
+        assert!(validate_metadata_file(PathBuf::new()).await.is_err())
     }
 
     #[rstest]

@@ -32,9 +32,9 @@ fn options(
             level,
         },
         UnpackOptions {
-            pack_file: pack_file,
+            pack_file,
             output_directory: output_dir.path().to_path_buf(),
-            shell: shell,
+            shell,
         },
     )
 }
