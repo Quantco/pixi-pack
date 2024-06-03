@@ -18,7 +18,7 @@ Starting with a [pixi](https://pixi.sh) lockfile `pixi.lock`, you can create a p
 This environment can be unpacked on any system using `pixi-pack` to recreate the original environment.
 
 In contrast to [`conda-pack`](https://conda.github.io/conda-pack/), `pixi-pack` does not require the original conda environment to be present on the system for packing.
-Instead, it uses the lockfile to download the required `.conda` packages and puts them into a `.tar.zstd` archive.
+Instead, it uses the lockfile to download the required packages and puts them into a `.tar.zstd` archive.
 This archive can then be shared with others and installed using `pixi-pack unpack` to recreate the original environment.
 
 The original motivation behind `pixi-pack` was to create a `conda-pack` alternative that does not have the same reproducibility issues as `conda-pack`.
