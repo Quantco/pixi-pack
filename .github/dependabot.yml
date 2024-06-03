@@ -16,8 +16,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    registries:
-      - github
     groups:
       rust-dependencies:
         patterns:
