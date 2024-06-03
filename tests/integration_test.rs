@@ -5,9 +5,13 @@ use pixi_pack::{PackOptions, PixiPackMetadata, UnpackOptions};
 use rattler_conda_types::Platform;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
-use tempfile::tempdir;
+use tempfile::{tempdir, TempDir};
 
-struct Options(PackOptions, UnpackOptions);
+struct Options {
+    pack_options: PackOptions,
+    unpack_options: UnpackOptions,
+    output_dir: TempDir,
+}
 
 #[fixture]
 fn options(
@@ -21,8 +25,8 @@ fn options(
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar.zstd");
-    Options(
-        PackOptions {
+    Options {
+        pack_options: PackOptions {
             environment,
             platform,
             auth_file,
@@ -31,24 +35,22 @@ fn options(
             metadata,
             level,
         },
-        UnpackOptions {
+        unpack_options: UnpackOptions {
             pack_file,
             output_directory: output_dir.path().to_path_buf(),
             shell,
         },
-    )
+        output_dir,
+    }
 }
 
 #[rstest]
 #[tokio::test]
 async fn test_simple_python(options: Options) {
-    let mut pack_options = options.0;
-    let mut unpack_options = options.1;
-    let temp_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = temp_dir.path().join("environment.tar.zstd");
-    pack_options.output_file = pack_file.clone();
-    unpack_options.pack_file = pack_file.clone();
-    unpack_options.output_directory = temp_dir.path().to_path_buf();
+    let pack_options = options.pack_options;
+    let unpack_options = options.unpack_options;
+    let _output_dir = options.output_dir;
+    let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok());
