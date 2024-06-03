@@ -15,8 +15,8 @@ use futures::{
     StreamExt, TryStreamExt,
 };
 use indicatif::ProgressStyle;
-use rattler_conda_types::Platform;
-use rattler_lock::{LockFile, Package};
+use rattler_conda_types::{PackageRecord, Platform};
+use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
@@ -65,9 +65,20 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.platform.as_str()
     ))?;
 
+    let mut conda_packages = Vec::new();
+
+    for package in packages {
+        match package {
+            Package::Conda(p) => conda_packages.push(p),
+            Package::Pypi(_) => {
+                anyhow::bail!("pypi packages are not supported in pixi-pack");
+            }
+        }
+    }
+
     // Download packages to temporary directory.
-    tracing::info!("Downloading {} packages", packages.len());
-    let bar = indicatif::ProgressBar::new(packages.len() as u64);
+    tracing::info!("Downloading {} packages", conda_packages.len());
+    let bar = indicatif::ProgressBar::new(conda_packages.len() as u64);
     bar.set_style(
         ProgressStyle::with_template(
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -81,7 +92,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
 
-    stream::iter(packages)
+    stream::iter(conda_packages.iter())
         .map(Ok)
         .try_for_each_concurrent(50, |package| async {
             download_package(&client, package, &channel_dir).await?;
@@ -104,6 +115,13 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let metadata = serde_json::to_string_pretty(&options.metadata)?;
     metadata_file.write_all(metadata.as_bytes()).await?;
+
+    // Create environment file.
+    create_environment_file(
+        output_folder.path(),
+        conda_packages.iter().map(|p| p.package_record()),
+    )
+    .await?;
 
     // Pack = archive + compress the contents.
     archive_directory(output_folder.path(), &options.output_file, options.level)
@@ -143,25 +161,21 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
 /// Download a conda package to a given output directory.
 async fn download_package(
     client: &ClientWithMiddleware,
-    package: Package,
+    package: &CondaPackage,
     output_dir: &Path,
 ) -> Result<()> {
-    let conda_package = package
-        .as_conda()
-        .ok_or(anyhow!("package is not a conda package"))?; // TODO: we might want to skip here
-
-    let output_dir = output_dir.join(&conda_package.package_record().subdir);
+    let output_dir = output_dir.join(&package.package_record().subdir);
     create_dir_all(&output_dir)
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    let file_name = conda_package
+    let file_name = package
         .file_name()
         .ok_or(anyhow!("could not get file name"))?;
     let mut dest = File::create(output_dir.join(file_name)).await?;
 
-    tracing::debug!("Fetching package {}", conda_package.url());
-    let mut response = client.get(conda_package.url().to_string()).send().await?;
+    tracing::debug!("Fetching package {}", package.url());
+    let mut response = client.get(package.url().to_string()).send().await?;
 
     while let Some(chunk) = response.chunk().await? {
         dest.write_all(&chunk).await?;
@@ -205,6 +219,37 @@ async fn archive_directory(
         .shutdown()
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    Ok(())
+}
+
+async fn create_environment_file(
+    destination: &Path,
+    packages: impl IntoIterator<Item = &PackageRecord>,
+) -> Result<()> {
+    let environment_path = destination.join("environment.yml");
+
+    let mut environment = String::new();
+
+    environment.push_str("channels:\n");
+    environment.push_str(&format!("  - ./{CHANNEL_DIRECTORY_NAME}\n",));
+    environment.push_str("  - nodefaults\n");
+    environment.push_str("dependencies:\n");
+
+    for package in packages {
+        let match_spec_str = format!(
+            "{}={}={}",
+            package.name.as_normalized(),
+            package.version,
+            package.build,
+        );
+
+        environment.push_str(&format!("  - {}\n", match_spec_str));
+    }
+
+    fs::write(environment_path, environment)
+        .await
+        .map_err(|e| anyhow!("Could not write environment file: {}", e))?;
 
     Ok(())
 }

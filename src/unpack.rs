@@ -138,9 +138,9 @@ async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
 
     let reader = tokio::io::BufReader::new(file);
 
-    let decocder = ZstdDecoder::new(reader);
+    let decoder = ZstdDecoder::new(reader);
 
-    let mut archive = Archive::new(decocder);
+    let mut archive = Archive::new(decoder);
 
     archive
         .unpack(target_dir)
