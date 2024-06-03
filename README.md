@@ -2,17 +2,16 @@
 
 <br />
 <p align="center">
-  <h3 align="center" style="font-size: 64px">📦</h3>
-  <h3 align="center">A tool to pack and unpack conda environments created with pixi</h3>
+  <h3 align="center">📦 A tool to pack and unpack conda environments created with pixi</h3>
 </p>
 
 ## 🗂 Table of Contents
 
-* [Introduction](#introduction)
-* [Installation](#installation)
-* [Usage](#usage)
+* [Introduction](#-introduction)
+* [Installation](#-installation)
+* [Usage](#-usage)
 
-## Introduction
+## 📖 Introduction
 
 Starting with a [pixi](https://pixi.sh) lockfile `pixi.lock`, you can create a packed environment that can be shared with others.
 This environment can be unpacked on any system using `pixi-pack` to recreate the original environment.
@@ -24,7 +23,7 @@ This archive can then be shared with others and installed using `pixi-pack unpac
 The original motivation behind `pixi-pack` was to create a `conda-pack` alternative that does not have the same reproducibility issues as `conda-pack`.
 It also aims to allow cross-platform building packs, so you can create a pack for `win-64` on a `linux-64` system.
 
-## Installation
+## 💿 Installation
 
 You can install `pixi-pack` using `pixi`:
 
@@ -38,7 +37,7 @@ Or using `cargo`:
 cargo install --locked --git https://github.com/quantco/pixi-pack.git
 ```
 
-## Usage
+## 🎯 Usage
 
 ### `pixi-pack pack`: Packing an environment
 
