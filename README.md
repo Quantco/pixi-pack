@@ -113,9 +113,9 @@ You can then install the environment using `conda` or `micromamba`:
 
 ```bash
 tar --zstd -xvf environment.tar.zstd
-micromamba create -p ./env --file environment.yml"
+micromamba create -p ./env --file environment.yml
 # or
-conda env create -p ./env --file environment.yml"
+conda env create -p ./env --file environment.yml
 ```
 
 > [!NOTE]
