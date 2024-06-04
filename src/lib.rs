@@ -4,7 +4,7 @@ mod unpack;
 pub use pack::{pack, PackOptions};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
-pub use unpack::{unpack, UnpackOptions};
+pub use unpack::{unarchive, unpack, UnpackOptions};
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";

@@ -131,7 +131,7 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
 }
 
 /// Unarchive a compressed tarball.
-async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     let file = fs::File::open(archive_path)
         .await
         .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
