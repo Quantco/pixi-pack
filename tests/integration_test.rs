@@ -158,7 +158,7 @@ async fn test_compatibility(
         .current_dir(unpack_dir)
         .output()
         .expect("Failed to run create command");
-    assert!(output.status.success());
+    assert!(output.status.success(), "Failed to create environment: {:?}", output);
 
     required_fs_objects
         .iter()
