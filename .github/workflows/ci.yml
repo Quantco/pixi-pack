@@ -20,7 +20,7 @@ jobs:
           environments: default lint
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          key: "pre-commit"
+          key: pre-commit
       - name: pre-commit
         run: pixi run pre-commit-run --color=always --show-diff-on-failure
 
@@ -41,6 +41,6 @@ jobs:
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          key: "tests"
+          key: tests
       - name: Run test
         run: pixi run test

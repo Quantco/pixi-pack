@@ -148,7 +148,12 @@ async fn test_compatibility(
     } else {
         vec!["create", "-y", "-p", prefix_str, "-f", "environment.yml"]
     };
-    let output = Command::new(tool)
+    let tool_exe = if cfg!(windows) {
+        format!("{}.exe", tool)
+    } else {
+        tool.to_string()
+    };
+    let output = Command::new(tool_exe)
         .args(args)
         .current_dir(unpack_dir)
         .output()
