@@ -12,6 +12,10 @@ test = "cargo test"
 [dependencies]
 rust = "1.77.2"
 
+[feature.test.dependencies]
+conda = "*"
+micromamba = "*"
+
 [feature.lint.dependencies]
 pre-commit = "*"
 prettier = "*"
@@ -23,5 +27,5 @@ pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run -a"
 
 [environments]
-default = ["lint"]
-lint = ["lint"]
+default = ["lint", "test"]
+lint = { features = ["lint"], no-default-feature = true }

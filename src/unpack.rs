@@ -27,7 +27,7 @@ use crate::{
 };
 
 /// Options for unpacking a pixi environment.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
     pub output_directory: PathBuf,
@@ -36,7 +36,6 @@ pub struct UnpackOptions {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
-    // TODO: Dont use static dir here but a temp dir
     let unpack_dir = tempfile::tempdir()
         .map_err(|e| anyhow!("Could not create temporary directory: {}", e))?
         .into_path();
@@ -47,7 +46,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
 
-    validate_metadata_file(&unpack_dir).await?;
+    validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
     let target_prefix = options.output_directory.join("env");
 
@@ -87,9 +86,7 @@ async fn collect_packages_in_subdir(subdir: PathBuf) -> Result<FxHashMap<String,
     Ok(conda_packages)
 }
 
-async fn validate_metadata_file(unpack_dir: &Path) -> Result<()> {
-    let metadata_file = unpack_dir.join(PIXI_PACK_METADATA_PATH);
-
+async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
     let metadata_contents = fs::read_to_string(&metadata_file)
         .await
         .map_err(|e| anyhow!("Could not read metadata file: {}", e))?;
@@ -134,7 +131,7 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
 }
 
 /// Unarchive a compressed tarball.
-async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     let file = fs::File::open(archive_path)
         .await
         .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
@@ -244,4 +241,86 @@ async fn create_activation_script(
         .map_err(|e| anyhow!("Could not write activate script: {}", e))?;
 
     Ok(())
+}
+
+/* --------------------------------------------------------------------------------------------- */
+/*                                             TESTS                                             */
+/* --------------------------------------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+    use serde_json::json;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn other_platform() -> Platform {
+        match Platform::current() {
+            Platform::Linux64 => Platform::Win64,
+            _ => Platform::Linux64,
+        }
+    }
+
+    #[fixture]
+    fn metadata_file(
+        #[default(DEFAULT_PIXI_PACK_VERSION.to_string())] version: String,
+        #[default(Platform::current())] platform: Platform,
+    ) -> NamedTempFile {
+        let mut metadata_file = NamedTempFile::new().unwrap();
+        let metadata = PixiPackMetadata { version, platform };
+        let buffer = metadata_file.as_file_mut();
+        buffer
+            .write_all(json!(metadata).to_string().as_bytes())
+            .unwrap();
+        metadata_file
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_metadata_file_valid(metadata_file: NamedTempFile) {
+        assert!(validate_metadata_file(metadata_file.path().to_path_buf())
+            .await
+            .is_ok())
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_metadata_file_empty() {
+        assert!(
+            validate_metadata_file(NamedTempFile::new().unwrap().path().to_path_buf())
+                .await
+                .is_err()
+        )
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_metadata_file_non_existent() {
+        assert!(validate_metadata_file(PathBuf::new()).await.is_err())
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_metadata_file_invalid_version(
+        #[with("v0".to_string())] metadata_file: NamedTempFile,
+    ) {
+        let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
+        let error = result.unwrap_err();
+        assert_eq!(error.to_string(), "Unsupported pixi-pack version: v0");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_metadata_file_wrong_platform(
+        #[with(DEFAULT_PIXI_PACK_VERSION.to_string(), other_platform())]
+        metadata_file: NamedTempFile,
+    ) {
+        let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "The pack was created for a different platform"
+        );
+    }
 }

@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    reviewers:
+      - quantco/ci
+    groups:
+      gh-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: build
+    labels:
+      - dependencies

@@ -7,3 +7,5 @@ platforms = ["osx-arm64", "linux-64", "win-64"]
 
 [dependencies]
 python = ">=3.12.3,<3.13"
+# needed because conda and micromamba include pip by default when installing python, pixi doesn't
+pip = "*"

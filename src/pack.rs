@@ -25,7 +25,7 @@ use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH};
 use anyhow::anyhow;
 
 /// Options for packing a pixi environment.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PackOptions {
     pub environment: String,
     pub platform: Platform,
@@ -127,9 +127,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     archive_directory(output_folder.path(), &options.output_file, options.level)
         .await
         .map_err(|e| anyhow!("could not archive directory: {}", e))?;
-
-    // TODO: copy extra-files (parsed from pixi.toml), different compression algorithms, levels
-    // todo: fail on pypi deps
 
     Ok(())
 }

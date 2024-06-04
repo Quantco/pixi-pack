@@ -18,25 +18,19 @@ jobs:
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
         with:
           environments: default lint
-      - name: Set up cargo cache # use https://github.com/Swatinem/rust-cache once whitelisted
-        uses: actions/cache@v3
-        continue-on-error: false
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: pre-commit
       - name: pre-commit
         run: pixi run pre-commit-run --color=always --show-diff-on-failure
 
   unit-tests:
     name: test
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -45,17 +39,8 @@ jobs:
           fetch-depth: 0
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
-      - name: Set up cargo cache # use https://github.com/Swatinem/rust-cache once whitelisted
-        uses: actions/cache@v3
-        continue-on-error: false
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: tests
       - name: Run test
         run: pixi run test

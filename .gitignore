@@ -111,6 +111,8 @@ $RECYCLE.BIN/
 # pixi environments
 .pixi
 *.egg-info
+
+# pixi-pack
 environment.tar.zstd
 environment.tar
 environment
