@@ -100,6 +100,7 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
         });
 }
 
+#[cfg(not(target_os = "windows"))] // https://github.com/Quantco/pixi-pack/issues/8
 #[rstest]
 #[case("conda")]
 #[case("micromamba")]
