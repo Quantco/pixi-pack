@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -10,12 +11,9 @@ use tokio::{
 
 use anyhow::Result;
 use async_compression::{tokio::write::ZstdEncoder, Level};
-use futures::{
-    stream::{self},
-    StreamExt, TryStreamExt,
-};
+use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::ProgressStyle;
-use rattler_conda_types::{PackageRecord, Platform};
+use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData};
 use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
@@ -107,7 +105,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     bar.finish();
 
     // Create `repodata.json` files.
-    rattler_index::index(&channel_dir, None)?;
+    create_repodata_files(conda_packages.iter(), &channel_dir).await?;
 
     // Add pixi-pack.json containing metadata.
     let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
@@ -253,6 +251,56 @@ async fn create_environment_file(
     fs::write(environment_path, environment)
         .await
         .map_err(|e| anyhow!("Could not write environment file: {}", e))?;
+
+    Ok(())
+}
+
+async fn create_repodata_files(
+    packages: impl Iterator<Item = &CondaPackage>,
+    channel_dir: &Path,
+) -> Result<()> {
+    let mut packages_per_subdir = HashMap::new();
+
+    for p in packages {
+        let package_record = p.package_record();
+        let subdir = &package_record.subdir;
+
+        let packages = packages_per_subdir.entry(subdir).or_insert_with(Vec::new);
+        packages.push(p);
+    }
+
+    for (subdir, packages) in packages_per_subdir {
+        let repodata_path = channel_dir.join(subdir).join("repodata.json");
+
+        let conda_packages = packages
+            .into_iter()
+            .map(|p| {
+                (
+                    p.file_name()
+                        .expect("Could not determine filename")
+                        .to_string(),
+                    p.package_record().clone(),
+                )
+            })
+            .collect();
+
+        let repodata = RepoData {
+            info: Some(ChannelInfo {
+                subdir: subdir.clone(),
+                base_url: None,
+            }),
+            packages: HashMap::default(),
+            conda_packages,
+            removed: HashSet::default(),
+            version: Some(2),
+        };
+
+        let repodata_json = serde_json::to_string_pretty(&repodata)
+            .map_err(|e| anyhow!("could not serialize repodata: {}", e))?;
+        fs::write(repodata_path, repodata_json)
+            .map_err(|e| anyhow!("could not write repodata: {}", e))
+            .await?;
+    }
 
     Ok(())
 }
