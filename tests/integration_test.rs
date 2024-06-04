@@ -148,17 +148,16 @@ async fn test_compatibility(
     } else {
         vec!["create", "-y", "-p", prefix_str, "-f", "environment.yml"]
     };
-    let tool_exe = if cfg!(windows) {
-        format!("{}.exe", tool)
-    } else {
-        tool.to_string()
-    };
-    let output = Command::new(tool_exe)
+    let output = Command::new(tool)
         .args(args)
         .current_dir(unpack_dir)
         .output()
         .expect("Failed to run create command");
-    assert!(output.status.success(), "Failed to create environment: {:?}", output);
+    assert!(
+        output.status.success(),
+        "Failed to create environment: {:?}",
+        output
+    );
 
     required_fs_objects
         .iter()
