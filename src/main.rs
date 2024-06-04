@@ -14,7 +14,7 @@ use tracing_log::AsTrace;
 /* -------------------------------------------- CLI -------------------------------------------- */
 
 fn cwd() -> PathBuf {
-    std::env::current_dir().expect("todo: error handling")
+    std::env::current_dir().expect("failed to obtain current working directory")
 }
 
 /// The pixi-pack CLI.

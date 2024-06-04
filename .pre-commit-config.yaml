@@ -1,3 +1,4 @@
+exclude: ^env/
 repos:
   - repo: local
     hooks:

@@ -1,0 +1,90 @@
+# ------------------------------------- PULL REQUEST LABELS ------------------------------------- #
+autolabeler:
+  # Conventional Commit Types (https://github.com/commitizen/conventional-commit-types)
+  - label: build
+    title:
+      - '/^build(\(.*\))?(\!)?\:/'
+  - label: chore
+    title:
+      - '/^chore(\(.*\))?(\!)?\:/'
+  - label: ci
+    title:
+      - '/^ci(\(.*\))?(\!)?\:/'
+  - label: documentation
+    title:
+      - '/^docs(\(.*\))?(\!)?\:/'
+  - label: enhancement
+    title:
+      - '/^feat(\(.*\))?(\!)?\:/'
+  - label: fix
+    title:
+      - '/^fix(\(.*\))?(\!)?\:/'
+  - label: performance
+    title:
+      - '/^perf(\(.*\))?(\!)?\:/'
+  - label: refactor
+    title:
+      - '/^refactor(\(.*\))?(\!)?\:/'
+  - label: revert
+    title:
+      - '/^revert(\(.*\))?(\!)?\:/'
+  - label: style
+    title:
+      - '/^style(\(.*\))?(\!)?\:/'
+  - label: test
+    title:
+      - '/^test(\(.*\))?(\!)?\:/'
+  # Custom Types
+  - label: breaking
+    title:
+      - '/^[a-z]+(\(.*\))?\!\:/'
+# ------------------------------------ RELEASE CONFIGURATION ------------------------------------ #
+category-template: "### $TITLE"
+change-template: "- $TITLE by @$AUTHOR in [#$NUMBER]($URL)"
+replacers:
+  # remove conventional commit tag & scope from change list
+  - search: '/- [a-z]+(\(.*\))?(\!)?\: /g'
+    replace: "- "
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog:** [`$PREVIOUS_TAG...v$RESOLVED_VERSION`](https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
+categories:
+  - title: ⚠️ Breaking Changes
+    labels:
+      - breaking
+  - title: ✨ New Features
+    labels:
+      - enhancement
+  - title: 🐞 Bug Fixes
+    labels:
+      - fix
+  - title: 🏎️ Performance Improvements
+    labels:
+      - performance
+  - title: 📚 Documentation
+    labels:
+      - documentation
+  - title: 🏗️ Testing
+    labels:
+      - test
+  - title: ⚙️ Automation
+    labels:
+      - ci
+  - title: 🛠 Builds
+    labels:
+      - build
+  - title: 💎 Code Style
+    labels:
+      - style
+  - title: 📦 Refactorings
+    labels:
+      - refactor
+  - title: ♻️ Chores
+    labels:
+      - chore
+  - title: 🗑 Reverts
+    labels:
+      - revert
