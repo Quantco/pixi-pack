@@ -64,31 +64,29 @@ async fn test_simple_python(options: Options) {
     assert!(unpack_result.is_ok());
     assert!(activate_file.is_file());
     assert!(activate_file.exists());
-    let required_fs_objects = if cfg!(windows) {
-        vec![
-            "conda-meta",
+    let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
+    if cfg!(windows) {
+        required_fs_objects.extend(vec![
             "DLLs",
             "etc",
-            "include",
             "Lib",
             "Library",
             "libs",
             "Scripts",
-            "share",
             "Tools",
             "python.exe",
-        ]
+            "conda-meta/openssl-3.3.0-h2466b09_3.json",
+        ])
     } else {
-        vec![
-            "bin/python",
-            "conda-meta",
-            "include",
-            "lib",
-            "man",
-            "share",
-            "ssl",
-        ]
-    };
+        required_fs_objects.extend(vec!["bin/python", "lib", "man", "ssl"]);
+        if cfg!(target_os = "macos") {
+            // osx-arm64
+            required_fs_objects.push("conda-meta/openssl-3.3.0-hfb2fe0b_3.json");
+        } else {
+            // linux-64
+            required_fs_objects.push("conda-meta/openssl-3.3.0-h4ab18f5_3.json");
+        }
+    }
     required_fs_objects
         .iter()
         .map(|dir| env_dir.join(dir))
