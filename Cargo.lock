@@ -2351,9 +2351,9 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4dbdaed42ff38c8bcccef910b960d4db52fcc3f774f485bb18de691b9e8fe94"
+checksum = "2a1825842b88187ee73905b52b8eba8ca4d33a8a2d18bd3039f8bff7fccf8934"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2392,9 +2392,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.25.0"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a2046a77fc9d79879f8cdd798603e6b036ed9ac5a297b5ff25e44ee23fe2fc9"
+checksum = "c0581fd0ac9589965f5ef5b70e43c1a86844b36047b4f76395df429752341807"
 dependencies = [
  "chrono",
  "file_url",
@@ -2438,9 +2438,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.14"
+version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5241a6f25b0fe3a17501bccd7c3542ff1ded2155c83f75c590a4b86df65cef95"
+checksum = "cc7281d9b78b3e0b3c46d8048977f2e6171fa6d5daded00e2799d03efed676c2"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2453,9 +2453,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.9"
+version = "0.22.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "701ca75a920e2c142538faaed11bf3e983102d149dd50488ace153812c1e0f72"
+checksum = "49c0d58e71e2672f34e4097df5a4dba03687b1db759102c53a2270a3c1ddf7f1"
 dependencies = [
  "chrono",
  "file_url",
@@ -2519,9 +2519,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.21.1"
+version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ca9d94fb324ac9855ac5fdbbc3b53e4ca101e84a270d6a30f059e4319c45b62"
+checksum = "4592a083f590dc5c6e22c34ae6793998297569956fe15f4b0ec78052c12d24c2"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2545,9 +2545,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.20.6"
+version = "0.20.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5710a54191836eab4063543ff41b042d12d8a79092fdb568f210b98bd39ce03"
+checksum = "2dfc42442e2d98ed16556e89e3db5d616e36873e0345820d97b6cacc847591c7"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.6",
