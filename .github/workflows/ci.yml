@@ -29,12 +29,14 @@ jobs:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
-          - ubuntu-latest-arm-4core
+          - ubuntu-latest-arm
           - windows-latest
           - macos-latest
+          - macos-13
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
