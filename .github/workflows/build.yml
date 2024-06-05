@@ -106,7 +106,7 @@ jobs:
   release:
     name: Create Release
     needs: [metadata, build]
-    if: needs.metadata.outputs.release == 'true'
+    # if: needs.metadata.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,7 +115,7 @@ jobs:
         with:
           pattern: pixi-pack-*
       - run: |
-          ls pixi-pack-*
+          ls -la
       # - name: Push v${{ needs.metadata.outputs.version }} tag
       #   run: |
       #     git tag v${{ needs.metadata.outputs.version }}
