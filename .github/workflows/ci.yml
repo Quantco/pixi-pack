@@ -33,7 +33,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - ubuntu-latest-arm
+          - ubuntu-latest-arm-4core
           - windows-latest
           - macos-latest
           - macos-13
