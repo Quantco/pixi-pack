@@ -5,9 +5,12 @@ use std::{path::PathBuf, process::Command};
 use async_compression::Level;
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
 use rattler_conda_types::Platform;
+use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
 use tempfile::{tempdir, TempDir};
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 
 struct Options {
     pack_options: PackOptions,
@@ -38,6 +41,7 @@ fn options(
             manifest_path,
             metadata,
             level,
+            injected_packages: vec![],
             ignore_pypi_errors,
         },
         unpack_options: UnpackOptions {
@@ -93,7 +97,6 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
-    assert!(pack_file.exists());
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
@@ -101,7 +104,6 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
-    assert!(activate_file.exists());
 
     required_fs_objects
         .iter()
@@ -111,10 +113,87 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
         });
 }
 
-// https://github.com/Quantco/pixi-pack/issues/8
-#[cfg(not(target_os = "windows"))]
-#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
+#[rstest]
+#[case("conda")]
+#[case("tar.bz2")]
+#[tokio::test]
+async fn test_inject(
+    #[case] package_format: &str,
+    options: Options,
+    mut required_fs_objects: Vec<&'static str>,
+) {
+    let mut pack_options = options.pack_options;
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    pack_options.injected_packages.push(PathBuf::from(format!(
+        "examples/webserver/my-webserver-0.1.0-pyh4616a5c_0.{package_format}"
+    )));
+
+    pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok());
+    assert!(pack_file.is_file());
+
+    let env_dir = unpack_options.output_directory.join("env");
+    let activate_file = unpack_options.output_directory.join("activate.sh");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok());
+    assert!(activate_file.is_file());
+
+    // output env should contain files from the injected package
+    required_fs_objects.push("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
+
+    required_fs_objects
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_includes_repodata_patches(options: Options) {
+    let mut pack_options = options.pack_options;
+    pack_options.platform = Platform::Win64;
+    let pack_file = options.unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok());
+
+    let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
+    let unpack_dir = unpack_dir.path();
+    unarchive(pack_file.as_path(), unpack_dir)
+        .await
+        .expect("Failed to unarchive environment");
+
+    let mut repodata_raw = String::new();
+
+    File::open(unpack_dir.join("channel/win-64/repodata.json"))
+        .await
+        .expect("Failed to open repodata")
+        .read_to_string(&mut repodata_raw)
+        .await
+        .expect("could not read repodata.json");
+
+    let repodata: RepoData = serde_json::from_str(&repodata_raw).expect("cant parse repodata.json");
+
+    // in this example, the `libzlib` entry in the `python-3.12.3-h2628c8c_0_cpython.conda`
+    // package is `libzlib >=1.2.13,<1.3.0a0`, but the upstream repodata was patched to
+    // `libzlib >=1.2.13,<2.0.0a0` which is represented in the `pixi.lock` file
+    assert!(
+        repodata
+            .conda_packages
+            .get("python-3.12.3-h2628c8c_0_cpython.conda")
+            .expect("python not found in repodata")
+            .depends
+            .contains(&"libzlib >=1.2.13,<2.0.0a0".to_string()),
+        "'libzlib >=1.2.13,<2.0.0a0' not found in python dependencies"
+    );
+}
+
 #[rstest]
 #[case("conda")]
 #[case("micromamba")]
@@ -150,19 +229,15 @@ async fn test_compatibility(
     let prefix_str = create_prefix
         .to_str()
         .expect("Couldn't create conda prefix string");
-    let args = if tool == "conda" {
-        vec![
-            "env",
-            "create",
-            "-y",
-            "-p",
-            prefix_str,
-            "-f",
-            "environment.yml",
-        ]
-    } else {
-        vec!["create", "-y", "-p", prefix_str, "-f", "environment.yml"]
-    };
+    let args = vec![
+        "env",
+        "create",
+        "-y",
+        "-p",
+        prefix_str,
+        "-f",
+        "environment.yml",
+    ];
     let output = Command::new(tool)
         .args(args)
         .current_dir(unpack_dir)

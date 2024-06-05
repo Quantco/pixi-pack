@@ -27,13 +27,14 @@ clap = { version = "4.5.4", features = ["derive", "string"] }
 clap-verbosity-flag = "2.2.0"
 futures = "0.3.30"
 indicatif = "0.17.8"
-rattler = { version = "0.26.2", default-features = false }
-rattler_conda_types = "0.25.0"
-rattler_index = "0.19.15"
-rattler_lock = "0.22.10"
-rattler_networking = { version = "0.20.8", default-features = false }
-rattler_package_streaming = { version = "0.21.1", default-features = false }
-rattler_shell = "0.20.6"
+rattler = { git = "https://github.com/mamba-org/rattler", rev = "20c0951", default-features = false }
+rattler_digest = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
+rattler_conda_types = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
+rattler_index = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
+rattler_lock = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
+rattler_networking = { git = "https://github.com/mamba-org/rattler", rev = "20c0951", default-features = false }
+rattler_package_streaming = { git = "https://github.com/mamba-org/rattler", rev = "20c0951", default-features = false }
+rattler_shell = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
 reqwest = { version = "0.12.4", default-features = false, features = [
   "http2",
   "macos-system-configuration",
