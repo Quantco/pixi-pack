@@ -30,7 +30,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os:
+          - ubuntu-latest
+          - ubuntu-latest-arm-4core
+          - windows-latest
+          - macos-latest
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -43,4 +47,4 @@ jobs:
         with:
           key: tests
       - name: Run test
-        run: pixi run test --color always ${{ matrix.os == 'ubuntu-latest' && '--no-default-features --features rustls-tls' || '' }}
+        run: pixi run test --color always ${{ startsWith(matrix.os, 'ubuntu-latest') && '--no-default-features --features rustls-tls' || '' }}

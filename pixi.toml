@@ -11,9 +11,9 @@ test = "cargo test"
 
 [dependencies]
 rust = "1.77.2"
-# [target.linux.dependencies]
-# compilers = ">=1.7.0"
-# c-compiler = "*"
+openssl = "3.*"
+[target.linux.dependencies]
+compilers = ">=1.7.0"
 
 [feature.test.dependencies]
 conda = "*"

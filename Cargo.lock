@@ -1185,6 +1185,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa82e28a107a8cc405f0839610bdc9b15f1e25ec7d696aa5cf173edbcb1486ab"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http 1.1.0",
+ "indexmap 2.2.6",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1325,14 +1344,14 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "httparse",
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.7",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -1348,6 +1367,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
+ "h2 0.4.5",
  "http 1.1.0",
  "http-body 1.0.0",
  "httparse",
@@ -2702,7 +2722,7 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "h2",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.29",
@@ -2746,6 +2766,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "h2 0.4.5",
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
@@ -2769,6 +2790,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sync_wrapper",
+ "system-configuration",
  "tokio",
  "tokio-native-tls",
  "tokio-rustls 0.25.0",
