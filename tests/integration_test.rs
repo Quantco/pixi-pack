@@ -88,14 +88,46 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok());
     assert!(pack_file.is_file());
-    assert!(pack_file.exists());
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok());
     assert!(activate_file.is_file());
-    assert!(activate_file.exists());
+
+    required_fs_objects
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_inject(options: Options, mut required_fs_objects: Vec<&'static str>) {
+    let mut pack_options = options.pack_options;
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    pack_options
+        .additional_packages
+        .push(PathBuf::from("examples/webserver/pavel-delivers.conda"));
+
+    pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok());
+    assert!(pack_file.is_file());
+
+    let env_dir = unpack_options.output_directory.join("env");
+    let activate_file = unpack_options.output_directory.join("activate.sh");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok());
+    assert!(activate_file.is_file());
+
+    // output env should contain files from the injected package
+    required_fs_objects.push("pavel-delivers.json");
 
     required_fs_objects
         .iter()
@@ -141,19 +173,15 @@ async fn test_compatibility(
     let prefix_str = create_prefix
         .to_str()
         .expect("Couldn't create conda prefix string");
-    let args = if tool == "conda" {
-        vec![
-            "env",
-            "create",
-            "-y",
-            "-p",
-            prefix_str,
-            "-f",
-            "environment.yml",
-        ]
-    } else {
-        vec!["create", "-y", "-p", prefix_str, "-f", "environment.yml"]
-    };
+    let args = vec![
+        "env",
+        "create",
+        "-y",
+        "-p",
+        prefix_str,
+        "-f",
+        "environment.yml",
+    ];
     let output = Command::new(tool)
         .args(args)
         .current_dir(unpack_dir)
