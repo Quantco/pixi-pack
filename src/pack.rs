@@ -140,8 +140,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .collect();
     for (path, archive_type) in injected_packages {
         // step 1: Derive PackageRecord from index.json
-        // TODO: Migrate to use publicly exposed functions from rattler_index.
-        // xref: https://github.com/mamba-org/rattler/pull/726
         // TODO: We should create a `noarch` subdir here (this is relevant for installing via conda).
         let package_record = match archive_type {
             ArchiveType::TarBz2 => package_record_from_tar_bz2(&path),
