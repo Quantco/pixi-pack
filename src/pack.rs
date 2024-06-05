@@ -4,6 +4,8 @@ use std::{
     sync::Arc,
 };
 
+use fxhash::FxHashMap;
+use rattler_digest::{Md5, Sha256};
 use tokio::{
     fs::{self, create_dir_all, File},
     io::AsyncWriteExt,
@@ -13,7 +15,10 @@ use anyhow::Result;
 use async_compression::{tokio::write::ZstdEncoder, Level};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::ProgressStyle;
-use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData};
+use rattler_conda_types::{
+    package::{IndexJson, PackageFile},
+    ChannelInfo, PackageRecord, Platform, RepoData,
+};
 use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
@@ -32,6 +37,7 @@ pub struct PackOptions {
     pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
     pub level: Option<Level>,
+    pub additional_packages: Vec<PathBuf>,
 }
 
 /// Pack a pixi environment.
@@ -63,11 +69,19 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.platform.as_str()
     ))?;
 
-    let mut conda_packages = Vec::new();
+    let output_folder =
+        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
+
+    let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
+
+    let mut conda_packages_from_lockfile: Vec<CondaPackage> = Vec::new();
 
     for package in packages {
         match package {
-            Package::Conda(p) => conda_packages.push(p),
+            Package::Conda(p) => {
+                // let path = channel_dir.join(&p.package_record().subdir).join(&p.file_name().expect("TODO"));
+                conda_packages_from_lockfile.push(p)
+            }
             Package::Pypi(_) => {
                 anyhow::bail!("pypi packages are not supported in pixi-pack");
             }
@@ -75,8 +89,11 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     }
 
     // Download packages to temporary directory.
-    tracing::info!("Downloading {} packages", conda_packages.len());
-    let bar = indicatif::ProgressBar::new(conda_packages.len() as u64);
+    tracing::info!(
+        "Downloading {} packages",
+        conda_packages_from_lockfile.len()
+    );
+    let bar = indicatif::ProgressBar::new(conda_packages_from_lockfile.len() as u64);
     bar.set_style(
         ProgressStyle::with_template(
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -85,12 +102,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .progress_chars("##-"),
     );
 
-    let output_folder =
-        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
-
-    let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
-
-    stream::iter(conda_packages.iter())
+    stream::iter(conda_packages_from_lockfile.iter())
         .map(Ok)
         .try_for_each_concurrent(50, |package| async {
             download_package(&client, package, &channel_dir).await?;
@@ -104,6 +116,53 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     bar.finish();
 
+    let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
+
+    for package in conda_packages_from_lockfile {
+        let filename = package
+            .file_name()
+            .ok_or(anyhow!("could not get file name"))?
+            .to_string();
+        conda_packages.push((filename, package.package_record().clone()));
+    }
+
+    for path in options.additional_packages {
+        // step 1: Derive PackageRecord from index.json
+        let index = IndexJson::from_path(&path)
+            .map_err(|e| anyhow!("could not read index.json at {}: {}", path.display(), e))?;
+
+        let filename = path
+            .file_name()
+            .ok_or(anyhow!("could not get file name"))?
+            .to_str()
+            .ok_or(anyhow!("could not convert filename to string"))?
+            .to_string();
+
+        let sha256 = rattler_digest::compute_file_digest::<Sha256>(&path).ok();
+
+        let md5 = rattler_digest::compute_file_digest::<Md5>(&path).ok();
+
+        let size = fs::metadata(&path).await.ok().map(|m| m.len());
+
+        let package_record =
+            PackageRecord::from_index_json(index, size, sha256, md5).map_err(|e| {
+                anyhow!(
+                    "could not create package record from index.json at {}: {}",
+                    path.display(),
+                    e
+                )
+            })?;
+
+        // step 2: copy file into channel dir
+        let subdir = &package_record.subdir;
+
+        fs::copy(&path, channel_dir.join(subdir).join(&filename))
+            .await
+            .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
+
+        conda_packages.push((filename, package_record));
+    }
+
     // Create `repodata.json` files.
     create_repodata_files(conda_packages.iter(), &channel_dir).await?;
 
@@ -115,11 +174,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     metadata_file.write_all(metadata.as_bytes()).await?;
 
     // Create environment file.
-    create_environment_file(
-        output_folder.path(),
-        conda_packages.iter().map(|p| p.package_record()),
-    )
-    .await?;
+    create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
     // Pack = archive + compress the contents.
     archive_directory(output_folder.path(), &options.output_file, options.level)
@@ -253,32 +308,26 @@ async fn create_environment_file(
 }
 
 async fn create_repodata_files(
-    packages: impl Iterator<Item = &CondaPackage>,
+    packages: impl Iterator<Item = &(String, PackageRecord)>,
     channel_dir: &Path,
 ) -> Result<()> {
     let mut packages_per_subdir = HashMap::new();
 
-    for p in packages {
-        let package_record = p.package_record();
-        let subdir = &package_record.subdir;
+    for (filename, p) in packages {
+        let subdir = &p.subdir;
 
-        let packages = packages_per_subdir.entry(subdir).or_insert_with(Vec::new);
-        packages.push(p);
+        let packages = packages_per_subdir
+            .entry(subdir)
+            .or_insert_with(HashMap::new);
+        packages.insert(filename, p);
     }
 
     for (subdir, packages) in packages_per_subdir {
         let repodata_path = channel_dir.join(subdir).join("repodata.json");
 
-        let conda_packages = packages
+        let conda_packages: FxHashMap<_, _> = packages
             .into_iter()
-            .map(|p| {
-                (
-                    p.file_name()
-                        .expect("Could not determine filename")
-                        .to_string(),
-                    p.package_record().clone(),
-                )
-            })
+            .map(|(filename, p)| (filename.to_string(), p.clone()))
             .collect();
 
         let repodata = RepoData {

@@ -2191,6 +2191,7 @@ dependencies = [
  "indicatif",
  "rattler",
  "rattler_conda_types",
+ "rattler_digest",
  "rattler_index",
  "rattler_lock",
  "rattler_networking",

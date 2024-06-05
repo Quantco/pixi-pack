@@ -52,6 +52,10 @@ enum Commands {
         /// Output file to write the pack to
         #[arg(short, long, default_value = cwd().join("environment.tar.zstd").into_os_string())]
         output_file: PathBuf,
+
+        /// Inject a additional conda package into the final prefix
+        #[arg(short, long, num_args(0..))]
+        additional_packages: Vec<PathBuf>,
     },
 
     /// Unpack a pixi environment
@@ -92,6 +96,7 @@ async fn main() -> Result<()> {
             auth_file,
             manifest_path,
             output_file,
+            additional_packages,
         } => {
             let options = PackOptions {
                 environment,
@@ -104,6 +109,7 @@ async fn main() -> Result<()> {
                     platform,
                 },
                 level: None,
+                additional_packages,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

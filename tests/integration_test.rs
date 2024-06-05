@@ -35,6 +35,7 @@ fn options(
             manifest_path,
             metadata,
             level,
+            additional_packages: vec![],
         },
         unpack_options: UnpackOptions {
             pack_file,
