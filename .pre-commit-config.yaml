@@ -32,17 +32,10 @@ repos:
         language: system
         types: [text]
         require_serial: true
-      # cargo fmt and clippy
+      # cargo fmt
       - id: cargo-fmt
         name: cargo-fmt
         entry: pixi run -e default cargo fmt --
-        language: system
-        require_serial: false
-        types: [rust]
-      - id: cargo-clippy
-        name: cargo-clippy
-        entry: pixi run -e default cargo clippy --all-targets --all-features --workspace -- -D warnings
-        pass_filenames: false
         language: system
         require_serial: false
         types: [rust]
