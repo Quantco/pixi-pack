@@ -77,7 +77,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     for package in packages {
         match package {
             Package::Conda(p) => {
-                // let path = channel_dir.join(&p.package_record().subdir).join(&p.file_name().expect("TODO"));
                 conda_packages_from_lockfile.push(p)
             }
             Package::Pypi(_) => {
@@ -139,7 +138,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         })
         .collect();
     for (path, archive_type) in injected_packages {
-        // step 1: Derive PackageRecord from index.json
+        // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
             ArchiveType::TarBz2 => package_record_from_tar_bz2(&path),
             ArchiveType::Conda => package_record_from_conda(&path),
