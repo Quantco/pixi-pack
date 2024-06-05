@@ -42,20 +42,24 @@ enum Commands {
         platform: Platform,
 
         /// Authentication file for fetching packages
-        #[arg(short, long)] // TODO: Read from environment variable?
+        #[arg(long)] // TODO: Read from environment variable?
         auth_file: Option<PathBuf>,
 
         /// The path to 'pixi.toml' or 'pyproject.toml'
-        #[arg(short, long, default_value = cwd().join("pixi.toml").into_os_string())]
+        #[arg(required = true, default_value = cwd().join("pixi.toml").into_os_string())]
         manifest_path: PathBuf,
 
         /// Output file to write the pack to
         #[arg(short, long, default_value = cwd().join("environment.tar.zstd").into_os_string())]
         output_file: PathBuf,
 
+        /// Inject an additional conda package into the final prefix
+        #[arg(short, long, num_args(0..))]
+        inject: Vec<PathBuf>,
+
         /// PyPI dependencies are not supported.
         /// This flag allows packing even if PyPI dependencies are present.
-        #[arg(short, long, default_value = "false")]
+        #[arg(long, default_value = "false")]
         ignore_pypi_errors: bool,
     },
 
@@ -97,6 +101,7 @@ async fn main() -> Result<()> {
             auth_file,
             manifest_path,
             output_file,
+            inject,
             ignore_pypi_errors,
         } => {
             let options = PackOptions {
@@ -110,6 +115,7 @@ async fn main() -> Result<()> {
                     platform,
                 },
                 level: None,
+                injected_packages: inject,
                 ignore_pypi_errors,
             };
             tracing::debug!("Running pack command with options: {:?}", options);

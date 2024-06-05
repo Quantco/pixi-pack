@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/prefix-dev/recipe-format/main/schema.json
+
+package:
+  name: my-webserver
+  version: "0.1.0"
+
+source:
+  path: ../
+
+build:
+  number: 0
+  noarch: python
+  script:
+    - python -m pip install . --no-deps --ignore-installed -vv --no-build-isolation --disable-pip-version-check
+
+requirements:
+  host:
+    - python >=3.12
+    - pip
+    - hatchling
+  run:
+    - python >=3.12
+    - fastapi
+
+tests:
+  - python:
+      imports:
+        - my_webserver
+  - package_contents:
+      site_packages:
+        - my_webserver/__init__.py
