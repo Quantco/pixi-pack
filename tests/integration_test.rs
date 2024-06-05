@@ -18,14 +18,14 @@ struct Options {
 
 #[fixture]
 fn options(
+    #[default(PathBuf::from("examples/simple-python/pixi.toml"))] manifest_path: PathBuf,
+    #[default(false)] ignore_pypi_errors: bool,
     #[default("default")] environment: String,
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
-    #[default(PathBuf::from("examples/simple-python/pixi.toml"))] manifest_path: PathBuf,
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(Level::Best))] level: Option<Level>,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
-    #[default(true)] ignore_pypi_errors: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar.zstd");
@@ -173,17 +173,21 @@ async fn test_compatibility(
 }
 
 #[rstest]
-#[case(true, false)]
-#[case(false, true)]
 #[tokio::test]
 async fn test_pypi_ignore(
-    options: Options,
-    #[case] ignore_pypi_errors: bool,
-    #[case] should_fail: bool,
+    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"), true)] options: Options,
 ) {
-    let mut pack_options = options.pack_options;
-    pack_options.ignore_pypi_errors = ignore_pypi_errors;
+    assert!(options.pack_options.ignore_pypi_errors);
+    let pack_result = pixi_pack::pack(options.pack_options).await;
+    assert!(pack_result.is_ok());
+}
 
-    let pack_result = pixi_pack::pack(pack_options).await;
-    assert_eq!(pack_result.is_err(), should_fail);
+#[rstest]
+#[tokio::test]
+async fn test_pypi_fail(
+    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"), false)] options: Options,
+) {
+    assert!(!options.pack_options.ignore_pypi_errors);
+    let pack_result = pixi_pack::pack(options.pack_options).await;
+    assert!(pack_result.is_err());
 }
