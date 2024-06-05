@@ -87,16 +87,17 @@ jobs:
           rustc -V
 
       - name: Build
-        run: >-
-          cargo build
-          --locked
-          --release${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }}
+        run: |
+          cargo build \
+            --locked \
+            --release${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }}
+          mv target/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
-          path: target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          name: pixi-pack-${{ matrix.target }}
+          path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
   release:
@@ -109,10 +110,9 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: pixi-pack-*
-          path: target
+          pattern: pixi-pack-*
       - run: |
-          tree target
+          ls pixi-pack-*
       # - name: Push v${{ needs.metadata.outputs.version }} tag
       #   run: |
       #     git tag v${{ needs.metadata.outputs.version }}
