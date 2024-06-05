@@ -5,9 +5,16 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["tokio/rt-multi-thread"]
+default = ["tokio/rt-multi-thread", "rustls-tls"]
 # Activate this feature to activate online-testing in the integration test suite.
 online-test = []
+rustls-tls = [
+  "rattler/rustls-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+  "reqwest/rustls-tls",
+  "reqwest/rustls-tls-native-roots",
+]
 
 [dependencies]
 anyhow = "1.*"
@@ -15,14 +22,14 @@ clap = { version = "4.5.4", features = ["derive", "string"] }
 clap-verbosity-flag = "2.2.0"
 futures = "0.3.30"
 indicatif = "0.17.8"
-rattler = { version = "0.26.2", features = ["rustls-tls"] }
+rattler = { version = "0.26.2", default-features = false }
 rattler_conda_types = "0.25.0"
 rattler_index = "0.19.15"
 rattler_lock = "0.22.10"
-rattler_networking = "0.20.8"
-rattler_package_streaming = "0.21.1"
+rattler_networking = { version = "0.20.8", default-features = false }
+rattler_package_streaming = { version = "0.21.1", default-features = false }
 rattler_shell = "0.20.6"
-reqwest = { version = "0.12.4", features = ["rustls-tls", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12.4", default-features = false }
 reqwest-middleware = "0.3.1"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"

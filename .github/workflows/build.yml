@@ -76,11 +76,12 @@ jobs:
         run: echo "RUSTFLAGS=${RUSTFLAGS} -C target-feature=+crt-static" >> "${GITHUB_ENV}"
         if: endsWith(matrix.target, 'windows-msvc')
 
-      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
+      - name: Rust cache
+        uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
           key: build-${{ matrix.target }}
 
-      - name: Show version information (Rust, cargo, GCC)
+      - name: Show version information
         run: |
           cargo -V
           rustc -V
@@ -91,11 +92,12 @@ jobs:
           --locked
           --release
 
-      - name: "Artifact upload: binary"
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           path: target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          if-no-files-found: error
 
   release:
     name: Create Release
