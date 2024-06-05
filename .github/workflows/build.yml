@@ -46,11 +46,9 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-13
     env:
-      #
       # These are some environment variables that configure the build so that the binary size is reduced.
       # Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
       # They're only enable it on main and releases.
-      #
 
       # Enable Link Time Optimization (LTO) for our release builds. This increases link time but drastically reduces
       # binary size.
@@ -83,7 +81,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          key: build-${{ matrix.target }}
+          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}
 
       - name: Build
         run: |
@@ -100,7 +98,7 @@ jobs:
   release:
     name: Create Release
     needs: [metadata, build]
-    # if: needs.metadata.outputs.release == 'true'
+    if: needs.metadata.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,19 +107,14 @@ jobs:
         with:
           pattern: pixi-pack-*
           merge-multiple: true
-      - run: |
-          ls -la
-          file pixi-pack-*
-      # - name: Push v${{ needs.metadata.outputs.version }} tag
-      #   run: |
-      #     git tag v${{ needs.metadata.outputs.version }}
-      #     git push origin v${{ needs.metadata.outputs.version }}
-      # - name: Create Release
-      #   uses: softprops/action-gh-release@69320dbe05506a9a39fc8ae11030b214ec2d1f87
-      #   if: needs.metadata.outputs.release
-      #   with:
-      #     generate_release_notes: true
-      #     tag_name: v${{ needs.metadata.outputs.version }}
-      #     draft: true
-      #     files: |
-      #       target/*/release/pixi-pack*
+      - name: Push v${{ needs.metadata.outputs.version }} tag
+        run: |
+          git tag v${{ needs.metadata.outputs.version }}
+          git push origin v${{ needs.metadata.outputs.version }}
+      - name: Create Release
+        uses: softprops/action-gh-release@69320dbe05506a9a39fc8ae11030b214ec2d1f87
+        with:
+          generate_release_notes: true
+          tag_name: v${{ needs.metadata.outputs.version }}
+          draft: true
+          files: pixi-pack-*

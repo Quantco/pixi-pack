@@ -51,4 +51,4 @@ jobs:
         with:
           key: tests
       - name: Run test
-        run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu-latest') && ' --no-default-features --features rustls-tls' || '' }}
+        run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu') && ' --no-default-features --features rustls-tls' || '' }}
