@@ -85,14 +85,14 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok());
-    assert!(pack_file.is_file());
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.exists());
+    assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok());
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
     assert!(activate_file.exists());
 
@@ -119,7 +119,7 @@ async fn test_compatibility(
 
     let pack_result = pixi_pack::pack(pack_options).await;
     println!("{:?}", pack_result);
-    assert!(pack_result.is_ok());
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
     assert!(pack_file.exists());
 
