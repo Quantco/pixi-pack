@@ -73,7 +73,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             Package::Conda(p) => conda_packages.push(p),
             Package::Pypi(_) => {
                 if options.ignore_pypi_errors {
-                    tracing::warn!("pypi packages are not supported in pixi-pack");
+                    tracing::warn!(
+                        "ignoring pypi package since pypi packages are not supported by pixi-pack"
+                    );
                 } else {
                     anyhow::bail!("pypi packages are not supported in pixi-pack");
                 }
