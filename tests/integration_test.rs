@@ -113,9 +113,9 @@ async fn test_inject(options: Options, mut required_fs_objects: Vec<&'static str
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
-    pack_options
-        .additional_packages
-        .push(PathBuf::from("examples/webserver/pavel-delivers.conda"));
+    pack_options.additional_packages.push(PathBuf::from(
+        "examples/webserver/my-webserver-0.1.0-pyh4616a5c_0.conda",
+    ));
 
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
 
@@ -130,7 +130,7 @@ async fn test_inject(options: Options, mut required_fs_objects: Vec<&'static str
     assert!(activate_file.is_file());
 
     // output env should contain files from the injected package
-    required_fs_objects.push("pavel-delivers.json");
+    required_fs_objects.push("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
 
     required_fs_objects
         .iter()

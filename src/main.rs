@@ -46,7 +46,7 @@ enum Commands {
         auth_file: Option<PathBuf>,
 
         /// The path to 'pixi.toml' or 'pyproject.toml'
-        #[arg(short, long, default_value = cwd().join("pixi.toml").into_os_string())]
+        #[arg(required = true, default_value = cwd().join("pixi.toml").into_os_string())]
         manifest_path: PathBuf,
 
         /// Output file to write the pack to
@@ -59,7 +59,7 @@ enum Commands {
 
         /// PyPI dependencies are not supported.
         /// This flag allows packing even if PyPI dependencies are present.
-        #[arg(short, long, default_value = "false")]
+        #[arg(long, default_value = "false")]
         ignore_pypi_errors: bool,
     },
 
