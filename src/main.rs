@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
                     platform,
                 },
                 level: None,
-                additional_packages: inject,
+                injected_packages: inject,
                 ignore_pypi_errors,
             };
             tracing::debug!("Running pack command with options: {:?}", options);

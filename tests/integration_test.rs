@@ -41,7 +41,7 @@ fn options(
             manifest_path,
             metadata,
             level,
-            additional_packages: vec![],
+            injected_packages: vec![],
             ignore_pypi_errors,
         },
         unpack_options: UnpackOptions {
@@ -113,7 +113,7 @@ async fn test_inject(options: Options, mut required_fs_objects: Vec<&'static str
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
-    pack_options.additional_packages.push(PathBuf::from(
+    pack_options.injected_packages.push(PathBuf::from(
         "examples/webserver/my-webserver-0.1.0-pyh4616a5c_0.conda",
     ));
 
@@ -143,11 +143,11 @@ async fn test_inject(options: Options, mut required_fs_objects: Vec<&'static str
 #[rstest]
 #[tokio::test]
 async fn test_includes_repodata_patches(options: Options) {
-    let pack_options = options.pack_options;
+    let mut pack_options = options.pack_options;
+    pack_options.platform = Platform::Win64;
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    println!("{:?}", pack_result);
     assert!(pack_result.is_ok());
 
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
@@ -158,7 +158,7 @@ async fn test_includes_repodata_patches(options: Options) {
 
     let mut repodata_raw = String::new();
 
-    File::open(unpack_dir.join("win-64/repodata.json"))
+    File::open(unpack_dir.join("channel/win-64/repodata.json"))
         .await
         .expect("Failed to open repodata")
         .read_to_string(&mut repodata_raw)
@@ -167,12 +167,15 @@ async fn test_includes_repodata_patches(options: Options) {
 
     let repodata: RepoData = serde_json::from_str(&repodata_raw).expect("cant parse repodata.json");
 
-    assert!(repodata
-        .conda_packages
-        .get("python")
-        .expect("python not found in repodata")
-        .depends
-        .contains(&"libzlib <2".to_string()))
+    assert!(
+        repodata
+            .conda_packages
+            .get("python-3.12.3-h2628c8c_0_cpython.conda")
+            .expect("python not found in repodata")
+            .depends
+            .contains(&"libzlib >=1.2.13,<2.0.0a0".to_string()),
+        "'libzlib >=1.2.13,<2.0.0a0' not found in python dependencies"
+    );
 }
 
 #[cfg(not(target_os = "windows"))] // https://github.com/Quantco/pixi-pack/issues/8

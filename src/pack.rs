@@ -5,7 +5,7 @@ use std::{
 };
 
 use fxhash::FxHashMap;
-use rattler_digest::{Md5, Sha256};
+use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
 use tokio::{
     fs::{self, create_dir_all, File},
     io::AsyncWriteExt,
@@ -15,10 +15,7 @@ use anyhow::Result;
 use async_compression::{tokio::write::ZstdEncoder, Level};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::ProgressStyle;
-use rattler_conda_types::{
-    package::{IndexJson, PackageFile},
-    ChannelInfo, PackageRecord, Platform, RepoData,
-};
+use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
 use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
@@ -37,7 +34,7 @@ pub struct PackOptions {
     pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
     pub level: Option<Level>,
-    pub additional_packages: Vec<PathBuf>,
+    pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
 }
 
@@ -133,35 +130,32 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         conda_packages.push((filename, package.package_record().clone()));
     }
 
-    for path in options.additional_packages {
+    let injected_packages: Vec<(PathBuf, ArchiveType)> = options
+        .injected_packages
+        .iter()
+        .filter_map(|e| {
+            ArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
+                .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
+        })
+        .collect();
+    for (path, archive_type) in injected_packages {
         // step 1: Derive PackageRecord from index.json
-        let index = IndexJson::from_path(&path)
-            .map_err(|e| anyhow!("could not read index.json at {}: {}", path.display(), e))?;
+        // TODO: Migrate to use publicly exposed functions from rattler_index.
+        // xref: https://github.com/mamba-org/rattler/pull/726
+        // TODO: We should create a `noarch` subdir here (this is relevant for installing via conda).
+        let package_record = match archive_type {
+            ArchiveType::TarBz2 => package_record_from_tar_bz2(&path),
+            ArchiveType::Conda => package_record_from_conda(&path),
+        }?;
 
+        // step 2: copy file into channel dir
+        let subdir = &package_record.subdir;
         let filename = path
             .file_name()
             .ok_or(anyhow!("could not get file name"))?
             .to_str()
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
-
-        let sha256 = rattler_digest::compute_file_digest::<Sha256>(&path).ok();
-
-        let md5 = rattler_digest::compute_file_digest::<Md5>(&path).ok();
-
-        let size = fs::metadata(&path).await.ok().map(|m| m.len());
-
-        let package_record =
-            PackageRecord::from_index_json(index, size, sha256, md5).map_err(|e| {
-                anyhow!(
-                    "could not create package record from index.json at {}: {}",
-                    path.display(),
-                    e
-                )
-            })?;
-
-        // step 2: copy file into channel dir
-        let subdir = &package_record.subdir;
 
         fs::copy(&path, channel_dir.join(subdir).join(&filename))
             .await
