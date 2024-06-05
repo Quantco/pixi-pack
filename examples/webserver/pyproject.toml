@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "my-webserver"
+description = "Example web server"
+version = "0.1.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.12"
+# pixi handles the dependencies
+# since we don't want to distribute this to pypi, we don't need to specify them here
+dependencies = []
