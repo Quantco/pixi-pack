@@ -11,6 +11,7 @@ test = "cargo test"
 
 [dependencies]
 rust = "1.77.2"
+[target.linux.dependencies]
 compilers = ">=1.7.0"
 c-compiler = "*"
 
