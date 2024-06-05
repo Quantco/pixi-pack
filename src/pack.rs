@@ -34,6 +34,7 @@ pub struct PackOptions {
     pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
     pub level: Option<Level>,
+    pub ignore_pypi_errors: bool,
 }
 
 /// Pack a pixi environment.
@@ -71,7 +72,11 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         match package {
             Package::Conda(p) => conda_packages.push(p),
             Package::Pypi(_) => {
-                anyhow::bail!("pypi packages are not supported in pixi-pack");
+                if options.ignore_pypi_errors {
+                    tracing::warn!("pypi packages are not supported in pixi-pack");
+                } else {
+                    anyhow::bail!("pypi packages are not supported in pixi-pack");
+                }
             }
         }
     }

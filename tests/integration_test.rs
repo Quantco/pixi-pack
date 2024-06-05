@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::{path::PathBuf, process::Command};
 
 use async_compression::Level;
@@ -23,6 +25,7 @@ fn options(
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(Level::Best))] level: Option<Level>,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
+    #[default(true)] ignore_pypi_errors: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar.zstd");
@@ -35,6 +38,7 @@ fn options(
             manifest_path,
             metadata,
             level,
+            ignore_pypi_errors,
         },
         unpack_options: UnpackOptions {
             pack_file,
