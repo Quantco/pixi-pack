@@ -133,13 +133,13 @@ async fn test_inject(
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok());
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok());
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
 
     // output env should contain files from the injected package
