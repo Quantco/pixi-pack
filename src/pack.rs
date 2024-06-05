@@ -140,7 +140,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .collect();
     for (path, archive_type) in injected_packages {
         // step 1: Derive PackageRecord from index.json
-        // TODO: We should create a `noarch` subdir here (this is relevant for installing via conda).
         let package_record = match archive_type {
             ArchiveType::TarBz2 => package_record_from_tar_bz2(&path),
             ArchiveType::Conda => package_record_from_conda(&path),
