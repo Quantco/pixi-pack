@@ -56,6 +56,11 @@ enum Commands {
         /// Inject a additional conda package into the final prefix
         #[arg(short, long, num_args(0..))]
         additional_packages: Vec<PathBuf>,
+
+        /// PyPI dependencies are not supported.
+        /// This flag allows packing even if PyPI dependencies are present.
+        #[arg(short, long, default_value = "false")]
+        ignore_pypi_errors: bool,
     },
 
     /// Unpack a pixi environment
@@ -97,6 +102,7 @@ async fn main() -> Result<()> {
             manifest_path,
             output_file,
             additional_packages,
+            ignore_pypi_errors,
         } => {
             let options = PackOptions {
                 environment,
@@ -110,6 +116,7 @@ async fn main() -> Result<()> {
                 },
                 level: None,
                 additional_packages,
+                ignore_pypi_errors,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

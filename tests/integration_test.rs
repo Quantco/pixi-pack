@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::{path::PathBuf, process::Command};
 
 use async_compression::Level;
@@ -16,13 +18,14 @@ struct Options {
 
 #[fixture]
 fn options(
+    #[default(PathBuf::from("examples/simple-python/pixi.toml"))] manifest_path: PathBuf,
     #[default("default")] environment: String,
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
-    #[default(PathBuf::from("examples/simple-python/pixi.toml"))] manifest_path: PathBuf,
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(Level::Best))] level: Option<Level>,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
+    #[default(false)] ignore_pypi_errors: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar.zstd");
@@ -36,6 +39,7 @@ fn options(
             metadata,
             level,
             additional_packages: vec![],
+            ignore_pypi_errors,
         },
         unpack_options: UnpackOptions {
             pack_file,
@@ -167,4 +171,19 @@ async fn test_compatibility(
         .for_each(|dir| {
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
+}
+
+#[rstest]
+#[case(true, false)]
+#[case(false, true)]
+#[tokio::test]
+async fn test_pypi_ignore(
+    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"))] options: Options,
+    #[case] ignore_pypi_errors: bool,
+    #[case] should_fail: bool,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.ignore_pypi_errors = ignore_pypi_errors;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert_eq!(pack_result.is_err(), should_fail);
 }
