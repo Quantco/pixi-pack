@@ -5,9 +5,12 @@ use std::{path::PathBuf, process::Command};
 use async_compression::Level;
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
 use rattler_conda_types::Platform;
+use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
 use tempfile::{tempdir, TempDir};
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 
 struct Options {
     pack_options: PackOptions,
@@ -135,6 +138,41 @@ async fn test_inject(options: Options, mut required_fs_objects: Vec<&'static str
         .for_each(|dir| {
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_includes_repodata_patches(options: Options) {
+    let pack_options = options.pack_options;
+    let pack_file = options.unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    println!("{:?}", pack_result);
+    assert!(pack_result.is_ok());
+
+    let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
+    let unpack_dir = unpack_dir.path();
+    unarchive(pack_file.as_path(), unpack_dir)
+        .await
+        .expect("Failed to unarchive environment");
+
+    let mut repodata_raw = String::new();
+
+    File::open(unpack_dir.join("win-64/repodata.json"))
+        .await
+        .expect("Failed to open repodata")
+        .read_to_string(&mut repodata_raw)
+        .await
+        .expect("could not read repodata.json");
+
+    let repodata: RepoData = serde_json::from_str(&repodata_raw).expect("cant parse repodata.json");
+
+    assert!(repodata
+        .conda_packages
+        .get("python")
+        .expect("python not found in repodata")
+        .depends
+        .contains(&"libzlib <2".to_string()))
 }
 
 #[cfg(not(target_os = "windows"))] // https://github.com/Quantco/pixi-pack/issues/8
