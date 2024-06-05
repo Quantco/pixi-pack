@@ -93,7 +93,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          name: pixi-pack-${{ matrix.target }}
           path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
@@ -108,6 +108,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: pixi-pack-*
+          merge-multiple: true
       - run: |
           ls -la
           file pixi-pack-*
