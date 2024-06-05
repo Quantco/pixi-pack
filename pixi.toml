@@ -15,7 +15,7 @@ openssl = "3.*"
 
 [target.linux.activation]
 scripts = ["activate-openssl.sh"]
-# TODO: once TODO is fixed, replace with
+# TODO: once https://github.com/prefix-dev/pixi/issues/1481 is fixed, replace with
 # [activation.env]
 # OPENSSL_DIR = "$CONDA_PREFIX"
 
