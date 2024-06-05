@@ -2,7 +2,7 @@
 
 package:
   name: my-webserver
-  version: '0.1.0'
+  version: "0.1.0"
 
 source:
   path: ../
@@ -27,5 +27,5 @@ tests:
       imports:
         - my_webserver
   - package_contents:
-      site_packages: 
+      site_packages:
         - my_webserver/__init__.py
