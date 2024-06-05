@@ -52,6 +52,11 @@ enum Commands {
         /// Output file to write the pack to
         #[arg(short, long, default_value = cwd().join("environment.tar.zstd").into_os_string())]
         output_file: PathBuf,
+
+        /// PyPI dependencies are not supported.
+        /// This flag allows packing even if PyPI dependencies are present.
+        #[arg(short, long, default_value = "false")]
+        ignore_pypi_errors: bool,
     },
 
     /// Unpack a pixi environment
@@ -92,6 +97,7 @@ async fn main() -> Result<()> {
             auth_file,
             manifest_path,
             output_file,
+            ignore_pypi_errors,
         } => {
             let options = PackOptions {
                 environment,
@@ -104,6 +110,7 @@ async fn main() -> Result<()> {
                     platform,
                 },
                 level: None,
+                ignore_pypi_errors,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?
