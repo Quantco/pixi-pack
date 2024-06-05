@@ -43,4 +43,4 @@ jobs:
         with:
           key: tests
       - name: Run test
-        run: pixi run test
+        run: pixi run test --color always ${{ matrix.os == 'ubuntu-latest' && '--no-default-features --features rustls-tls' || '' }}

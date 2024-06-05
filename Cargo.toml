@@ -7,11 +7,11 @@ edition = "2021"
 [features]
 default = ["native-tls"]
 native-tls = [
-    "reqwest/native-tls",
-    "reqwest/native-tls-alpn",
-    "rattler/native-tls",
-    "rattler_networking/rustls-tls",
-    "rattler_package_streaming/rustls-tls",
+  "reqwest/native-tls",
+  "reqwest/native-tls-alpn",
+  "rattler/native-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
 ]
 rustls-tls = [
   "reqwest/rustls-tls",
