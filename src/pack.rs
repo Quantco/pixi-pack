@@ -76,9 +76,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     for package in packages {
         match package {
-            Package::Conda(p) => {
-                conda_packages_from_lockfile.push(p)
-            }
+            Package::Conda(p) => conda_packages_from_lockfile.push(p),
             Package::Pypi(_) => {
                 if options.ignore_pypi_errors {
                     tracing::warn!(
