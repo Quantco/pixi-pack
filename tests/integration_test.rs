@@ -171,3 +171,19 @@ async fn test_compatibility(
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
 }
+
+#[rstest]
+#[case(true, false)]
+#[case(false, true)]
+#[tokio::test]
+async fn test_pypi_ignore(
+    options: Options,
+    #[case] ignore_pypi_errors: bool,
+    #[case] should_fail: bool,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.ignore_pypi_errors = ignore_pypi_errors;
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert_eq!(pack_result.is_err(), should_fail);
+}
