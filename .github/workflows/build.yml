@@ -90,7 +90,7 @@ jobs:
         run: >-
           cargo build
           --locked
-          --release
+          --release${{ endsWith(matrix.target, 'musl') && ' --no-default-features --feature native-tls' }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

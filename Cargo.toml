@@ -5,15 +5,20 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["tokio/rt-multi-thread", "rustls-tls"]
-# Activate this feature to activate online-testing in the integration test suite.
-online-test = []
+default = ["native-tls"]
+native-tls = [
+    "reqwest/native-tls",
+    "reqwest/native-tls-alpn",
+    "rattler/native-tls",
+    "rattler_networking/rustls-tls",
+    "rattler_package_streaming/rustls-tls",
+]
 rustls-tls = [
+  "reqwest/rustls-tls",
+  "reqwest/rustls-tls-native-roots",
   "rattler/rustls-tls",
   "rattler_networking/rustls-tls",
   "rattler_package_streaming/rustls-tls",
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
 ]
 
 [dependencies]
@@ -35,7 +40,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 serde_yaml = "0.9.34"
 tokio-tar = "0.3.1"
-tokio = "1.37.0"
+tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
 tokio-stream = { version = "0.1.15", features = ["fs"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [
