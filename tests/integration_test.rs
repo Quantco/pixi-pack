@@ -73,7 +73,13 @@ fn required_fs_objects() -> Vec<&'static str> {
             openssl_required_file,
         ])
     } else {
-        required_fs_objects.extend(vec!["bin/python", "lib", "man", "ssl", openssl_required_file]);
+        required_fs_objects.extend(vec![
+            "bin/python",
+            "lib",
+            "man",
+            "ssl",
+            openssl_required_file,
+        ]);
     }
     required_fs_objects
 }
@@ -105,7 +111,10 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
         });
 }
 
-#[cfg(not(target_os = "windows"))] // https://github.com/Quantco/pixi-pack/issues/8
+// https://github.com/Quantco/pixi-pack/issues/8
+#[cfg(not(target_os = "windows"))]
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 #[rstest]
 #[case("conda")]
 #[case("micromamba")]

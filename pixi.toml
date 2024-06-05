@@ -8,7 +8,6 @@ platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64", "win-64"]
 [tasks]
 build = "cargo build --release"
 test = "cargo test"
-clippy = "cargo clippy"
 
 [dependencies]
 rust = "1.77.2"

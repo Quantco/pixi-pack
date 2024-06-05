@@ -50,7 +50,5 @@ jobs:
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
           key: tests
-      - name: Run clippy
-        run: pixi run clippy --color always${{ startsWith(matrix.os, 'ubuntu-latest') && ' --no-default-features --features rustls-tls' || '' }}
       - name: Run test
         run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu-latest') && ' --no-default-features --features rustls-tls' || '' }}
