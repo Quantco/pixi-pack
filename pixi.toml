@@ -14,7 +14,7 @@ clippy = "cargo clippy"
 rust = "1.77.2"
 openssl = "3.*"
 
-[activation]
+[target.linux.activation]
 scripts = ["activate-openssl.sh"]
 # TODO: once TODO is fixed, replace with
 # [activation.env]

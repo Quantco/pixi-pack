@@ -52,6 +52,14 @@ fn options(
 #[fixture]
 fn required_fs_objects() -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
+    let openssl_required_file = match Platform::current() {
+        Platform::Linux64 => "conda-meta/openssl-3.3.0-h4ab18f5_3.json",
+        Platform::LinuxAarch64 => "conda-meta/openssl-3.3.1-h68df207_0.json",
+        Platform::OsxArm64 => "conda-meta/openssl-3.3.0-hfb2fe0b_3.json",
+        Platform::Osx64 => "conda-meta/openssl-3.3.1-h87427d6_0.json",
+        Platform::Win64 => "conda-meta/openssl-3.3.0-h2466b09_3.json",
+        _ => panic!("Unsupported platform"),
+    };
     if cfg!(windows) {
         required_fs_objects.extend(vec![
             "DLLs",
@@ -62,17 +70,10 @@ fn required_fs_objects() -> Vec<&'static str> {
             "Scripts",
             "Tools",
             "python.exe",
-            "conda-meta/openssl-3.3.0-h2466b09_3.json",
+            openssl_required_file,
         ])
     } else {
-        required_fs_objects.extend(vec!["bin/python", "lib", "man", "ssl"]);
-        if cfg!(target_os = "macos") {
-            // osx-arm64
-            required_fs_objects.push("conda-meta/openssl-3.3.0-hfb2fe0b_3.json");
-        } else {
-            // linux-64
-            required_fs_objects.push("conda-meta/openssl-3.3.0-h4ab18f5_3.json");
-        }
+        required_fs_objects.extend(vec!["bin/python", "lib", "man", "ssl", openssl_required_file]);
     }
     required_fs_objects
 }
