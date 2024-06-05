@@ -53,8 +53,8 @@ enum Commands {
         #[arg(short, long, default_value = cwd().join("environment.tar.zstd").into_os_string())]
         output_file: PathBuf,
 
-        /// Pypi dependencies are not supported yet.
-        /// This flag allows the pack to continue even if pypi dependencies are present.
+        /// PyPI dependencies are not supported.
+        /// This flag allows packing even if PyPI dependencies are present.
         #[arg(short, long, default_value = "false")]
         ignore_pypi_errors: bool,
     },
