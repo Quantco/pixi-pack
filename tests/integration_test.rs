@@ -110,14 +110,18 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
 #[case("conda")]
 #[case("tar.bz2")]
 #[tokio::test]
-async fn test_inject(#[case] package_format: &str, options: Options, mut required_fs_objects: Vec<&'static str>) {
+async fn test_inject(
+    #[case] package_format: &str,
+    options: Options,
+    mut required_fs_objects: Vec<&'static str>,
+) {
     let mut pack_options = options.pack_options;
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
-    pack_options.injected_packages.push(PathBuf::from(
-        format!("examples/webserver/my-webserver-0.1.0-pyh4616a5c_0.{package_format}"),
-    ));
+    pack_options.injected_packages.push(PathBuf::from(format!(
+        "examples/webserver/my-webserver-0.1.0-pyh4616a5c_0.{package_format}"
+    )));
 
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
 
