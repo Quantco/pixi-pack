@@ -88,18 +88,11 @@ jobs:
           cargo -V
           rustc -V
 
-      - name: Use rustls on musl targets.
-        id: build-options
-        if: contains(matrix.target, '-musl')
-        run: |
-          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
-
       - name: Build
-        run: >
+        run: >-
           cargo build
           --locked
           --release
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
       - name: "Artifact upload: binary"
         uses: actions/upload-artifact@v4
