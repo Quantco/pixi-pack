@@ -74,7 +74,6 @@ jobs:
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
         with:
           activate-environment: true
-      - run: pixi shell-hook --json --manifest-path pixi.toml --color always
 
       - name: Use static CRT on Windows
         shell: bash
@@ -85,11 +84,6 @@ jobs:
         uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
           key: build-${{ matrix.target }}
-
-      - name: Show version information
-        run: |
-          cargo -V
-          rustc -V
 
       - name: Build
         run: |
@@ -116,6 +110,7 @@ jobs:
           pattern: pixi-pack-*
       - run: |
           ls -la
+          file pixi-pack-*
       # - name: Push v${{ needs.metadata.outputs.version }} tag
       #   run: |
       #     git tag v${{ needs.metadata.outputs.version }}
