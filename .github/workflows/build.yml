@@ -89,7 +89,7 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --locked --release${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }}
+          cargo build --color always --locked --release${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }}
           mv target/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
