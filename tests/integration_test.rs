@@ -57,11 +57,11 @@ fn options(
 fn required_fs_objects() -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
     let openssl_required_file = match Platform::current() {
-        Platform::Linux64 => "conda-meta/openssl-3.3.0-h4ab18f5_3.json",
+        Platform::Linux64 => "conda-meta/openssl-3.3.1-h4ab18f5_0.json",
         Platform::LinuxAarch64 => "conda-meta/openssl-3.3.1-h68df207_0.json",
-        Platform::OsxArm64 => "conda-meta/openssl-3.3.0-hfb2fe0b_3.json",
+        Platform::OsxArm64 => "conda-meta/openssl-3.3.1-hfb2fe0b_0.json",
         Platform::Osx64 => "conda-meta/openssl-3.3.1-h87427d6_0.json",
-        Platform::Win64 => "conda-meta/openssl-3.3.0-h2466b09_3.json",
+        Platform::Win64 => "conda-meta/openssl-3.3.1-h2466b09_0.json",
         _ => panic!("Unsupported platform"),
     };
     if cfg!(windows) {
