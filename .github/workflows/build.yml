@@ -82,9 +82,6 @@ jobs:
 
       - name: Show version information (Rust, cargo, GCC)
         run: |
-          gcc --version || true
-          rustup -V
-          rustup toolchain list
           cargo -V
           rustc -V
 
