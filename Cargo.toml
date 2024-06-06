@@ -1,13 +1,25 @@
 [package]
 name = "pixi-pack"
-description = "A tool to pack and relocate pixi environments"
+description = "A command line tool to pack and unpack conda environments for easy sharing"
 version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["tokio/rt-multi-thread"]
-# Activate this feature to activate online-testing in the integration test suite.
-online-test = []
+default = ["native-tls"]
+native-tls = [
+  "reqwest/native-tls",
+  "reqwest/native-tls-alpn",
+  "rattler/native-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+]
+rustls-tls = [
+  "reqwest/rustls-tls",
+  "reqwest/rustls-tls-native-roots",
+  "rattler/rustls-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+]
 
 [dependencies]
 anyhow = "1.*"
@@ -15,21 +27,24 @@ clap = { version = "4.5.4", features = ["derive", "string"] }
 clap-verbosity-flag = "2.2.0"
 futures = "0.3.30"
 indicatif = "0.17.8"
-rattler = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
+rattler = { git = "https://github.com/mamba-org/rattler", rev = "20c0951", default-features = false }
 rattler_digest = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
 rattler_conda_types = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
 rattler_index = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
 rattler_lock = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
-rattler_networking = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
-rattler_package_streaming = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
+rattler_networking = { git = "https://github.com/mamba-org/rattler", rev = "20c0951", default-features = false }
+rattler_package_streaming = { git = "https://github.com/mamba-org/rattler", rev = "20c0951", default-features = false }
 rattler_shell = { git = "https://github.com/mamba-org/rattler", rev = "20c0951" }
-reqwest = "0.12.4"
+reqwest = { version = "0.12.4", default-features = false, features = [
+  "http2",
+  "macos-system-configuration",
+] }
 reqwest-middleware = "0.3.1"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 serde_yaml = "0.9.34"
 tokio-tar = "0.3.1"
-tokio = "1.37.0"
+tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
 tokio-stream = { version = "0.1.15", features = ["fs"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [

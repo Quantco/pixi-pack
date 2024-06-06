@@ -1,7 +1,5 @@
 [project]
 name = "pixi-pack"
-version = "0.1.0"
-description = "A command line tool to pack and unpack conda environments for easy sharing."
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64", "win-64"]
 
@@ -11,6 +9,11 @@ test = "cargo test"
 
 [dependencies]
 rust = "1.77.2"
+openssl = "3.*"
+pkg-config = "*"
+
+[target.linux.dependencies]
+compilers = ">=1.7.0"
 
 [feature.test.dependencies]
 conda = "*"

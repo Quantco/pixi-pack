@@ -1,0 +1,58 @@
+name: Chore
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, edited, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-pr-title:
+    name: Check PR Title
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check valid conventional commit message
+        id: lint
+        uses: amannn/action-semantic-pull-request@cfb60706e18bc85e8aec535e3c577abe8f70378e
+        with:
+          subjectPattern: ^[A-Za-z].+[^. ]$ # subject must start with letter and may not end with a dot/space
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Post comment about invalid PR title
+        if: failure()
+        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
+        with:
+          header: conventional-commit-pr-title
+          message: |
+            Thank you for opening this pull request! 👋🏼
+
+            This repository requires pull request titles to follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/) and it looks like your proposed title needs to be adjusted.
+
+            <details><summary><b>Details</b></summary>
+
+            ```
+            ${{ steps.lint.outputs.error_message }}
+            ```
+
+            </details>
+
+      - name: Delete comment about invalid PR title
+        if: success()
+        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
+        with:
+          header: conventional-commit-pr-title
+          delete: true
+
+      - name: Assign labels
+        uses: release-drafter/release-drafter@3f0f87098bd6b5c5b9a36d49c41d998ea58f9348
+        with:
+          disable-releaser: true
+          disable-autolabeler: false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

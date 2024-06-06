@@ -37,6 +37,8 @@ Or using `cargo`:
 cargo install --locked --git https://github.com/quantco/pixi-pack.git
 ```
 
+Or by downloading our pre-built binaries from the [releases page](https://github.com/quantco/pixi-pack/releases).
+
 ## 🎯 Usage
 
 ### `pixi-pack pack`: Packing an environment

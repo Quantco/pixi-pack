@@ -1,0 +1,115 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  metadata:
+    name: Check if version changed
+    runs-on: ubuntu-latest
+    outputs:
+      optimize-build: ${{ github.event_name == 'push' }}
+      release: ${{ github.event_name == 'push' && github.repository == 'Quantco/pixi-pack' && steps.version-metadata.outputs.changed == 'true' }}
+      version: ${{ steps.version-metadata.outputs.newVersion }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      - uses: Quantco/ui-actions/version-metadata@a0653e9fc0ee3c4be9f7cc88e509e40536e9f3c1
+        id: version-metadata
+        with:
+          file: ./Cargo.toml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version-extraction-override: 'regex:version = "(.*)"'
+
+  build:
+    name: Build Binary
+    runs-on: ${{ matrix.os }}
+    needs: [metadata]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest-arm-4core
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest-arm-4core
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-13
+    env:
+      # These are some environment variables that configure the build so that the binary size is reduced.
+      # Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
+      # They only enable it on main and releases.
+
+      # Enable Link Time Optimization (LTO) for our release builds. This increases link time but drastically reduces
+      # binary size.
+      CARGO_PROFILE_RELEASE_LTO: ${{ needs.metadata.outputs.optimize-build }}
+
+      # Use a single code gen unit. This effectively disables parallel linking but ensures that everything is linked
+      # together in a single unit which reduces the file-size at the cost of link time.
+      # Default for a release build is 16
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ needs.metadata.outputs.optimize-build && 1 || 16 }}
+
+      # Strip the binaries. This reduces the filesize of the final release.
+      CARGO_PROFILE_RELEASE_STRIP: ${{ needs.metadata.outputs.optimize-build && 'symbols' || 'false' }}
+
+      # Optimize the binary for size. This reduces the filesize at the cost of a slower binary.
+      CARGO_PROFILE_OPT_LEVEL: ${{ needs.metadata.outputs.optimize-build && 's' || '0' }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
+        with:
+          activate-environment: true
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
+        with:
+          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}
+
+      - name: Build
+        run: |
+          pixi run build --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }}
+          mv target/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixi-pack-${{ matrix.target }}
+          path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [metadata, build]
+    if: needs.metadata.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pixi-pack-*
+          merge-multiple: true
+      - name: Push v${{ needs.metadata.outputs.version }} tag
+        run: |
+          git tag v${{ needs.metadata.outputs.version }}
+          git push origin v${{ needs.metadata.outputs.version }}
+      - name: Create Release
+        uses: softprops/action-gh-release@69320dbe05506a9a39fc8ae11030b214ec2d1f87
+        with:
+          generate_release_notes: true
+          tag_name: v${{ needs.metadata.outputs.version }}
+          draft: true
+          files: pixi-pack-*

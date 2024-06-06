@@ -1,4 +1,4 @@
-exclude: ^env/
+exclude: (^env/|.pixi/)
 repos:
   - repo: local
     hooks:

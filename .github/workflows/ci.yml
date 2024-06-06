@@ -29,8 +29,14 @@ jobs:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os:
+          - ubuntu-latest
+          - ubuntu-latest-arm-4core
+          - windows-latest
+          - macos-latest
+          - macos-13
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -39,8 +45,10 @@ jobs:
           fetch-depth: 0
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
+        with:
+          activate-environment: true
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
           key: tests
       - name: Run test
-        run: pixi run test
+        run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu') && ' --no-default-features --features rustls-tls' || '' }}

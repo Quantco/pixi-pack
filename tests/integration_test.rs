@@ -56,6 +56,14 @@ fn options(
 #[fixture]
 fn required_fs_objects() -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
+    let openssl_required_file = match Platform::current() {
+        Platform::Linux64 => "conda-meta/openssl-3.3.1-h4ab18f5_0.json",
+        Platform::LinuxAarch64 => "conda-meta/openssl-3.3.1-h68df207_0.json",
+        Platform::OsxArm64 => "conda-meta/openssl-3.3.1-hfb2fe0b_0.json",
+        Platform::Osx64 => "conda-meta/openssl-3.3.1-h87427d6_0.json",
+        Platform::Win64 => "conda-meta/openssl-3.3.1-h2466b09_0.json",
+        _ => panic!("Unsupported platform"),
+    };
     if cfg!(windows) {
         required_fs_objects.extend(vec![
             "DLLs",
@@ -66,17 +74,16 @@ fn required_fs_objects() -> Vec<&'static str> {
             "Scripts",
             "Tools",
             "python.exe",
-            "conda-meta/openssl-3.3.0-h2466b09_3.json",
+            openssl_required_file,
         ])
     } else {
-        required_fs_objects.extend(vec!["bin/python", "lib", "man", "ssl"]);
-        if cfg!(target_os = "macos") {
-            // osx-arm64
-            required_fs_objects.push("conda-meta/openssl-3.3.0-hfb2fe0b_3.json");
-        } else {
-            // linux-64
-            required_fs_objects.push("conda-meta/openssl-3.3.0-h4ab18f5_3.json");
-        }
+        required_fs_objects.extend(vec![
+            "bin/python",
+            "lib",
+            "man",
+            "ssl",
+            openssl_required_file,
+        ]);
     }
     required_fs_objects
 }
@@ -89,13 +96,13 @@ async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static 
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok());
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok());
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
 
     required_fs_objects
@@ -126,13 +133,13 @@ async fn test_inject(
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok());
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok());
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
 
     // output env should contain files from the injected package
@@ -201,7 +208,7 @@ async fn test_compatibility(
 
     let pack_result = pixi_pack::pack(pack_options).await;
     println!("{:?}", pack_result);
-    assert!(pack_result.is_ok());
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
     assert!(pack_file.exists());
 
