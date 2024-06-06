@@ -17,7 +17,7 @@ Starting with a [pixi](https://pixi.sh) lockfile `pixi.lock`, you can create a p
 This environment can be unpacked on any system using `pixi-pack` to recreate the original environment.
 
 In contrast to [`conda-pack`](https://conda.github.io/conda-pack/), `pixi-pack` does not require the original conda environment to be present on the system for packing.
-Instead, it uses the lockfile to download the required packages and puts them into a `.tar.zstd` archive.
+Instead, it uses the lockfile to download the required packages and puts them into a `.tar` archive.
 This archive can then be shared with others and installed using `pixi-pack unpack` to recreate the original environment.
 
 The original motivation behind `pixi-pack` was to create a `conda-pack` alternative that does not have the same reproducibility issues as `conda-pack`.
@@ -43,16 +43,16 @@ Or by downloading our pre-built binaries from the [releases page](https://github
 
 ### `pixi-pack pack`: Packing an environment
 
-With `pixi-pack pack`, you can pack a conda environment into a `environment.tar.zstd` file:
+With `pixi-pack pack`, you can pack a conda environment into a `environment.tar` file:
 
 ```bash
 pixi-pack pack --manifest-file pixi.toml --environment prod --platform linux-64
 ```
 
-This will create a `environment.tar.zstd` file that contains all conda packages required to create the environment.
+This will create a `environment.tar` file that contains all conda packages required to create the environment.
 
 ```
-# environment.tar.zstd
+# environment.tar
 | pixi-pack.json
 | environment.yml
 | channel
@@ -68,17 +68,17 @@ This will create a `environment.tar.zstd` file that contains all conda packages 
 
 ### `pixi-pack unpack`: Unpacking an environment
 
-With `pixi-pack unpack environment.tar.zstd`, you can unpack the environment on your target system.
+With `pixi-pack unpack environment.tar`, you can unpack the environment on your target system.
 This will create a new conda environment in `./env` that contains all packages specified in your `pixi.toml`.
 It also creates an `activate.sh` (or `activate.bat` on Windows) file that lets you activate the environment
 without needing to have `conda` or `micromamba` installed.
 
 ```bash
-$ pixi-pack unpack environment.tar.zstd
+$ pixi-pack unpack environment.tar
 $ ls
 env/
 activate.sh
-environment.tar.zstd
+environment.tar
 $ cat activate.sh
 export PATH="/home/user/project/env/bin:..."
 export CONDA_PREFIX="/home/user/project/env"
@@ -109,12 +109,12 @@ This can be particularly useful if you build the project itself and want to incl
 ### Unpacking without `pixi-pack`
 
 If you don't have `pixi-pack` available on your target system, you can still install the environment if you have `conda` or `micromamba` available.
-Just decompress the `environment.tar.zstd`, then you have a local channel on your system where all necessary packages are available.
+Just unarchive the `environment.tar`, then you have a local channel on your system where all necessary packages are available.
 Next to this local channel, you will find an `environment.yml` file that contains the environment specification.
 You can then install the environment using `conda` or `micromamba`:
 
 ```bash
-tar --zstd -xvf environment.tar.zstd
+tar -xvf environment.tar
 micromamba create -p ./env --file environment.yml
 # or
 conda env create -p ./env --file environment.yml

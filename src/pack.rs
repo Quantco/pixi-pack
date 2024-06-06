@@ -12,7 +12,6 @@ use tokio::{
 };
 
 use anyhow::Result;
-use async_compression::{tokio::write::ZstdEncoder, Level};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::ProgressStyle;
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
@@ -33,7 +32,6 @@ pub struct PackOptions {
     pub output_file: PathBuf,
     pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
-    pub level: Option<Level>,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
 }
@@ -171,8 +169,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Create environment file.
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
-    // Pack = archive + compress the contents.
-    archive_directory(output_folder.path(), &options.output_file, options.level)
+    // Pack = archive the contents.
+    archive_directory(output_folder.path(), &options.output_file)
         .await
         .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
@@ -232,12 +230,8 @@ async fn download_package(
     Ok(())
 }
 
-/// Archive a directory into a compressed tarball.
-async fn archive_directory(
-    input_dir: &Path,
-    archive_target: &Path,
-    level: Option<Level>,
-) -> Result<()> {
+/// Archive a directory into a tarball.
+async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()> {
     let outfile = fs::File::create(archive_target).await.map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",
@@ -247,11 +241,7 @@ async fn archive_directory(
     })?;
 
     let writer = tokio::io::BufWriter::new(outfile);
-
-    let level = level.unwrap_or(Level::Default);
-    let compressor = ZstdEncoder::with_quality(writer, level);
-
-    let mut archive = Builder::new(compressor);
+    let mut archive = Builder::new(writer);
 
     archive
         .append_dir_all(".", input_dir)
@@ -271,6 +261,7 @@ async fn archive_directory(
     Ok(())
 }
 
+/// Create an `environment.yml` file from the given packages.
 async fn create_environment_file(
     destination: &Path,
     packages: impl IntoIterator<Item = &PackageRecord>,
@@ -302,6 +293,7 @@ async fn create_environment_file(
     Ok(())
 }
 
+/// Create `repodata.json` files for the given packages.
 async fn create_repodata_files(
     packages: impl Iterator<Item = &(String, PackageRecord)>,
     channel_dir: &Path,

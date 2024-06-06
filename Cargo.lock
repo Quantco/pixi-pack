@@ -152,8 +152,6 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "tokio",
- "zstd",
- "zstd-safe",
 ]
 
 [[package]]
@@ -2207,7 +2205,6 @@ name = "pixi-pack"
 version = "0.1.1"
 dependencies = [
  "anyhow",
- "async-compression",
  "async-std",
  "clap",
  "clap-verbosity-flag",

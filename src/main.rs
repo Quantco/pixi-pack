@@ -49,8 +49,8 @@ enum Commands {
         #[arg(default_value = cwd().join("pixi.toml").into_os_string())]
         manifest_path: PathBuf,
 
-        /// Output file to write the pack to
-        #[arg(short, long, default_value = cwd().join("environment.tar.zstd").into_os_string())]
+        /// Output file to write the pack to (will be an archive)
+        #[arg(short, long, default_value = cwd().join("environment.tar").into_os_string())]
         output_file: PathBuf,
 
         /// Inject an additional conda package into the final prefix
@@ -114,7 +114,6 @@ async fn main() -> Result<()> {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
                     platform,
                 },
-                level: None,
                 injected_packages: inject,
                 ignore_pypi_errors,
             };
