@@ -39,7 +39,6 @@ autolabeler:
     title:
       - '/^[a-z]+(\(.*\))?\!\:/'
 template: |
-  template: |
   ## What's Changed
 
   $CHANGES
