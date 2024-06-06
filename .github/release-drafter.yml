@@ -38,7 +38,7 @@ autolabeler:
   - label: breaking
     title:
       - '/^[a-z]+(\(.*\))?\!\:/'
-# ------------------------------------ RELEASE CONFIGURATION ------------------------------------ #
+# not used but required s.t. release-drafter doesn't complain
 category-template: "### $TITLE"
 change-template: "- $TITLE by @$AUTHOR in [#$NUMBER]($URL)"
 replacers:
