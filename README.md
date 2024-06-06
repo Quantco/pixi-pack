@@ -5,6 +5,8 @@
   <h3 align="center">📦 A tool to pack and unpack conda environments created with pixi</h3>
 </p>
 
+![pixi-pack example](.github/assets/example.mp4)
+
 ## 🗂 Table of Contents
 
 - [Introduction](#-introduction)
