@@ -1,6 +1,6 @@
 [package]
 name = "pixi-pack"
-description = "A tool to pack and relocate pixi environments"
+description = "A command line tool to pack and unpack conda environments for easy sharing"
 version = "0.1.0"
 edition = "2021"
 

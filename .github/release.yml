@@ -33,4 +33,4 @@ changelog:
         - refactor
     - title: 🤷🏻 Other changes
       labels:
-        - '*'
+        - "*"
