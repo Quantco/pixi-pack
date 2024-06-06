@@ -38,3 +38,4 @@ autolabeler:
   - label: breaking
     title:
       - '/^[a-z]+(\(.*\))?\!\:/'
+template: not-used
