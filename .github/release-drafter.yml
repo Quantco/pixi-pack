@@ -38,4 +38,10 @@ autolabeler:
   - label: breaking
     title:
       - '/^[a-z]+(\(.*\))?\!\:/'
-template: not-used
+template: |
+  template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog:** [`$PREVIOUS_TAG...v$RESOLVED_VERSION`](https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
