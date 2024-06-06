@@ -48,13 +48,13 @@ jobs:
     env:
       # These are some environment variables that configure the build so that the binary size is reduced.
       # Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
-      # They're only enable it on main and releases.
+      # They only enable it on main and releases.
 
       # Enable Link Time Optimization (LTO) for our release builds. This increases link time but drastically reduces
       # binary size.
       CARGO_PROFILE_RELEASE_LTO: ${{ needs.metadata.outputs.optimize-build }}
 
-      # Use a single code gen unit, this effectively disables parallel linking but ensures that everything is linked
+      # Use a single code gen unit. This effectively disables parallel linking but ensures that everything is linked
       # together in a single unit which reduces the file-size at the cost of link time.
       # Default for a release build is 16
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ needs.metadata.outputs.optimize-build && 1 || 16 }}
@@ -72,11 +72,6 @@ jobs:
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
         with:
           activate-environment: true
-
-      - name: Use static CRT on Windows
-        shell: bash
-        run: echo "RUSTFLAGS=${RUSTFLAGS} -C target-feature=+crt-static" >> "${GITHUB_ENV}"
-        if: endsWith(matrix.target, 'windows-msvc')
 
       - name: Rust cache
         uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84

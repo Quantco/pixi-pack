@@ -13,14 +13,15 @@ test = "cargo test"
 rust = "1.77.2"
 openssl = "3.*"
 
-[target.linux.activation]
-scripts = ["activate-openssl.sh"]
+# [target.linux.activation]
+# scripts = ["activate-openssl.sh"]
 # TODO: once https://github.com/prefix-dev/pixi/issues/1481 is fixed, replace with
 # [activation.env]
 # OPENSSL_DIR = "$CONDA_PREFIX"
 
 [target.linux.dependencies]
 compilers = ">=1.7.0"
+pkg-config = "*"
 
 [feature.test.dependencies]
 conda = "*"
