@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
-use async_compression::tokio::bufread::ZstdDecoder;
 use futures::{
     stream::{self, StreamExt},
     TryFutureExt, TryStreamExt,
@@ -130,17 +129,14 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
     Ok(packages)
 }
 
-/// Unarchive a compressed tarball.
+/// Unarchive a tarball.
 pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     let file = fs::File::open(archive_path)
         .await
         .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
 
     let reader = tokio::io::BufReader::new(file);
-
-    let decoder = ZstdDecoder::new(reader);
-
-    let mut archive = Archive::new(decoder);
+    let mut archive = Archive::new(reader);
 
     archive
         .unpack(target_dir)

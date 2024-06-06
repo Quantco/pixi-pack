@@ -2,7 +2,6 @@
 
 use std::{path::PathBuf, process::Command};
 
-use async_compression::Level;
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
@@ -26,12 +25,11 @@ fn options(
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
-    #[default(Some(Level::Best))] level: Option<Level>,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = output_dir.path().join("environment.tar.zstd");
+    let pack_file = output_dir.path().join("environment.tar");
     Options {
         pack_options: PackOptions {
             environment,
@@ -40,7 +38,6 @@ fn options(
             output_file: pack_file.clone(),
             manifest_path,
             metadata,
-            level,
             injected_packages: vec![],
             ignore_pypi_errors,
         },

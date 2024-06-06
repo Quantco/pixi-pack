@@ -53,7 +53,6 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 tracing-log = "0.2"
 url = "2.5.0"
-async-compression = { version = "0.4.11", features = ["tokio", "zstd"] }
 fxhash = "0.2.1"
 tempfile = "3.10.1"
 

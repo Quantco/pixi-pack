@@ -113,13 +113,18 @@ $RECYCLE.BIN/
 *.egg-info
 
 # pixi-pack
-environment.tar.zstd
-environment.tar
-environment
-env/
-unpack/
-cache/
 activate.*
+cache/
+channel/
+env/
+environment.yml
+environment
+environment.tar
+environment.tar.zst
+environment.tar.zstd
+pixi-pack.json
+unpack/
+
 # pixi environments
 .pixi
 *.egg-info
