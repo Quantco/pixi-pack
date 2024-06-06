@@ -38,3 +38,53 @@ autolabeler:
   - label: breaking
     title:
       - '/^[a-z]+(\(.*\))?\!\:/'
+# not used but required s.t. release-drafter doesn't complain
+category-template: "### $TITLE"
+change-template: "- $TITLE by @$AUTHOR in [#$NUMBER]($URL)"
+replacers:
+  # remove conventional commit tag & scope from change list
+  - search: '/- [a-z]+(\(.*\))?(\!)?\: /g'
+    replace: "- "
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog:** [`$PREVIOUS_TAG...v$RESOLVED_VERSION`](https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
+categories:
+  - title: ⚠️ Breaking Changes
+    labels:
+      - breaking
+  - title: ✨ New Features
+    labels:
+      - enhancement
+  - title: 🐞 Bug Fixes
+    labels:
+      - fix
+  - title: 🏎️ Performance Improvements
+    labels:
+      - performance
+  - title: 📚 Documentation
+    labels:
+      - documentation
+  - title: 🏗️ Testing
+    labels:
+      - test
+  - title: ⚙️ Automation
+    labels:
+      - ci
+  - title: 🛠 Builds
+    labels:
+      - build
+  - title: 💎 Code Style
+    labels:
+      - style
+  - title: 📦 Refactorings
+    labels:
+      - refactor
+  - title: ♻️ Chores
+    labels:
+      - chore
+  - title: 🗑 Reverts
+    labels:
+      - revert
