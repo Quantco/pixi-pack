@@ -46,7 +46,7 @@ enum Commands {
         auth_file: Option<PathBuf>,
 
         /// The path to 'pixi.toml' or 'pyproject.toml'
-        #[arg(required = true, default_value = cwd().join("pixi.toml").into_os_string())]
+        #[arg(default_value = cwd().join("pixi.toml").into_os_string())]
         manifest_path: PathBuf,
 
         /// Output file to write the pack to
