@@ -1,6 +1,6 @@
 <h1>
   <a href="https://github.com/quantco/pixi-pack">
-    <img alt="banner" src="https://github.com/Quantco/pixi-pack/raw/main/.github/assets/pixi-pack-banner-light.svg">
+    <img alt="banner" src="https://github.com/Quantco/pixi-pack/raw/banner/.github/assets/pixi-pack-banner-dark.svg">
   </a>
 </h1>
 
