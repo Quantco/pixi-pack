@@ -3,7 +3,7 @@
 
 <div align="center">
 
-![License][license-badge]
+[![License][license-badge]](LICENSE)
 [![CI Status][ci-badge]][ci]
 [![Project Chat][chat-badge]][chat-url]
 [![Pixi Badge][pixi-badge]][pixi-url]
