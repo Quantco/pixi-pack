@@ -18,7 +18,8 @@
 
 </div>
 
-![pixi-pack demo](https://github.com/Quantco/pixi-pack/assets/29506042/d8961960-b403-47b0-8ede-0d711ed3a0b4)
+![pixi-pack demo](.github/assets/demo/demo-light.gif#gh-light-mode-only)
+![pixi-pack demo](.github/assets/demo/demo-dark.gif#gh-dark-mode-only)
 
 ## 🗂 Table of Contents
 

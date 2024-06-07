@@ -22,7 +22,7 @@ micromamba = "*"
 # [feature.demo.dependencies]
 # vhs = "*"
 # [feature.demo.tasks]
-# demo = "vhs .github/assets/demo/demo.tape"
+# demo = "vhs .github/assets/demo/demo-light.tape && vhs .github/assets/demo/demo-dark.tape"
 
 [feature.lint.dependencies]
 pre-commit = "*"
