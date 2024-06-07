@@ -18,6 +18,8 @@
 
 </div>
 
+![pixi-pack demo](.github/assets/pixi-pack-demo.gif)
+
 ## 🗂 Table of Contents
 
 - [Introduction](#-introduction)
