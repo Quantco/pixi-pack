@@ -1,11 +1,7 @@
-<h1>
-  <a href="https://github.com/quantco/pixi-pack">
-    <img alt="banner" src="https://github.com/Quantco/pixi-pack/raw/banner/.github/assets/pixi-pack-banner-dark.svg">
-  </a>
-</h1>
-
 ![banner](.github/assets/pixi-pack-banner-dark.svg#gh-dark-mode-only)
 ![banner](.github/assets/pixi-pack-banner-light.svg#gh-light-mode-only)
+
+<h1 align="center">
 
 ![License][license-badge]
 [![CI Status][ci-badge]][ci]
@@ -19,6 +15,8 @@
 [chat-url]: https://discord.gg/kKV8ZxyzY4
 [pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square
 [pixi-url]: https://pixi.sh
+
+</h1>
 
 ## 🗂 Table of Contents
 
