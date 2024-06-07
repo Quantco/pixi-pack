@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    pin::Pin,
+};
 
 use anyhow::{anyhow, Result};
 use futures::{
@@ -22,8 +25,8 @@ use tokio_tar::Archive;
 use url::Url;
 
 use crate::{
-    InstallationProgressReporter, PixiPackMetadata, CHANNEL_DIRECTORY_NAME,
-    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+    PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION,
+    PIXI_PACK_METADATA_PATH,
 };
 
 /// Options for unpacking a pixi environment.
@@ -43,6 +46,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
+    eprintln!("📂 Unarchiving pack...");
     unarchive(&options.pack_file, &unpack_dir)
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
@@ -150,11 +154,16 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
 
     let reader = tokio::io::BufReader::new(file);
     let mut archive = Archive::new(reader);
+    let mut entries = archive.entries()?;
+    let mut pinned = Pin::new(&mut entries);
 
-    archive
-        .unpack(target_dir)
-        .await
-        .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
+    let spinner = ProgressReporter::new_spinner();
+    while let Some(entry) = pinned.next().await {
+        let mut file = entry.map_err(|e| anyhow!("could not unpack archive: {}", e))?;
+        file.unpack_in::<&Path>(target_dir.as_ref()).await?;
+        spinner.pb.tick();
+    }
+    spinner.pb.finish_and_clear();
 
     Ok(())
 }
@@ -212,9 +221,8 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
     tracing::info!("Installing {} packages", repodata_records.len());
     eprintln!("⏳ Installing {} packages...", repodata_records.len());
 
-    let installer = Installer::default().with_reporter(InstallationProgressReporter::new(
-        repodata_records.len() as u64,
-    ));
+    let installer =
+        Installer::default().with_reporter(ProgressReporter::new(repodata_records.len() as u64));
     installer
         .with_package_cache(package_cache)
         .install(&target_prefix, repodata_records)

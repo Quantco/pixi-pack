@@ -4,31 +4,38 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rattler::install::Reporter;
 use rattler_conda_types::RepoDataRecord;
 
-/// Create a progress bar with default style.
-pub fn create_progress_bar(length: u64) -> ProgressBar {
-    ProgressBar::new(length).with_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .expect("could not set progress style")
-        .progress_chars("##-"),
-    )
+/// Progress reporter that wraps a progress bar or spinner with default styles.
+pub struct ProgressReporter {
+    pub pb: ProgressBar,
 }
 
-/// Progress reporter for installing packages.
-pub struct InstallationProgressReporter {
-    pb: ProgressBar,
-}
-
-impl InstallationProgressReporter {
+impl ProgressReporter {
     pub fn new(length: u64) -> Self {
         Self {
-            pb: create_progress_bar(length),
+            pb: ProgressBar::new(length).with_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+                )
+                .expect("could not set progress style")
+                .progress_chars("##-"),
+            ),
+        }
+    }
+
+    pub fn new_spinner() -> Self {
+        Self {
+            pb: ProgressBar::new_spinner(),
         }
     }
 }
 
-impl Reporter for InstallationProgressReporter {
+impl From<ProgressBar> for ProgressReporter {
+    fn from(pb: ProgressBar) -> Self {
+        ProgressReporter { pb }
+    }
+}
+
+impl Reporter for ProgressReporter {
     fn on_transaction_start(
         &self,
         _transaction: &rattler::install::Transaction<

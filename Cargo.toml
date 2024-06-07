@@ -1,7 +1,7 @@
 [package]
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 
 [features]

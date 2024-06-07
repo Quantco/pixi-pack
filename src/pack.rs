@@ -21,8 +21,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
 
 use crate::{
-    create_progress_bar, get_size, PixiPackMetadata, CHANNEL_DIRECTORY_NAME,
-    PIXI_PACK_METADATA_PATH,
+    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -99,19 +98,17 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         "⏳ Downloading {} packages...",
         conda_packages_from_lockfile.len()
     );
-    let bar = create_progress_bar(conda_packages_from_lockfile.len() as u64);
-
+    let bar = ProgressReporter::new(conda_packages_from_lockfile.len() as u64);
     stream::iter(conda_packages_from_lockfile.iter())
         .map(Ok)
         .try_for_each_concurrent(50, |package| async {
             download_package(&client, package, &channel_dir).await?;
-            bar.inc(1);
+            bar.pb.inc(1);
             Ok(())
         })
         .await
         .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;
-
-    bar.finish_and_clear();
+    bar.pb.finish_and_clear();
 
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 

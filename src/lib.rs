@@ -6,7 +6,7 @@ pub use pack::{pack, PackOptions};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
 pub use unpack::{unarchive, unpack, UnpackOptions};
-pub use util::{create_progress_bar, get_size, InstallationProgressReporter};
+pub use util::{get_size, ProgressReporter};
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";
