@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rattler::install::Reporter;
@@ -11,13 +11,13 @@ pub struct ProgressReporter {
 
 impl ProgressReporter {
     pub fn new(length: u64) -> Self {
-        Self {
-            pb: ProgressBar::new(length).with_style(
-                ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {msg}")
-                    .expect("could not set progress style")
-                    .progress_chars("##-"),
-            ),
-        }
+        let pb = ProgressBar::new(length).with_style(
+            ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {msg}")
+                .expect("could not set progress style")
+                .progress_chars("##-"),
+        );
+        pb.enable_steady_tick(Duration::from_millis(500));
+        Self { pb }
     }
 }
 
