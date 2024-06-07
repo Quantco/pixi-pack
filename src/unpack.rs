@@ -22,7 +22,8 @@ use tokio_tar::Archive;
 use url::Url;
 
 use crate::{
-    PixiPackMetadata, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+    InstallationProgressReporter, PixiPackMetadata, CHANNEL_DIRECTORY_NAME,
+    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
 };
 
 /// Options for unpacking a pixi environment.
@@ -41,6 +42,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
 
+    tracing::info!("Unarchiving pack to {}", unpack_dir.display());
     unarchive(&options.pack_file, &unpack_dir)
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
@@ -49,10 +51,12 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     let target_prefix = options.output_directory.join("env");
 
+    tracing::info!("Creating prefix at {}", target_prefix.display());
     create_prefix(&channel_directory, &target_prefix)
         .await
         .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
 
+    tracing::info!("Generating activation script");
     create_activation_script(
         &options.output_directory,
         &target_prefix,
@@ -60,6 +64,15 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     )
     .await
     .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
+
+    tracing::info!(
+        "Finished unpacking to {}.",
+        options.output_directory.display(),
+    );
+    println!(
+        "💫 Finished unpacking to {}.",
+        options.output_directory.display()
+    );
 
     Ok(())
 }
@@ -158,8 +171,6 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
     // extract packages to cache
     let package_cache = PackageCache::new(cache_dir);
 
-    let installer = Installer::default();
-
     let repodata_records: Vec<RepoDataRecord> = stream::iter(packages)
         .map(|(file_name, package_record)| {
             let cache_key = CacheKey::from(&package_record);
@@ -198,6 +209,12 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         .await?;
 
     // Invariant: all packages are in the cache
+    tracing::info!("Installing {} packages", repodata_records.len());
+    println!("⏳ Installing {} packages...", repodata_records.len());
+
+    let installer = Installer::default().with_reporter(InstallationProgressReporter::new(
+        repodata_records.len() as u64,
+    ));
     installer
         .with_package_cache(package_cache)
         .install(&target_prefix, repodata_records)

@@ -5,6 +5,7 @@ use std::{
 };
 
 use fxhash::FxHashMap;
+use indicatif::HumanBytes;
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
 use tokio::{
     fs::{self, create_dir_all, File},
@@ -13,14 +14,16 @@ use tokio::{
 
 use anyhow::Result;
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
-use indicatif::ProgressStyle;
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
 use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
 
-use crate::{PixiPackMetadata, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH};
+use crate::{
+    create_progress_bar, get_size, PixiPackMetadata, CHANNEL_DIRECTORY_NAME,
+    PIXI_PACK_METADATA_PATH,
+};
 use anyhow::anyhow;
 
 /// Options for packing a pixi environment.
@@ -89,31 +92,26 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // Download packages to temporary directory.
     tracing::info!(
-        "Downloading {} packages",
+        "Downloading {} packages...",
         conda_packages_from_lockfile.len()
     );
-    let bar = indicatif::ProgressBar::new(conda_packages_from_lockfile.len() as u64);
-    bar.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .expect("could not set progress style")
-        .progress_chars("##-"),
+    println!(
+        "⏳ Downloading {} packages...",
+        conda_packages_from_lockfile.len()
     );
+    let bar = create_progress_bar(conda_packages_from_lockfile.len() as u64);
 
     stream::iter(conda_packages_from_lockfile.iter())
         .map(Ok)
         .try_for_each_concurrent(50, |package| async {
             download_package(&client, package, &channel_dir).await?;
-
             bar.inc(1);
-
             Ok(())
         })
         .await
         .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;
 
-    bar.finish();
+    bar.finish_and_clear();
 
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
@@ -133,6 +131,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
         })
         .collect();
+
+    tracing::info!("Injecting {} packages", injected_packages.len());
     for (path, archive_type) in injected_packages {
         // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
@@ -157,9 +157,11 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     }
 
     // Create `repodata.json` files.
+    tracing::info!("Creating repodata.json files");
     create_repodata_files(conda_packages.iter(), &channel_dir).await?;
 
     // Add pixi-pack.json containing metadata.
+    tracing::info!("Creating pixi-pack.json file");
     let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
     let mut metadata_file = File::create(&metadata_path).await?;
 
@@ -167,12 +169,26 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     metadata_file.write_all(metadata.as_bytes()).await?;
 
     // Create environment file.
+    tracing::info!("Creating environment.yml file");
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
     // Pack = archive the contents.
+    tracing::info!("Creating archive at {}", options.output_file.display());
     archive_directory(output_folder.path(), &options.output_file)
         .await
         .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+
+    let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
+    tracing::info!(
+        "Created pack at {} with size {}.",
+        options.output_file.display(),
+        output_size
+    );
+    println!(
+        "📦 Created pack at {} with size {}.",
+        options.output_file.display(),
+        output_size
+    );
 
     Ok(())
 }
