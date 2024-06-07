@@ -4,8 +4,8 @@
   </a>
 </h1>
 
-![banner][.github/assets/pixi-pack-banner-dark.svg#gh-dark-mode-only]
-![banner][.github/assets/pixi-pack-banner-light.svg#gh-light-mode-only]
+![banner](.github/assets/pixi-pack-banner-dark.svg#gh-dark-mode-only)
+![banner](.github/assets/pixi-pack-banner-light.svg#gh-light-mode-only)
 
 ![License][license-badge]
 [![CI Status][ci-badge]][ci]
