@@ -1,6 +1,5 @@
 Output .github/assets/demo/demo.mp4
-# Output .github/assets/demo/demo.gif
-# Output .github/assets/demo/demo.webm
+Output .github/assets/demo/demo.gif
 Require pixi-pack
 
 Set Shell "bash"

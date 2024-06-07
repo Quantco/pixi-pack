@@ -18,7 +18,7 @@
 
 </div>
 
-![pixi-pack demo](.github/assets/pixi-pack-demo.gif)
+![pixi-pack demo](https://github.com/Quantco/pixi-pack/assets/29506042/8bb1b24e-7a5d-4630-9509-0fd8b7a257fe)
 
 ## 🗂 Table of Contents
 
