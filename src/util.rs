@@ -13,11 +13,9 @@ impl ProgressReporter {
     pub fn new(length: u64) -> Self {
         Self {
             pb: ProgressBar::new(length).with_style(
-                ProgressStyle::with_template(
-                    "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-                )
-                .expect("could not set progress style")
-                .progress_chars("##-"),
+                ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {msg}")
+                    .expect("could not set progress style")
+                    .progress_chars("##-"),
             ),
         }
     }
