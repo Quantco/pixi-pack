@@ -69,7 +69,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
         "Finished unpacking to {}.",
         options.output_directory.display(),
     );
-    println!(
+    eprintln!(
         "💫 Finished unpacking to {}.",
         options.output_directory.display()
     );
@@ -210,7 +210,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
 
     // Invariant: all packages are in the cache
     tracing::info!("Installing {} packages", repodata_records.len());
-    println!("⏳ Installing {} packages...", repodata_records.len());
+    eprintln!("⏳ Installing {} packages...", repodata_records.len());
 
     let installer = Installer::default().with_reporter(InstallationProgressReporter::new(
         repodata_records.len() as u64,

@@ -95,7 +95,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         "Downloading {} packages...",
         conda_packages_from_lockfile.len()
     );
-    println!(
+    eprintln!(
         "⏳ Downloading {} packages...",
         conda_packages_from_lockfile.len()
     );
@@ -184,7 +184,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.output_file.display(),
         output_size
     );
-    println!(
+    eprintln!(
         "📦 Created pack at {} with size {}.",
         options.output_file.display(),
         output_size
