@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rattler::install::Reporter;
 use rattler_conda_types::RepoDataRecord;
 
-/// Progress reporter that wraps a progress bar or spinner with default styles.
+/// Progress reporter that wraps a progress bar with default styles.
 pub struct ProgressReporter {
     pub pb: ProgressBar,
 }
@@ -20,18 +20,6 @@ impl ProgressReporter {
                 .progress_chars("##-"),
             ),
         }
-    }
-
-    pub fn new_spinner() -> Self {
-        Self {
-            pb: ProgressBar::new_spinner(),
-        }
-    }
-}
-
-impl From<ProgressBar> for ProgressReporter {
-    fn from(pb: ProgressBar) -> Self {
-        ProgressReporter { pb }
     }
 }
 

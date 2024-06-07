@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    pin::Pin,
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use futures::{
@@ -46,7 +43,6 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
-    eprintln!("📂 Unarchiving pack...");
     unarchive(&options.pack_file, &unpack_dir)
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
@@ -154,16 +150,11 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
 
     let reader = tokio::io::BufReader::new(file);
     let mut archive = Archive::new(reader);
-    let mut entries = archive.entries()?;
-    let mut pinned = Pin::new(&mut entries);
 
-    let spinner = ProgressReporter::new_spinner();
-    while let Some(entry) = pinned.next().await {
-        let mut file = entry.map_err(|e| anyhow!("could not unpack archive: {}", e))?;
-        file.unpack_in::<&Path>(target_dir.as_ref()).await?;
-        spinner.pb.tick();
-    }
-    spinner.pb.finish_and_clear();
+    archive
+        .unpack(target_dir)
+        .await
+        .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
 
     Ok(())
 }
@@ -177,7 +168,10 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
         .into_path();
 
+    eprintln!("⏳ Installing {} packages...", packages.len());
+
     // extract packages to cache
+    tracing::info!("Creating cache with {} packages", packages.len());
     let package_cache = PackageCache::new(cache_dir);
 
     let repodata_records: Vec<RepoDataRecord> = stream::iter(packages)
@@ -219,8 +213,6 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
 
     // Invariant: all packages are in the cache
     tracing::info!("Installing {} packages", repodata_records.len());
-    eprintln!("⏳ Installing {} packages...", repodata_records.len());
-
     let installer =
         Installer::default().with_reporter(ProgressReporter::new(repodata_records.len() as u64));
     installer
