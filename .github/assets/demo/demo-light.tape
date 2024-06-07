@@ -5,7 +5,7 @@ Set Theme "rose-pine-dawn"
 Set Shell "bash"
 Set FontSize 32
 Set Width 1920
-Set Height 1080
+Set Height 700
 
 Hide
 Type "export PATH=$(pwd)/target/debug:$PATH" Enter
@@ -24,7 +24,7 @@ Type "ls" Sleep 1s Enter
 Sleep 3s
 
 Type@200ms "pixi-pack unpack environment.tar" Sleep 1s Enter
-Sleep 3s
+Sleep 4s
 
 Type@200ms "ls" Sleep 1s Enter
 Sleep 4s
