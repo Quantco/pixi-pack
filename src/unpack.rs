@@ -168,7 +168,10 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
         .into_path();
 
-    eprintln!("⏳ Installing {} packages...", packages.len());
+    eprintln!(
+        "⏳ Extracting and installing {} packages...",
+        packages.len()
+    );
     let reporter = ProgressReporter::new(packages.len() as u64);
 
     // extract packages to cache
@@ -204,6 +207,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
                     )
                     .await
                     .map_err(|e| anyhow!("could not extract package: {}", e))?;
+                reporter.pb.inc(1);
 
                 Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
             }
@@ -211,10 +215,12 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         .buffer_unordered(50)
         .try_collect()
         .await?;
+    reporter.pb.finish_and_clear();
 
     // Invariant: all packages are in the cache
     tracing::info!("Installing {} packages", repodata_records.len());
-    let installer = Installer::default().with_reporter(reporter);
+    let installer = Installer::default()
+        .with_reporter::<ProgressReporter>(ProgressReporter::new(repodata_records.len() as u64));
     installer
         .with_package_cache(package_cache)
         .install(&target_prefix, repodata_records)
