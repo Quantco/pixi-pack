@@ -13,7 +13,7 @@ Type "rm -rf env/ environment.tar activate.*" Enter
 Type "clear" Enter
 Show
 
-Type "ls" Sleep 1s Enter
+Type@200ms "ls" Sleep 1s Enter
 Sleep 3s
 
 Type@200ms "pixi-pack pack" Sleep 1s Enter
@@ -25,11 +25,11 @@ Sleep 3s
 Type@200ms "pixi-pack unpack environment.tar" Sleep 1s Enter
 Sleep 3s
 
-Type "ls" Sleep 1s Enter
+Type@200ms "ls" Sleep 1s Enter
 Sleep 4s
 
-Type "source activate.sh" Sleep 1s Enter
+Type@200ms "source activate.sh" Sleep 1s Enter
 Sleep 3s
 
-Type "which python" Sleep 1s Enter
+Type@200ms "which python" Sleep 1s Enter
 Sleep 5s
