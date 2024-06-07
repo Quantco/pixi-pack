@@ -1,9 +1,22 @@
-# `pixi-pack`
+![banner](.github/assets/pixi-pack-banner-dark.svg#gh-dark-mode-only)
+![banner](.github/assets/pixi-pack-banner-light.svg#gh-light-mode-only)
 
-<br />
-<p align="center">
-  <h3 align="center">📦 A tool to pack and unpack conda environments created with pixi</h3>
-</p>
+<div align="center">
+
+[![License][license-badge]](LICENSE)
+[![CI Status][ci-badge]][ci]
+[![Project Chat][chat-badge]][chat-url]
+[![Pixi Badge][pixi-badge]][pixi-url]
+
+[license-badge]: https://img.shields.io/github/license/quantco/pixi-pack?style=flat-square
+[ci-badge]: https://img.shields.io/github/actions/workflow/status/quantco/pixi-pack/ci.yml?style=flat-square&branch=main
+[ci]: https://github.com/quantco/pixi-pack/actions/
+[chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
+[chat-url]: https://discord.gg/kKV8ZxyzY4
+[pixi-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square
+[pixi-url]: https://pixi.sh
+
+</div>
 
 ## 🗂 Table of Contents
 
