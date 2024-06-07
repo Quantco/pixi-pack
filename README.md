@@ -1,7 +1,7 @@
 ![banner](.github/assets/pixi-pack-banner-dark.svg#gh-dark-mode-only)
 ![banner](.github/assets/pixi-pack-banner-light.svg#gh-light-mode-only)
 
-<h1 align="center">
+<div align="center">
 
 ![License][license-badge]
 [![CI Status][ci-badge]][ci]
@@ -16,7 +16,7 @@
 [pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square
 [pixi-url]: https://pixi.sh
 
-</h1>
+</div>
 
 ## 🗂 Table of Contents
 
