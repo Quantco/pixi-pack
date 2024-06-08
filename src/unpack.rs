@@ -172,7 +172,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         "⏳ Extracting and installing {} packages...",
         packages.len()
     );
-    let reporter = ProgressReporter::new(2 * packages.len() as u64);
+    let reporter = ProgressReporter::new(packages.len() as u64);
 
     // extract packages to cache
     tracing::info!("Creating cache with {} packages", packages.len());
@@ -218,7 +218,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
 
     // Invariant: all packages are in the cache
     tracing::info!("Installing {} packages", repodata_records.len());
-    let installer = Installer::default().with_reporter(reporter);
+    let installer = Installer::default();
     installer
         .with_package_cache(package_cache)
         .install(&target_prefix, repodata_records)
