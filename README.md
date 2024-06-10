@@ -18,6 +18,9 @@
 
 </div>
 
+![pixi-pack demo](.github/assets/demo/demo-light.gif#gh-light-mode-only)
+![pixi-pack demo](.github/assets/demo/demo-dark.gif#gh-dark-mode-only)
+
 ## 🗂 Table of Contents
 
 - [Introduction](#-introduction)
