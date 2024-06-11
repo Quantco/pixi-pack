@@ -19,10 +19,10 @@ compilers = ">=1.7.0"
 conda = "*"
 micromamba = "*"
 
-# [feature.demo.dependencies]
-# vhs = "*"
-# [feature.demo.tasks]
-# demo = "vhs .github/assets/demo/demo-light.tape && vhs .github/assets/demo/demo-dark.tape"
+[feature.demo.dependencies]
+vhs = "*"
+[feature.demo.tasks]
+demo = "vhs .github/assets/demo/demo-light.tape && vhs .github/assets/demo/demo-dark.tape"
 
 [feature.lint.dependencies]
 pre-commit = "*"
@@ -36,5 +36,5 @@ pre-commit-run = "pre-commit run -a"
 
 [environments]
 default = ["lint", "test"]
-# demo = { features = ["demo"], no-default-feature = true }
+demo = { features = ["demo"], no-default-feature = true }
 lint = { features = ["lint"], no-default-feature = true }
