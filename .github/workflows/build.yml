@@ -64,6 +64,8 @@ jobs:
 
       # Optimize the binary for size. This reduces the filesize at the cost of a slower binary.
       CARGO_PROFILE_OPT_LEVEL: ${{ needs.metadata.outputs.optimize-build && 's' || '0' }}
+
+      CROSS_CUSTOM_TOOLCHAIN: 1
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
