@@ -5,12 +5,15 @@
 
 [![License][license-badge]](LICENSE)
 [![CI Status][ci-badge]][ci]
+[![Conda Platform][conda-badge]][conda-url]
 [![Project Chat][chat-badge]][chat-url]
 [![Pixi Badge][pixi-badge]][pixi-url]
 
 [license-badge]: https://img.shields.io/github/license/quantco/pixi-pack?style=flat-square
 [ci-badge]: https://img.shields.io/github/actions/workflow/status/quantco/pixi-pack/ci.yml?style=flat-square&branch=main
 [ci]: https://github.com/quantco/pixi-pack/actions/
+[conda-badge]: https://img.shields.io/conda/vn/conda-forge/pixi-pack?style=flat-square
+[conda-url]: https://prefix.dev/channels/conda-forge/packages/pixi-pack
 [chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
 [chat-url]: https://discord.gg/kKV8ZxyzY4
 [pixi-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square
@@ -54,6 +57,13 @@ cargo install --locked --git https://github.com/quantco/pixi-pack.git
 ```
 
 Or by downloading our pre-built binaries from the [releases page](https://github.com/quantco/pixi-pack/releases).
+
+Instead of installing `pixi-pack` globally, you can also use `pixi exec` to run `pixi-pack` in a temporary environment:
+
+```bash
+pixi exec pixi-pack pack
+pixi exec pixi-pack unpack environment.tar
+```
 
 ## 🎯 Usage
 
