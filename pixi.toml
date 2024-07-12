@@ -4,6 +4,8 @@ channels = ["conda-forge"]
 platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64", "win-64"]
 
 [tasks]
+install-cross = "cargo install cross --git https://github.com/cross-rs/cross"
+cross-build = { cmd = "cross build --release", depends-on = ["install-cross"] }
 build = "cargo build --release"
 test = "cargo test"
 
