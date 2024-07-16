@@ -76,7 +76,7 @@ jobs:
           key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}
 
       - name: Install cross
-        run: cargo install --git https://github.com/cross-rs/cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build
         run: |
