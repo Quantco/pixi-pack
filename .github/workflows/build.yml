@@ -33,18 +33,25 @@ jobs:
         include:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            cross: false
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
+            cross: true
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            cross: false
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
+            cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            cross: false
           - target: aarch64-apple-darwin
             os: macos-latest
+            cross: false
           - target: x86_64-apple-darwin
             os: macos-13
+            cross: false
     env:
       # These are some environment variables that configure the build so that the binary size is reduced.
       # Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
@@ -76,11 +83,12 @@ jobs:
           key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}
 
       - name: Install cross
+        if: matrix.cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build
         run: |
-          cross build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{matrix.target}}
+          ${{ matrix.cross && 'cross' || 'cargo' }} build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{matrix.target}}
           mv target/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
