@@ -82,7 +82,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}
+          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}-${{ matrix.cross}}-${{ matrix.os}}
 
       - name: Install cross
         if: matrix.cross
