@@ -1,8 +1,6 @@
 name: Build
 on:
-  push:
-    branches:
-      - main
+  merge_group:
   pull_request:
 
 jobs:
@@ -24,7 +22,7 @@ jobs:
           version-extraction-override: 'regex:version = "(.*)"'
 
   build:
-    name: Build Binary
+    name: Build Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: [metadata]
     strategy:
@@ -33,18 +31,25 @@ jobs:
         include:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            cross: true
           - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest-arm-4core
+            os: ubuntu-latest
+            cross: true
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            cross: true
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest-arm-4core
+            os: ubuntu-latest
+            cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            cross: false
           - target: aarch64-apple-darwin
             os: macos-latest
+            cross: false
           - target: x86_64-apple-darwin
             os: macos-13
+            cross: false
     env:
       # These are some environment variables that configure the build so that the binary size is reduced.
       # Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
@@ -68,20 +73,23 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up pixi
-        uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          activate-environment: true
+          targets: ${{ matrix.target }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
         with:
-          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}
+          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}-${{ matrix.cross }}-${{ matrix.os }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build
         run: |
-          pixi run build --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }}
-          mv target/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          ${{ matrix.cross && 'cross' || 'cargo' }} build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

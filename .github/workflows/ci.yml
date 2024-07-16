@@ -1,5 +1,7 @@
 name: CI
-on: [push]
+on:
+  pull_request:
+  merge_group:
 
 # Automatically stop old builds on the same branch/PR
 concurrency:
@@ -33,7 +35,6 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - ubuntu-latest-arm-4core
           - windows-latest
           - macos-latest
           - macos-13
