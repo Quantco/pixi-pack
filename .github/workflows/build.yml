@@ -90,7 +90,7 @@ jobs:
 
       - name: Build
         run: |
-          ${{ matrix.cross && 'cross' || 'cargo' }} build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{matrix.target}}
+          ${{ matrix.cross && 'cross' || 'cargo' }} build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
           mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
