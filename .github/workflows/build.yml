@@ -76,6 +76,8 @@ jobs:
         uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84
@@ -89,7 +91,7 @@ jobs:
       - name: Build
         run: |
           ${{ matrix.cross && 'cross' || 'cargo' }} build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{matrix.target}}
-          mv target/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
