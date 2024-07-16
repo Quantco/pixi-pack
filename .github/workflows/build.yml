@@ -24,7 +24,7 @@ jobs:
           version-extraction-override: 'regex:version = "(.*)"'
 
   build:
-    name: Build Binary
+    name: Build Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: [metadata]
     strategy:
