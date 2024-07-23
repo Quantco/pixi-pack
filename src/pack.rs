@@ -36,6 +36,7 @@ pub struct PackOptions {
     pub metadata: PixiPackMetadata,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
+    pub create_executable: bool,
 }
 
 /// Pack a pixi environment.

@@ -27,6 +27,7 @@ fn options(
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
+    #[default(false)] create_executable: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar");
@@ -40,6 +41,7 @@ fn options(
             metadata,
             injected_packages: vec![],
             ignore_pypi_errors,
+            create_executable,
         },
         unpack_options: UnpackOptions {
             pack_file,

@@ -61,6 +61,10 @@ enum Commands {
         /// This flag allows packing even if PyPI dependencies are present.
         #[arg(long, default_value = "false")]
         ignore_pypi_errors: bool,
+
+        /// Create self-extracting executable
+        #[arg(long, default_value = "false")]
+        create_executable: bool,
     },
 
     /// Unpack a pixi environment
@@ -103,6 +107,7 @@ async fn main() -> Result<()> {
             output_file,
             inject,
             ignore_pypi_errors,
+            create_executable,
         } => {
             let options = PackOptions {
                 environment,
@@ -116,6 +121,7 @@ async fn main() -> Result<()> {
                 },
                 injected_packages: inject,
                 ignore_pypi_errors,
+                create_executable,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?
