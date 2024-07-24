@@ -310,11 +310,6 @@ async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> R
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
 
-    eprintln!(
-        "Current directory: {}",
-        std::env::current_dir().unwrap().display()
-    );
-
     const HEADER_CONTENT: &[u8] = include_bytes!("header.sh");
 
     let executable_path = target.with_extension("sh");

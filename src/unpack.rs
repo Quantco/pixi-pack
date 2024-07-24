@@ -45,7 +45,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
     if options.pack_file.extension().unwrap_or_default() == "sh" {
-        extract_archive_from_shellscript(&options.pack_file, &unpack_dir)
+        unarchive_from_shellscript(&options.pack_file, &unpack_dir)
             .await
             .map_err(|e| anyhow!("Could not extract archive from shell script: {}", e))?;
     } else {
@@ -150,10 +150,7 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
 }
 
 // Extract the archive from a shell script and unar
-pub async fn extract_archive_from_shellscript(
-    shell_script_path: &Path,
-    target_dir: &Path,
-) -> Result<()> {
+pub async fn unarchive_from_shellscript(shell_script_path: &Path, target_dir: &Path) -> Result<()> {
     let shell_script = fs::File::open(shell_script_path)
         .await
         .map_err(|e| anyhow!("could not open shell script: {}", e))?;

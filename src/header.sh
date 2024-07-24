@@ -7,7 +7,7 @@ PREFIX="env"
 FORCE=0
 INSTALLER="conda"  # Default to conda
 CREATE_ACTIVATION_SCRIPT=false
-PARENT_DIR="$(pwd)"
+PARENT_DIR="$(dirname "$0")"
 
 USAGE="
 usage: $0 [options]
@@ -27,14 +27,8 @@ create_activation_script() {
     local shell=$(basename "$3")
 
     case "$shell" in
-        bash)
+        bash | zsh | fish)
             extension="sh"
-            ;;
-        zsh)
-            extension="zsh"
-            ;;
-        fish)
-            extension="fish"
             ;;
         *)
             echo "Unsupported shell: $shell" >&2
@@ -69,25 +63,18 @@ create_activation_script() {
 
     # https://docs.rs/rattler_shell/latest/src/rattler_shell/activation.rs.html#191
     if [ -d "$env_vars_dir" ]; then
-        declare -A env_vars
+        env_var_files=$(find "$env_vars_dir" -type f | sort)
 
-        env_var_files=($(find "$env_vars_dir" -type f | sort))
-
-        for file in "${env_var_files[@]}"; do
+        for file in $env_var_files; do
             if jq empty "$file" 2>/dev/null; then
-                while IFS="=" read -r key value; do
+                jq -r 'to_entries | map("\(.key)=\(.value)") | .[]' "$file" | while IFS="=" read -r key value; do
                     # Remove quotes from the value
-                    value="${value%\"}"
-                    value="${value#\"}"
-                    env_vars["$key"]="$value"
-                done < <(jq -r 'to_entries | map("\(.key)=\(.value)") | .[]' "$file")
+                    value=$(echo "$value" | sed 's/^"//; s/"$//')
+                    echo "export $key=\"$value\"" >> "$activate_path"
+                done
             else
                 echo "WARNING: Invalid JSON file: $file" >&2
             fi
-        done
-
-        for key in "${!env_vars[@]}"; do
-            echo "export $key=\"${env_vars[$key]}\"" >> "$activate_path"
         done
     fi
 
@@ -96,19 +83,18 @@ create_activation_script() {
         if ! state_json=$(jq '.' "$state_file" 2>/dev/null); then
             echo "WARNING: Invalid JSON in state file: $state_file" >&2
         else
-            state_env_vars=$(echo "$state_json" | jq -r '.env_vars // {}')
-            while IFS="=" read -r key value; do
+            echo "$state_json" | jq -r '.env_vars // {} | to_entries | map("\(.key)=\(.value)") | .[]' | while IFS="=" read -r key value; do
                 if [ -n "$key" ]; then
-                    if [ -n "${env_vars[$key]}" ]; then
+                    if grep -q "export $key=" "$activate_path"; then
                         echo "WARNING: environment variable $key already defined in packages (path: $state_file)" >&2
                     fi
                     if [ -n "$value" ]; then
-                        env_vars["${key^^}"]="$value"
+                        echo "export ${key}=\"$value\"" >> "$activate_path"
                     else
                         echo "WARNING: environment variable $key has no string value (path: $state_file)" >&2
                     fi
                 fi
-            done < <(echo "$state_env_vars" | jq -r 'to_entries | map("\(.key)=\(.value)") | .[]')
+            done
         fi
         echo "export CONDA_ENV_STATE_FILE=\"$state_file\"" >> "$activate_path"
     fi
@@ -151,7 +137,7 @@ elif [ "$FORCE" = "1" ] && [ -e "$PREFIX" ]; then
     rm -rf "$PREFIX"
 fi
 
-PREFIX="$(pwd)/$PREFIX"
+PREFIX="$PARENT_DIR/$PREFIX"
 
 last_line=$(($(grep -anm 1 '^@@END_HEADER@@' "$0" | sed 's/:.*//') + 1))
 

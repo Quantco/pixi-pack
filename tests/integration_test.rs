@@ -30,7 +30,11 @@ fn options(
     #[default(false)] create_executable: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = output_dir.path().join("environment.tar");
+    let pack_file = if create_executable {
+        output_dir.path().join("environment.sh")
+    } else {
+        output_dir.path().join("environment.tar")
+    };
     Options {
         pack_options: PackOptions {
             environment,
@@ -269,4 +273,99 @@ async fn test_pypi_ignore(
     pack_options.ignore_pypi_errors = ignore_pypi_errors;
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_create_executable(options: Options, required_fs_objects: Vec<&'static str>) {
+    let mut pack_options = options.pack_options;
+    pack_options.create_executable = true;
+    pack_options.output_file = options.output_dir.path().join("environment.sh");
+
+    let pack_file = pack_options.output_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert!(pack_file.exists());
+    assert_eq!(pack_file.extension().unwrap(), "sh");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(&pack_file).unwrap();
+        let permissions = metadata.permissions();
+        assert!(permissions.mode() & 0o111 != 0);
+    }
+
+    let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
+    let unpack_dir_path = unpack_dir.path();
+    let unpack_options = UnpackOptions {
+        pack_file,
+        output_directory: unpack_dir_path.to_path_buf(),
+        shell: Some(ShellEnum::Bash(Bash)),
+    };
+
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+
+    let env_dir = unpack_dir_path.join("env");
+    assert!(env_dir.exists());
+
+    let activate_file = unpack_dir_path.join("activate.sh");
+    assert!(activate_file.exists());
+
+    required_fs_objects
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
+    let mut pack_options = options.pack_options;
+    pack_options.create_executable = true;
+    pack_options.output_file = options.output_dir.path().join("environment.sh");
+
+    let pack_file = pack_options.output_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert!(pack_file.exists());
+    assert_eq!(pack_file.extension().unwrap(), "sh");
+
+    eprintln!("{:?}", pack_file);
+
+    let output = Command::new("sh")
+        .arg(pack_file)
+        .arg("-a")
+        .output()
+        .expect("Failed to execute packed file for extraction");
+
+    assert!(output.status.success(), "Extraction failed: {:?}", output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    eprintln!("{:?}", stdout);
+
+    let env_dir = options.output_dir.path().join("env");
+    assert!(
+        env_dir.exists(),
+        "Environment directory not found after extraction"
+    );
+    let activate_file = options.output_dir.path().join("activate.sh");
+    assert!(
+        activate_file.exists(),
+        "Activation script not found after extraction"
+    );
+
+    required_fs_objects
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
 }
