@@ -17,6 +17,7 @@ use rattler_shell::{
     shell::{Shell, ShellEnum},
 };
 use tokio::fs;
+use tokio::io::AsyncBufReadExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use url::Url;
@@ -43,9 +44,15 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
-    unarchive(&options.pack_file, &unpack_dir)
-        .await
-        .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
+    if options.pack_file.extension().unwrap_or_default() == "sh" {
+        extract_archive_from_shellscript(&options.pack_file, &unpack_dir)
+            .await
+            .map_err(|e| anyhow!("Could not extract archive from shell script: {}", e))?;
+    } else {
+        unarchive(&options.pack_file, &unpack_dir)
+            .await
+            .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
+    }
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
@@ -140,6 +147,41 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
         .await?;
 
     Ok(packages)
+}
+
+// Extract the archive from a shell script and unar
+pub async fn extract_archive_from_shellscript(
+    shell_script_path: &Path,
+    target_dir: &Path,
+) -> Result<()> {
+    let shell_script = fs::File::open(shell_script_path)
+        .await
+        .map_err(|e| anyhow!("could not open shell script: {}", e))?;
+
+    let mut reader = tokio::io::BufReader::new(shell_script);
+    let mut line = String::new();
+    let mut found_end_header = false;
+
+    while reader.read_line(&mut line).await? > 0 {
+        if line.trim() == "@@END_HEADER@@" {
+            found_end_header = true;
+            break;
+        }
+        line.clear();
+    }
+
+    if !found_end_header {
+        return Err(anyhow!("Could not find @@END_HEADER@@ in shell script"));
+    }
+
+    let mut archive = Archive::new(reader);
+
+    archive
+        .unpack(target_dir)
+        .await
+        .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
+
+    Ok(())
 }
 
 /// Unarchive a tarball.

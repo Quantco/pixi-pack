@@ -1,5 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet}, path::{Path, PathBuf}, sync::Arc
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use fxhash::FxHashMap;
@@ -169,10 +171,14 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating archive at {}", options.output_file.display());
-    archive_directory(output_folder.path(), &options.output_file, options.create_executable)
-        .await
-        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    tracing::info!("Creating pack at {}", options.output_file.display());
+    archive_directory(
+        output_folder.path(),
+        &options.output_file,
+        options.create_executable,
+    )
+    .await
+    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
     let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
     tracing::info!(
@@ -242,7 +248,11 @@ async fn download_package(
     Ok(())
 }
 
-async fn archive_directory(input_dir: &Path, archive_target: &Path, create_executable: bool) -> Result<()> {
+async fn archive_directory(
+    input_dir: &Path,
+    archive_target: &Path,
+    create_executable: bool,
+) -> Result<()> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
         create_self_extracting_executable(input_dir, archive_target).await
@@ -281,7 +291,7 @@ async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn create_self_extracting_executable(input_dir: &Path, archive_target: &Path) -> Result<()> {
+async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> Result<()> {
     let tarbytes = Vec::new();
     let mut archive = Builder::new(tarbytes);
 
@@ -298,20 +308,22 @@ async fn create_self_extracting_executable(input_dir: &Path, archive_target: &Pa
     compressor
         .shutdown()
         .await
-        .map_err(|e| anyhow!("could not flush output: {}", e))?;    
-    
-    let header_path = PathBuf::from("src/header.sh");
-    let header = tokio::fs::read_to_string(&header_path).await.map_err(|e| {
-        anyhow!("could not read header file: {}", e)
-    })?;
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
 
-    let executable_path = archive_target.with_extension("sh");
+    eprintln!(
+        "Current directory: {}",
+        std::env::current_dir().unwrap().display()
+    );
 
-    let mut final_executable = tokio::fs::File::create(&executable_path).await.map_err(|e| {
-        anyhow!("could not create final executable file: {}", e)
-    })?;
+    const HEADER_CONTENT: &[u8] = include_bytes!("header.sh");
 
-    final_executable.write_all(header.as_bytes()).await?;
+    let executable_path = target.with_extension("sh");
+
+    let mut final_executable = tokio::fs::File::create(&executable_path)
+        .await
+        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+
+    final_executable.write_all(HEADER_CONTENT).await?;
     final_executable.write_all(b"\n").await?; // Add a newline after the header
 
     final_executable.write_all(&compressor).await?;
