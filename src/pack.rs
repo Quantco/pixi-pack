@@ -170,7 +170,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // Pack = archive the contents.
     tracing::info!("Creating archive at {}", options.output_file.display());
-    eprintln!("📦 The temp folder contains {:?}", output_folder);
     archive_directory(output_folder.path(), &options.output_file, options.create_executable)
         .await
         .map_err(|e| anyhow!("could not archive directory: {}", e))?;
@@ -283,35 +282,48 @@ async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
 }
 
 async fn create_self_extracting_executable(input_dir: &Path, archive_target: &Path) -> Result<()> {
-    let temp_tarball = archive_target.with_extension("tar.gz.tmp");
-    create_tarball(input_dir, &temp_tarball).await?;
+    let tarbytes = Vec::new();
+    let mut archive = Builder::new(tarbytes);
 
+    archive
+        .append_dir_all(".", input_dir)
+        .await
+        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+
+    let mut compressor = archive
+        .into_inner()
+        .await
+        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
+
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;    
+    
     let header_path = PathBuf::from("src/header.sh");
     let header = tokio::fs::read_to_string(&header_path).await.map_err(|e| {
         anyhow!("could not read header file: {}", e)
     })?;
 
     let executable_path = archive_target.with_extension("sh");
-    let mut final_executable = tokio::fs::File::create(executable_path).await.map_err(|e| {
+
+    let mut final_executable = tokio::fs::File::create(&executable_path).await.map_err(|e| {
         anyhow!("could not create final executable file: {}", e)
     })?;
+
     final_executable.write_all(header.as_bytes()).await?;
     final_executable.write_all(b"\n").await?; // Add a newline after the header
 
-    let mut tarball = fs::File::open(&temp_tarball).await?;
-    tokio::io::copy(&mut tarball, &mut final_executable).await?;
+    final_executable.write_all(&compressor).await?;
 
     // Make the file executable
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(archive_target).await?.permissions();
+        let mut perms = fs::metadata(&executable_path).await?.permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(archive_target, perms).await?;
+        fs::set_permissions(&executable_path, perms).await?;
     }
-
-    // Clean up temporary tarball
-    fs::remove_file(&temp_tarball).await?;
 
     Ok(())
 }

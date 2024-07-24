@@ -58,23 +58,22 @@ export PREFIX
 
 echo "PREFIX=$PREFIX"
 
-extract_range () {
-    dd if="$0" bs=1 skip="$1" count="$((${2}-${1}))" 2>/dev/null
-}
+last_line=$(($(grep -anm 1 '^@@END_HEADER@@' "$0" | sed 's/:.*//') + 1))
 
-last_line=$(grep -anm 1 '^@@END_HEADER@@' "$0" | sed 's/:.*//')
-boundary=$(head -n "${last_line}" "$0" | wc -c | sed 's/ //g')
-
-cd "$PREFIX"
+echo "last_line: $last_line"
 
 echo "Unpacking payload ..."
-extract_range $boundary | tar -xzf -
+tail -n +$last_line "$0" | tar xzv -C "$PREFIX"
 
-echo "Installation completed."
+echo "Creating environment using conda"
 
-if [ "$BATCH" = "0" ]; then
-    echo "Thank you for installing ${INSTALLER_NAME}!"
-fi
+conda env create -p ./env --file "$PREFIX/environment.yml"
+
+echo "Environment created"
+
+# if [ "$BATCH" = "0" ]; then
+#     echo "Thank you for installing ${INSTALLER_NAME}!"
+# fi
 
 exit 0
 @@END_HEADER@@
