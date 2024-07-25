@@ -325,6 +325,7 @@ async fn test_create_executable(options: Options, required_fs_objects: Vec<&'sta
 
 #[rstest]
 #[tokio::test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
     let mut pack_options = options.pack_options;
     pack_options.create_executable = true;

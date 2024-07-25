@@ -141,7 +141,7 @@ PREFIX="$PARENT_DIR/$PREFIX"
 last_line=$(($(grep -anm 1 '^@@END_HEADER@@' "$0" | sed 's/:.*//') + 1))
 
 echo "Unpacking payload ..."
-tail -n +$last_line "$0" | tar xzv -C "$TEMPDIR"
+tail -n +$last_line "$0" | tar -xvf -C "$TEMPDIR"
 
 echo "Creating environment using $INSTALLER"
 
