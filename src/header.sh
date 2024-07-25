@@ -96,7 +96,6 @@ create_activation_script() {
                 fi
             done
         fi
-        echo "export CONDA_ENV_STATE_FILE=\"$state_file\"" >> "$activate_path"
     fi
 
     chmod +x "$activate_path"
