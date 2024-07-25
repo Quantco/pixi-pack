@@ -338,8 +338,6 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     assert!(pack_file.exists());
     assert_eq!(pack_file.extension().unwrap(), "sh");
 
-    eprintln!("{:?}", pack_file);
-
     let output = Command::new("sh")
         .arg(pack_file)
         .arg("-a")
