@@ -1,2 +1,19 @@
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# These are some variables that configure the build so that the binary size is reduced.
+# Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
+# They only enable it on main and releases.
+[profile.release-min-size]
+inherits = "release"
+# Enable Link Time Optimization (LTO) for our release builds. This increases link time but drastically reduces
+# binary size.
+lto = true
+# Use a single code gen unit. This effectively disables parallel linking but ensures that everything is linked
+# together in a single unit which reduces the file-size at the cost of link time.
+# Default for a release build is 16
+codegen-units = 1
+# Strip the binaries. This reduces the filesize of the final release.
+strip = "all"
+# Optimize the binary for size. This reduces the filesize at the cost of a slower binary.
+opt-level = "z"

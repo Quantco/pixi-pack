@@ -53,25 +53,6 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-13
             cross: false
-    env:
-      # These are some environment variables that configure the build so that the binary size is reduced.
-      # Inspiration was taken from this blog: https://arusahni.net/blog/2020/03/optimizing-rust-binary-size.html
-      # They only enable it on main and releases.
-
-      # Enable Link Time Optimization (LTO) for our release builds. This increases link time but drastically reduces
-      # binary size.
-      CARGO_PROFILE_RELEASE_LTO: ${{ needs.metadata.outputs.optimize-build }}
-
-      # Use a single code gen unit. This effectively disables parallel linking but ensures that everything is linked
-      # together in a single unit which reduces the file-size at the cost of link time.
-      # Default for a release build is 16
-      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ needs.metadata.outputs.optimize-build && 1 || 16 }}
-
-      # Strip the binaries. This reduces the filesize of the final release.
-      CARGO_PROFILE_RELEASE_STRIP: ${{ needs.metadata.outputs.optimize-build && 'symbols' || 'false' }}
-
-      # Optimize the binary for size. This reduces the filesize at the cost of a slower binary.
-      CARGO_PROFILE_OPT_LEVEL: ${{ needs.metadata.outputs.optimize-build && 's' || '0' }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -91,7 +72,7 @@ jobs:
 
       - name: Build
         run: |
-          ${{ matrix.cross && 'cross' || 'cargo' }} build --release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
+          ${{ matrix.cross && 'cross' || 'cargo' }} build --profile ${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release'}} --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
           mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
