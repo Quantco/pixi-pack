@@ -14,6 +14,6 @@ lto = true
 # Default for a release build is 16
 codegen-units = 1
 # Strip the binaries. This reduces the filesize of the final release.
-strip = "all"
+strip = true
 # Optimize the binary for size. This reduces the filesize at the cost of a slower binary.
 opt-level = "z"
