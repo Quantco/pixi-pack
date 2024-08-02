@@ -27,14 +27,14 @@ clap = { version = "4.5.13", features = ["derive", "string"] }
 clap-verbosity-flag = "2.2.1"
 futures = "0.3.30"
 indicatif = "0.17.8"
-rattler = { version = "0.26.4", default-features = false }
+rattler = { version = "0.27.2", default-features = false }
 rattler_digest = "1.0.0"
-rattler_conda_types = "0.25.2"
-rattler_index = "0.19.17"
-rattler_lock = "0.22.12"
+rattler_conda_types = "0.26.3"
+rattler_index = "0.19.21"
+rattler_lock = "0.22.16"
 rattler_networking = { version = "0.20.10", default-features = false }
-rattler_package_streaming = { version = "0.21.3", default-features = false }
-rattler_shell = "0.20.9"
+rattler_package_streaming = { version = "0.21.7", default-features = false }
+rattler_shell = "0.21.3"
 reqwest = { version = "0.12.5", default-features = false, features = [
   "http2",
   "macos-system-configuration",
