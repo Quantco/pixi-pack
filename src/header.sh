@@ -143,6 +143,8 @@ last_line=$(($(grep -anm 1 '^@@END_HEADER@@' "$0" | sed 's/:.*//') + 1))
 echo "Unpacking payload ..."
 tail -n +$last_line "$0" | tar -xvf -C "$TEMPDIR"
 
+tail .... | sh $TEMPDIR
+
 echo "Creating environment using $INSTALLER"
 
 cd $TEMPDIR

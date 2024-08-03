@@ -1,0 +1,9 @@
+[package]
+name = "extractor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rattler = { version = "0.26.4", default-features = false }
+rattler_shell = "0.20.9"
+anyhow = "1.*"
