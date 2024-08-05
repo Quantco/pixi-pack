@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    io::Cursor,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, Result};
 use futures::{
@@ -18,7 +21,7 @@ use rattler_shell::{
 };
 
 use tokio::fs;
-use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncReadExt;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use url::Url;
@@ -152,26 +155,33 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
 
 // Extract the archive from a shell script and unar
 pub async fn unarchive_from_shellscript(shell_script_path: &Path, target_dir: &Path) -> Result<()> {
-    let shell_script = fs::File::open(shell_script_path)
+    let mut shell_script = fs::File::open(shell_script_path)
         .await
         .map_err(|e| anyhow!("could not open shell script: {}", e))?;
 
-    let mut reader = tokio::io::BufReader::new(shell_script);
-    let mut line = String::new();
-    let mut found_end_header = false;
+    let mut content = Vec::new();
+    shell_script
+        .read_to_end(&mut content)
+        .await
+        .map_err(|e| anyhow!("could not read shell script: {}", e))?;
 
-    while reader.read_line(&mut line).await? > 0 {
-        if line.trim() == "@@END_HEADER@@" {
-            found_end_header = true;
-            break;
-        }
-        line.clear();
-    }
+    let end_header = b"@@END_HEADER@@\n";
+    let end_archive = b"@@END_ARCHIVE@@\n";
 
-    if !found_end_header {
-        return Err(anyhow!("Could not find @@END_HEADER@@ in shell script"));
-    }
+    let start = content
+        .windows(end_header.len())
+        .position(|window| window == end_header)
+        .map(|pos| pos + end_header.len())
+        .ok_or_else(|| anyhow!("Could not find @@END_HEADER@@ in shell script"))?;
 
+    let end = content
+        .windows(end_archive.len())
+        .position(|window| window == end_archive)
+        .ok_or_else(|| anyhow!("Could not find @@END_ARCHIVE@@ in shell script"))?;
+
+    let archive_content = &content[start..end];
+
+    let reader = tokio::io::BufReader::new(Cursor::new(archive_content));
     let mut archive = Archive::new(reader);
 
     archive
