@@ -341,7 +341,7 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
 
     let output = Command::new("sh")
         .arg(pack_file)
-        .arg("-a")
+        .arg("-af")
         .output()
         .expect("Failed to execute packed file for extraction");
 

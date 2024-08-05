@@ -16,6 +16,7 @@ use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell::{Shell, ShellEnum},
 };
+
 use tokio::fs;
 use tokio::io::AsyncBufReadExt;
 use tokio_stream::wrappers::ReadDirStream;

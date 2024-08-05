@@ -21,7 +21,8 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
 
 use crate::{
-    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
+    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME,
+    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -310,18 +311,39 @@ async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> R
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
 
-    const HEADER_CONTENT: &[u8] = include_bytes!("header.sh");
+    let header = include_str!("header.sh")
+        .to_string()
+        .replace(
+            "PIXI_PACK_CHANNEL_DIRECTORY=\"\"",
+            &format!("PIXI_PACK_CHANNEL_DIRECTORY=\"{}\"", CHANNEL_DIRECTORY_NAME),
+        )
+        .replace(
+            "PIXI_PACK_METADATA_PATH=\"\"",
+            &format!("PIXI_PACK_METADATA_PATH=\"{}\"", PIXI_PACK_METADATA_PATH),
+        )
+        .replace(
+            "PIXI_PACK_DEFAULT_VERSION=\"\"",
+            &format!(
+                "PIXI_PACK_DEFAULT_VERSION=\"{}\"",
+                DEFAULT_PIXI_PACK_VERSION
+            ),
+        );
 
     let executable_path = target.with_extension("sh");
 
-    let mut final_executable = tokio::fs::File::create(&executable_path)
+    // Add the binary of extractor to the final executable
+    const EXTRACTOR: &[u8] = include_bytes!("../extractor/target/release/extractor");
+
+    let mut final_executable = File::create(&executable_path)
         .await
         .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
 
-    final_executable.write_all(HEADER_CONTENT).await?;
+    final_executable.write_all(header.as_bytes()).await?;
     final_executable.write_all(b"\n").await?; // Add a newline after the header
-
     final_executable.write_all(&compressor).await?;
+    final_executable.write_all(b"\n").await?;
+    final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
+    final_executable.write_all(EXTRACTOR).await?;
 
     // Make the file executable
     #[cfg(unix)]

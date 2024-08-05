@@ -117,6 +117,8 @@ async fn main() -> Result<()> {
             let mut output_file_with_extension = output_file;
 
             if create_executable {
+                // TODO: Add support for other platforms
+                // Change this to shell.extension()
                 output_file_with_extension = output_file_with_extension.with_extension("sh");
             } else {
                 output_file_with_extension = output_file_with_extension.with_extension("tar");
