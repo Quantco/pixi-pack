@@ -1,5 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
+    fs::FileTimes,
+    os::macos::fs::FileTimesExt,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -19,9 +21,11 @@ use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
+use walkdir::WalkDir;
 
 use crate::{
-    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
+    get_size, util::set_default_file_times, PixiPackMetadata, ProgressReporter,
+    CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -160,14 +164,33 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
     let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
-    let mut metadata_file = File::create(&metadata_path).await?;
-
     let metadata = serde_json::to_string_pretty(&options.metadata)?;
-    metadata_file.write_all(metadata.as_bytes()).await?;
+    fs::write(metadata_path, metadata.as_bytes()).await?;
 
     // Create environment file.
     tracing::info!("Creating environment.yml file");
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
+
+    // Adjusting all timestamps of directories and files (excl. conda packages).
+    for entry in WalkDir::new(output_folder.path())
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path() != output_folder.path())
+    {
+        match entry.path().extension().and_then(|e| e.to_str()) {
+            Some("tar.bz2") | Some("conda") => continue,
+            _ => {
+                set_default_file_times(entry.path()).map_err(|e| {
+                    anyhow!(
+                        "could not set default file times for path {}: {}",
+                        entry.path().display(),
+                        e
+                    )
+                })?;
+            }
+        }
+    }
 
     // Pack = archive the contents.
     tracing::info!("Creating archive at {}", options.output_file.display());
@@ -240,6 +263,23 @@ async fn download_package(
         dest.write_all(&chunk).await?;
     }
 
+    // Adjust file metadata (timestamps).
+    let package_timestamp = package
+        .package_record()
+        .timestamp
+        .ok_or_else(|| anyhow!("could not read package timestamp"))?;
+    let file_times = FileTimes::new()
+        .set_modified(package_timestamp.into())
+        .set_accessed(package_timestamp.into())
+        .set_created(package_timestamp.into());
+
+    // Make sure to write all data and metadata to disk before modifying timestamp.
+    dest.sync_all().await?;
+    let dest_file = dest
+        .try_into_std()
+        .map_err(|e| anyhow!("could not read standard file: {:?}", e))?;
+    dest_file.set_times(file_times)?;
+
     Ok(())
 }
 
@@ -299,7 +339,7 @@ async fn create_environment_file(
         environment.push_str(&format!("  - {}\n", match_spec_str));
     }
 
-    fs::write(environment_path, environment)
+    fs::write(environment_path.as_path(), environment)
         .await
         .map_err(|e| anyhow!("Could not write environment file: {}", e))?;
 
@@ -343,7 +383,7 @@ async fn create_repodata_files(
 
         let repodata_json = serde_json::to_string_pretty(&repodata)
             .map_err(|e| anyhow!("could not serialize repodata: {}", e))?;
-        fs::write(repodata_path, repodata_json)
+        fs::write(repodata_path.as_path(), repodata_json)
             .map_err(|e| anyhow!("could not write repodata: {}", e))
             .await?;
     }
