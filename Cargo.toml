@@ -55,6 +55,8 @@ tracing-log = "0.2"
 url = "2.5.2"
 fxhash = "0.2.1"
 tempfile = "3.10.1"
+walkdir = "2.5.0"
+fs-set-times = "0.20.1"
 
 [dev-dependencies]
 async-std = "1.12.0"
