@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::FileTimes,
-    os::macos::fs::FileTimesExt,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -270,8 +269,7 @@ async fn download_package(
         .ok_or_else(|| anyhow!("could not read package timestamp"))?;
     let file_times = FileTimes::new()
         .set_modified(package_timestamp.into())
-        .set_accessed(package_timestamp.into())
-        .set_created(package_timestamp.into());
+        .set_accessed(package_timestamp.into());
 
     // Make sure to write all data and metadata to disk before modifying timestamp.
     dest.sync_all().await?;
