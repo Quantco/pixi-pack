@@ -179,7 +179,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .filter(|e| e.path() != output_folder.path())
     {
         match entry.path().extension().and_then(|e| e.to_str()) {
-            Some("tar.bz2") | Some("conda") => continue,
+            Some("bz2") | Some("conda") => continue,
             _ => {
                 set_default_file_times(entry.path()).map_err(|e| {
                     anyhow!(
