@@ -36,14 +36,13 @@ pub struct UnpackOptions {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
-    let unpack_dir = tempfile::tempdir()
-        .map_err(|e| anyhow!("Could not create temporary directory: {}", e))?
-        .into_path();
-
+    let tmp_dir =
+        tempfile::tempdir().map_err(|e| anyhow!("Could not create temporary directory: {}", e))?;
+    let unpack_dir = tmp_dir.path();
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
-    unarchive(&options.pack_file, &unpack_dir)
+    unarchive(&options.pack_file, unpack_dir)
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
 
