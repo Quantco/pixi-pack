@@ -17,6 +17,7 @@ repos:
         types: [text]
       - id: end-of-file-fixer
         name: end-of-file-fixer
+        exclude: src/header.sh
         entry: pixi run -e lint end-of-file-fixer
         language: system
         types: [text]

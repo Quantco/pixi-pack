@@ -50,7 +50,7 @@ enum Commands {
         manifest_path: PathBuf,
 
         /// Output file to write the pack to (will be an archive)
-        #[arg(short, long, default_value = cwd().join("environment.tar").into_os_string())]
+        #[arg(short, long, default_value = cwd().join("environment").into_os_string())]
         output_file: PathBuf,
 
         /// Inject an additional conda package into the final prefix
@@ -61,6 +61,11 @@ enum Commands {
         /// This flag allows packing even if PyPI dependencies are present.
         #[arg(long, default_value = "false")]
         ignore_pypi_errors: bool,
+
+        /// Create self-extracting executable
+        /// This feature is only available on macOS and Linux.
+        #[arg(long, default_value = "false")]
+        create_executable: bool,
     },
 
     /// Unpack a pixi environment
@@ -103,12 +108,27 @@ async fn main() -> Result<()> {
             output_file,
             inject,
             ignore_pypi_errors,
+            create_executable,
         } => {
+            if create_executable && is_unsupported_platform(&platform) {
+                return Err(anyhow::anyhow!("Creating self-extracting executables is only supported on macOS and Linux. Current platform: {}", platform));
+            }
+
+            let mut output_file_with_extension = output_file;
+
+            if create_executable {
+                // TODO: Add support for other platforms
+                // Change this to shell.extension()
+                output_file_with_extension = output_file_with_extension.with_extension("sh");
+            } else {
+                output_file_with_extension = output_file_with_extension.with_extension("tar");
+            }
+
             let options = PackOptions {
                 environment,
                 platform,
                 auth_file,
-                output_file,
+                output_file: output_file_with_extension,
                 manifest_path,
                 metadata: PixiPackMetadata {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
@@ -116,6 +136,7 @@ async fn main() -> Result<()> {
                 },
                 injected_packages: inject,
                 ignore_pypi_errors,
+                create_executable,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?
@@ -137,4 +158,12 @@ async fn main() -> Result<()> {
     tracing::debug!("Finished running pixi-pack");
 
     Ok(())
+}
+
+/// Check if the given platform supports creating self-extracting executables
+fn is_unsupported_platform(platform: &Platform) -> bool {
+    matches!(
+        platform,
+        Platform::Win32 | Platform::Win64 | Platform::WinArm64
+    )
 }

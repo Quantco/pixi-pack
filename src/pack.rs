@@ -21,7 +21,8 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
 
 use crate::{
-    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
+    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME,
+    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -36,6 +37,7 @@ pub struct PackOptions {
     pub metadata: PixiPackMetadata,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
+    pub create_executable: bool,
 }
 
 /// Pack a pixi environment.
@@ -170,10 +172,14 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating archive at {}", options.output_file.display());
-    archive_directory(output_folder.path(), &options.output_file)
-        .await
-        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    tracing::info!("Creating pack at {}", options.output_file.display());
+    archive_directory(
+        output_folder.path(),
+        &options.output_file,
+        options.create_executable,
+    )
+    .await
+    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
     let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
     tracing::info!(
@@ -243,8 +249,20 @@ async fn download_package(
     Ok(())
 }
 
-/// Archive a directory into a tarball.
-async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()> {
+async fn archive_directory(
+    input_dir: &Path,
+    archive_target: &Path,
+    create_executable: bool,
+) -> Result<()> {
+    if create_executable {
+        eprintln!("📦 Creating self-extracting executable");
+        create_self_extracting_executable(input_dir, archive_target).await
+    } else {
+        create_tarball(input_dir, archive_target).await
+    }
+}
+
+async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
     let outfile = fs::File::create(archive_target).await.map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",
@@ -270,6 +288,71 @@ async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()
         .shutdown()
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    Ok(())
+}
+
+async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> Result<()> {
+    let tarbytes = Vec::new();
+    let mut archive = Builder::new(tarbytes);
+
+    archive
+        .append_dir_all(".", input_dir)
+        .await
+        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+
+    let mut compressor = archive
+        .into_inner()
+        .await
+        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
+
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    let header = include_str!("header.sh")
+        .to_string()
+        .replace(
+            "PIXI_PACK_CHANNEL_DIRECTORY=\"\"",
+            &format!("PIXI_PACK_CHANNEL_DIRECTORY=\"{}\"", CHANNEL_DIRECTORY_NAME),
+        )
+        .replace(
+            "PIXI_PACK_METADATA_PATH=\"\"",
+            &format!("PIXI_PACK_METADATA_PATH=\"{}\"", PIXI_PACK_METADATA_PATH),
+        )
+        .replace(
+            "PIXI_PACK_DEFAULT_VERSION=\"\"",
+            &format!(
+                "PIXI_PACK_DEFAULT_VERSION=\"{}\"",
+                DEFAULT_PIXI_PACK_VERSION
+            ),
+        );
+
+    let executable_path = target.with_extension("sh");
+
+    // Add the binary of extractor to the final executable
+    const EXTRACTOR: &[u8] = include_bytes!("../extractor/target/release/extractor");
+
+    let mut final_executable = File::create(&executable_path)
+        .await
+        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+
+    final_executable.write_all(header.as_bytes()).await?;
+    final_executable.write_all(b"\n").await?; // Add a newline after the header
+    final_executable.write_all(&compressor).await?;
+    final_executable.write_all(b"\n").await?;
+    final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
+    final_executable.write_all(EXTRACTOR).await?;
+
+    // Make the file executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&executable_path).await?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&executable_path, perms).await?;
+    }
 
     Ok(())
 }
