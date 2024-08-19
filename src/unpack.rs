@@ -163,13 +163,14 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
 
-    let cache_dir = tempfile::tempdir()
-        .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
-        .into_path();
+    let tmp_dir =
+        tempfile::tempdir().map_err(|e| anyhow!("Could not create temporary directory: {}", e))?;
+    let cache_dir = tmp_dir.path();
 
     eprintln!(
-        "⏳ Extracting and installing {} packages...",
-        packages.len()
+        "⏳ Extracting and installing {} packages to {}...",
+        packages.len(),
+        cache_dir.display()
     );
     let reporter = ProgressReporter::new(packages.len() as u64);
 
