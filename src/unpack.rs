@@ -47,11 +47,11 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
     if options.pack_file.extension().unwrap_or_default() == "sh" {
-        unarchive_from_shellscript(&options.pack_file, &unpack_dir)
+        unarchive_from_shellscript(&options.pack_file, unpack_dir)
             .await
             .map_err(|e| anyhow!("Could not extract archive from shell script: {}", e))?;
     } else {
-        unarchive(&options.pack_file, &unpack_dir)
+        unarchive(&options.pack_file, unpack_dir)
             .await
             .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
     }
