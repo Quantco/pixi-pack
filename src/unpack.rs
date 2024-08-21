@@ -41,11 +41,9 @@ pub struct UnpackOptions {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
-    let unpack_dir = tempfile::tempdir()
-        .map_err(|e| anyhow!("Could not create temporary directory: {}", e))?
-        .into_path();
-
-    let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
+    let tmp_dir =
+        tempfile::tempdir().map_err(|e| anyhow!("Could not create temporary directory: {}", e))?;
+    let unpack_dir = tmp_dir.path();
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
     if options.pack_file.extension().unwrap_or_default() == "sh" {
@@ -63,7 +61,9 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let target_prefix = options.output_directory.join("env");
 
     tracing::info!("Creating prefix at {}", target_prefix.display());
-    create_prefix(&channel_directory, &target_prefix)
+    let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
+    let cache_dir = unpack_dir.join("cache");
+    create_prefix(&channel_directory, &target_prefix, &cache_dir)
         .await
         .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
 
@@ -84,6 +84,10 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
         "💫 Finished unpacking to {}.",
         options.output_directory.display()
     );
+
+    tmp_dir
+        .close()
+        .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
 
     Ok(())
 }
@@ -209,18 +213,15 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
+async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Path) -> Result<()> {
     let packages = collect_packages(channel_dir)
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
 
-    let cache_dir = tempfile::tempdir()
-        .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
-        .into_path();
-
     eprintln!(
-        "⏳ Extracting and installing {} packages...",
-        packages.len()
+        "⏳ Extracting and installing {} packages to {}...",
+        packages.len(),
+        cache_dir.display()
     );
     let reporter = ProgressReporter::new(packages.len() as u64);
 

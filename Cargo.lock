@@ -2411,7 +2411,7 @@ dependencies = [
 
 [[package]]
 name = "pixi-pack"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "async-std",
@@ -2425,8 +2425,8 @@ dependencies = [
  "rattler_digest",
  "rattler_index",
  "rattler_lock",
- "rattler_networking",
- "rattler_package_streaming",
+ "rattler_networking 0.21.1",
+ "rattler_package_streaming 0.21.7",
  "rattler_shell",
  "reqwest 0.12.7",
  "reqwest-middleware",
@@ -2813,6 +2813,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_networking"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d635bd42b45a0446ba7cfe21ac07e6efc6016e28ef35c40f6b6e3aa22681667f"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "dirs",
+ "fslock",
+ "getrandom",
+ "google-cloud-auth",
+ "http 1.1.0",
+ "itertools",
+ "keyring",
+ "netrc-rs",
+ "reqwest 0.12.5",
+ "reqwest-middleware",
+ "retry-policies",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "rattler_package_streaming"
 version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2860,7 +2888,7 @@ dependencies = [
  "enum_dispatch",
  "indexmap 2.4.0",
  "itertools",
- "rattler_conda_types",
+ "rattler_conda_types 0.27.2",
  "serde_json",
  "shlex",
  "tempfile",
@@ -3114,9 +3142,9 @@ dependencies = [
 
 [[package]]
 name = "rstest"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9afd55a67069d6e434a95161415f5beeada95a01c7b815508a82dcb0e1593682"
+checksum = "7b423f0e62bdd61734b67cd21ff50871dfaeb9cc74f869dcd6af974fbcb19936"
 dependencies = [
  "futures",
  "futures-timer",
@@ -3126,9 +3154,9 @@ dependencies = [
 
 [[package]]
 name = "rstest_macros"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4165dfae59a39dd41d8dec720d3cbfbc71f69744efb480a3920f5d4e0cc6798d"
+checksum = "c5e1711e7d14f74b12a58411c542185ef7fb7f2e7f8ee6e2940a883628522b42"
 dependencies = [
  "cfg-if",
  "glob",
@@ -3373,7 +3401,7 @@ checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
 name = "serde"
 version = "1.0.208"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cff085d2cb684faa248efb494c39b68e522822ac0de72ccf08109abde717cfb2"
+checksum = "cff085d2cb684faa248efb494c39b68e522822ac0de72ccf08109abde717cfb2"\
 dependencies = [
  "serde_derive",
 ]
