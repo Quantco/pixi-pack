@@ -9,6 +9,8 @@ fn main() {
             "--release",
             "--manifest-path",
             &format!("{}/Cargo.toml", extractor_path),
+            "--target-dir",
+            "extractor/target",
         ])
         .status()
         .expect("Failed to build extractor");

@@ -332,6 +332,9 @@ async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> R
     let executable_path = target.with_extension("sh");
 
     // Add the binary of extractor to the final executable
+    #[cfg(windows)]
+    const EXTRACTOR: &[u8] = include_bytes!("../extractor/target/release/extractor.exe");
+    #[cfg(not(windows))]
     const EXTRACTOR: &[u8] = include_bytes!("../extractor/target/release/extractor");
 
     let mut final_executable = File::create(&executable_path)
