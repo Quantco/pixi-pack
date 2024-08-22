@@ -1,7 +1,7 @@
 name: Chore
 on:
   pull_request:
-    branches: [main, selfexec_support]
+    branches: [main]
     types: [opened, reopened, edited, synchronize]
 
 concurrency:
