@@ -1,7 +1,12 @@
 name: CI
 on:
-  pull_request:
   merge_group:
+  pull_request:
+  push:
+    branches:
+      - main
+      - selfexec_support
+    
 
 # Automatically stop old builds on the same branch/PR
 concurrency:
