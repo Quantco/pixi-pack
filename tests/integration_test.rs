@@ -210,7 +210,7 @@ async fn test_compatibility(
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    println!("{:?}", pack_result);
+
     assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
     assert!(pack_file.exists());
@@ -348,9 +348,6 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         .expect("Failed to execute packed file for extraction");
 
     assert!(output.status.success(), "Extraction failed: {:?}", output);
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    eprintln!("{:?}", stdout);
 
     let env_dir = options.output_dir.path().join("env");
     assert!(

@@ -27,3 +27,6 @@ tokio-stream = { version = "0.1.15", features = ["fs"] }
 url = "2.5.2"
 fxhash = "0.2.1"
 tempfile = "3.10.1"
+
+[dev-dependencies]
+rstest = "0.22.0"

@@ -5,7 +5,9 @@ platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64", "win-64"]
 
 [tasks]
 build = "cargo build --release"
-test = "cargo test"
+test-pixi-pack = "cargo test"
+test-extractor = { cmd = "cargo test --manifest-path extractor/Cargo.toml", env = { PIXI_PACK_DEFAULT_VERSION = "1" } }
+test = { depends-on = ["test-pixi-pack", "test-extractor"] }
 
 [dependencies]
 rust = "1.77.2"
