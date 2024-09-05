@@ -65,6 +65,10 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     .await
     .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
 
+    tmp_dir
+        .close()
+        .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
+
     tracing::info!(
         "Finished unpacking to {}.",
         options.output_directory.display(),
@@ -73,10 +77,6 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
         "💫 Finished unpacking to {}.",
         options.output_directory.display()
     );
-
-    tmp_dir
-        .close()
-        .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
 
     Ok(())
 }
