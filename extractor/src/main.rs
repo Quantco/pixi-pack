@@ -6,7 +6,7 @@ use tokio_stream::wrappers::ReadDirStream;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use rattler::{
     install::Installer,
     package_cache::{CacheKey, PackageCache},
@@ -60,11 +60,12 @@ async fn main() -> Result<()> {
 /// Unpack a pixi environment from a directory
 pub async fn unpack(archive_dir: &Path, output_dir: &Path) -> Result<()> {
     let channel_directory = archive_dir.join(std::env::var("PIXI_PACK_CHANNEL_DIRECTORY").unwrap());
+    let cache_dir = archive_dir.join("cache");
 
     validate_metadata_file(archive_dir.join(std::env::var("PIXI_PACK_METADATA_PATH").unwrap()))
         .await?;
 
-    create_prefix(&channel_directory, output_dir)
+    create_prefix(&channel_directory, output_dir, &cache_dir)
         .await
         .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
 
@@ -136,20 +137,16 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
     Ok(packages)
 }
 
-async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
+async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Path) -> Result<()> {
     let packages = collect_packages(channel_dir)
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
 
-    let cache_dir = tempfile::tempdir()
-        .map_err(|e| anyhow!("could not create temporary directory: {}", e))?
-        .into_path();
-
     eprintln!(
-        "⏳ Extracting and installing {} packages...",
-        packages.len()
+        "⏳ Extracting and installing {} packages to {}...",
+        packages.len(),
+        cache_dir.display()
     );
-
     // extract packages to cache
     let package_cache = PackageCache::new(cache_dir);
 
@@ -175,13 +172,20 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
                 package_cache
                     .get_or_fetch(
                         cache_key,
-                        |destination| async move {
-                            extract(&package_path, &destination).map(|_| ())
+                        move |destination| {
+                            let package_path_clone = package_path.clone();
+                            async move { extract(&package_path_clone, &destination).map(|_| ()) }
                         },
                         None,
                     )
                     .await
-                    .map_err(|e| anyhow!("could not extract package: {}", e))?;
+                    .map_err(|e| {
+                        anyhow!(
+                            "could not extract \"{}\": {}",
+                            repodata_record.as_ref().name.as_source(),
+                            e
+                        )
+                    })?;
 
                 Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
             }
@@ -204,8 +208,8 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path) -> Result<()> {
         history_path,
         "// not relevant for pixi but for `conda run -p`",
     )
-    .await
-    .map_err(|e| anyhow!("Could not write history file: {}", e))?;
+    .map_err(|e| anyhow!("Could not write history file: {}", e))
+    .await?;
 
     Ok(())
 }
