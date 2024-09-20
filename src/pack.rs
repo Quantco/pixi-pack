@@ -177,6 +177,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         output_folder.path(),
         &options.output_file,
         options.create_executable,
+        options.platform,
     )
     .await
     .map_err(|e| anyhow!("could not archive directory: {}", e))?;
@@ -253,10 +254,11 @@ async fn archive_directory(
     input_dir: &Path,
     archive_target: &Path,
     create_executable: bool,
+    platform: Platform,
 ) -> Result<()> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
-        create_self_extracting_executable(input_dir, archive_target).await
+        create_self_extracting_executable(input_dir, archive_target, platform).await
     } else {
         create_tarball(input_dir, archive_target).await
     }
@@ -292,7 +294,11 @@ async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> Result<()> {
+async fn create_self_extracting_executable(
+    input_dir: &Path,
+    target: &Path,
+    platform: Platform,
+) -> Result<()> {
     let tarbytes = Vec::new();
     let mut archive = Builder::new(tarbytes);
 
@@ -331,11 +337,52 @@ async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> R
 
     let executable_path = target.with_extension("sh");
 
-    // Add the binary of extractor to the final executable
-    #[cfg(windows)]
-    const EXTRACTOR: &[u8] = include_bytes!("../extractor/target/release/extractor.exe");
-    #[cfg(not(windows))]
-    const EXTRACTOR: &[u8] = include_bytes!("../extractor/target/release/extractor");
+    // Determine the target OS and architecture
+    let (os, arch) = match platform {
+        Platform::Linux64 => ("unknown-linux-musl", "x86_64"),
+        Platform::LinuxAarch64 => ("unknown-linux-musl", "aarch64"),
+        Platform::Osx64 => ("apple-darwin", "x86_64"),
+        Platform::OsxArm64 => ("apple-darwin", "aarch64"),
+        Platform::Win64 => ("pc-windows-msvc", "x86_64"),
+        Platform::WinArm64 => ("pc-windows-msvc", "aarch64"),
+        _ => return Err(anyhow!("Unsupported platform: {}", platform)),
+    };
+
+    let executable_name = format!("pixi-pack-{}-{}", arch, os);
+    let extension = if os.contains("windows") { ".exe" } else { "" };
+
+    let version = env!("CARGO_PKG_VERSION");
+    let url = format!(
+        "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
+        version, executable_name, extension
+    );
+
+    eprintln!("📥 Downloading pixi-pack executable...");
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await?;
+    if !response.status().is_success() {
+        return Err(anyhow!("Failed to download pixi-pack executable"));
+    }
+
+    let total_size = response
+        .content_length()
+        .ok_or_else(|| anyhow!("Failed to get content length"))?;
+
+    let bar = ProgressReporter::new(total_size);
+    bar.pb.set_message("Downloading");
+
+    let mut executable_bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        executable_bytes.extend_from_slice(&chunk);
+        bar.pb.inc(chunk.len() as u64);
+    }
+
+    bar.pb.finish_with_message("Download complete");
+
+    eprintln!("✅ Pixi-pack executable downloaded successfully");
 
     let mut final_executable = File::create(&executable_path)
         .await
@@ -346,16 +393,7 @@ async fn create_self_extracting_executable(input_dir: &Path, target: &Path) -> R
     final_executable.write_all(&compressor).await?;
     final_executable.write_all(b"\n").await?;
     final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
-    final_executable.write_all(EXTRACTOR).await?;
-
-    // Make the file executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&executable_path).await?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&executable_path, perms).await?;
-    }
+    final_executable.write_all(&executable_bytes).await?;
 
     Ok(())
 }

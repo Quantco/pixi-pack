@@ -21,20 +21,16 @@ Unpacks an environment packed with pixi-pack
 -f           no error if environment already exists
 -h           print this help message and exit
 -p ENV       environment prefix, defaults to $PREFIX
--i INSTALLER create the environment using the specified installer defaulting to $INSTALLER
 -a           create an activation script to activate the environment
 "
 
-while getopts ":fhai:p:" x; do
+while getopts ":fha:p:" x; do
     case "$x" in
         f)
             FORCE=1
             ;;
         p)
             PREFIX="$OPTARG"
-            ;;
-        i)
-            INSTALLER="$OPTARG"
             ;;
         a)
             CREATE_ACTIVATION_SCRIPT=true
@@ -45,11 +41,6 @@ while getopts ":fhai:p:" x; do
             ;;
     esac
 done
-
-if [ "$INSTALLER" != "rattler" ] && [ "$INSTALLER" != "conda" ] && [ "$INSTALLER" != "micromamba" ]; then
-    echo "ERROR: Invalid installer: '$INSTALLER'" >&2
-    exit 1
-fi
 
 if [ "$FORCE" = "0" ] && [ -e "$PREFIX" ]; then
     echo "ERROR: File or directory already exists: '$PREFIX'" >&2
@@ -78,41 +69,23 @@ tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1)) | 
 
 echo "Creating environment using $INSTALLER"
 
-if [ "$INSTALLER" = "rattler" ]; then
-    (
-        ls $TEMPDIR
+ls $TEMPDIR
 
-        export PIXI_PACK_CHANNEL_DIRECTORY=$PIXI_PACK_CHANNEL_DIRECTORY
-        export PIXI_PACK_METADATA_PATH=$PIXI_PACK_METADATA_PATH
-        export PIXI_PACK_DEFAULT_VERSION=$PIXI_PACK_DEFAULT_VERSION
+export PIXI_PACK_CHANNEL_DIRECTORY=$PIXI_PACK_CHANNEL_DIRECTORY
+export PIXI_PACK_METADATA_PATH=$PIXI_PACK_METADATA_PATH
+export PIXI_PACK_DEFAULT_VERSION=$PIXI_PACK_DEFAULT_VERSION
 
-        rattler_start=$(($archive_end + 2))
+pixi_pack_start=$(($archive_end + 2))
 
-        tail -n +$rattler_start "$0" > "$TEMPDIR/rattler"
-        chmod +x "$TEMPDIR/rattler"
+tail -n +$pixi_pack_start "$0" > "$TEMPDIR/pixi-pack"
+chmod +x "$TEMPDIR/pixi-pack"
 
-        "$TEMPDIR/rattler" "unpack" "$TEMPDIR" "$PREFIX"
-        echo "Environment created at $PREFIX"
+"$TEMPDIR/pixi-pack" "unpack" "$TEMPDIR" "$PREFIX"
+echo "Environment created at $PREFIX"
 
-        if [ "$CREATE_ACTIVATION_SCRIPT" = true ]; then
-            "$TEMPDIR/rattler" "create-script" "$PARENT_DIR" "$PREFIX"
-            echo "Activation script created at $PARENT_DIR/activate.sh"
-        fi
-    )
-elif [ "$INSTALLER" = "conda" ]; then
-    cd $TEMPDIR
-    conda env create -p $PREFIX --file environment.yml
-    echo "Environment created at $PREFIX"
-elif [ "$INSTALLER" = "micromamba" ]; then
-    cd $TEMPDIR
-    micromamba create -p $PREFIX --file environment.yml
-
-    echo "Environment created at $PREFIX"
-
-    if [ "$CREATE_ACTIVATION_SCRIPT" = true ]; then
-        micromamba shell activate -p $PREFIX > $PARENTDIR/activate.sh
-        echo "Activation script created at $PARENTDIR/activate.sh"
-    fi
+if [ "$CREATE_ACTIVATION_SCRIPT" = true ]; then
+    "$TEMPDIR/pixi-pack" "create-script" "$PARENT_DIR" "$PREFIX"
+    echo "Activation script created at $PARENT_DIR/activate.sh"
 fi
 
 cd $PARENT_DIR
