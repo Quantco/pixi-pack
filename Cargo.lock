@@ -2415,6 +2415,7 @@ version = "0.1.8"
 dependencies = [
  "anyhow",
  "async-std",
+ "base64 0.22.1",
  "clap",
  "clap-verbosity-flag",
  "futures",

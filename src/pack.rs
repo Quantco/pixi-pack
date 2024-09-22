@@ -13,6 +13,7 @@ use tokio::{
 };
 
 use anyhow::Result;
+use base64::engine::{general_purpose::STANDARD, Engine};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
 use rattler_lock::{CondaPackage, LockFile, Package};
@@ -22,7 +23,7 @@ use tokio_tar::Builder;
 
 use crate::{
     get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME,
-    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+    PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -317,25 +318,16 @@ async fn create_self_extracting_executable(
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
 
-    let header = include_str!("header.sh")
-        .to_string()
-        .replace(
-            "PIXI_PACK_CHANNEL_DIRECTORY=\"\"",
-            &format!("PIXI_PACK_CHANNEL_DIRECTORY=\"{}\"", CHANNEL_DIRECTORY_NAME),
-        )
-        .replace(
-            "PIXI_PACK_METADATA_PATH=\"\"",
-            &format!("PIXI_PACK_METADATA_PATH=\"{}\"", PIXI_PACK_METADATA_PATH),
-        )
-        .replace(
-            "PIXI_PACK_DEFAULT_VERSION=\"\"",
-            &format!(
-                "PIXI_PACK_DEFAULT_VERSION=\"{}\"",
-                DEFAULT_PIXI_PACK_VERSION
-            ),
-        );
+    let windows_header = include_str!("header.ps1");
+    let unix_header = include_str!("header.sh");
 
-    let executable_path = target.with_extension("sh");
+    let header = if platform.is_windows() {
+        windows_header
+    } else {
+        unix_header
+    };
+
+    let executable_path = target.with_extension(if platform.is_windows() { "ps1" } else { "sh" });
 
     // Determine the target OS and architecture
     let (os, arch) = match platform {
@@ -349,7 +341,7 @@ async fn create_self_extracting_executable(
     };
 
     let executable_name = format!("pixi-pack-{}-{}", arch, os);
-    let extension = if os.contains("windows") { ".exe" } else { "" };
+    let extension = if platform.is_windows() { ".exe" } else { "" };
 
     let version = env!("CARGO_PKG_VERSION");
     let url = format!(
@@ -390,10 +382,21 @@ async fn create_self_extracting_executable(
 
     final_executable.write_all(header.as_bytes()).await?;
     final_executable.write_all(b"\n").await?; // Add a newline after the header
-    final_executable.write_all(&compressor).await?;
+    
+    // Encode the archive to base64
+    let archive_base64 = STANDARD.encode(&compressor);
+    final_executable.write_all(archive_base64.as_bytes()).await?;
+    
     final_executable.write_all(b"\n").await?;
-    final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
-    final_executable.write_all(&executable_bytes).await?;
+    if platform.is_windows() {
+        final_executable.write_all(b"__END_ARCHIVE__\n").await?;
+    } else {
+        final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
+    }
+    
+    // Encode the executable to base64
+    let executable_base64 = STANDARD.encode(&executable_bytes);
+    final_executable.write_all(executable_base64.as_bytes()).await?;
 
     Ok(())
 }

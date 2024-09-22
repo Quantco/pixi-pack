@@ -110,19 +110,15 @@ async fn main() -> Result<()> {
             ignore_pypi_errors,
             create_executable,
         } => {
-            if create_executable && is_unsupported_platform(&platform) {
-                return Err(anyhow::anyhow!("Creating self-extracting executables is only supported on macOS and Linux. Current platform: {}", platform));
-            }
-
-            let mut output_file_with_extension = output_file;
-
-            if create_executable {
-                // TODO: Add support for other platforms
-                // Change this to shell.extension()
-                output_file_with_extension = output_file_with_extension.with_extension("sh");
+            let output_file_with_extension = if create_executable {
+                output_file.with_extension(if platform.is_windows() {
+                    "ps1"
+                } else {
+                    "sh"
+                })
             } else {
-                output_file_with_extension = output_file_with_extension.with_extension("tar");
-            }
+                output_file.with_extension("tar")
+            };
 
             let options = PackOptions {
                 environment,
@@ -158,12 +154,4 @@ async fn main() -> Result<()> {
     tracing::debug!("Finished running pixi-pack");
 
     Ok(())
-}
-
-/// Check if the given platform supports creating self-extracting executables
-fn is_unsupported_platform(platform: &Platform) -> bool {
-    matches!(
-        platform,
-        Platform::Win32 | Platform::Win64 | Platform::WinArm64
-    )
 }
