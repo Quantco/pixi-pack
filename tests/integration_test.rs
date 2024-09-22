@@ -5,7 +5,7 @@ use std::{path::PathBuf, process::Command};
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
-use rattler_shell::shell::{Bash, ShellEnum};
+use rattler_shell::shell::{Bash, PowerShell, ShellEnum};
 use rstest::*;
 use tempfile::{tempdir, TempDir};
 use tokio::fs::File;
@@ -274,13 +274,16 @@ async fn test_pypi_ignore(
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
 }
-
 #[rstest]
 #[tokio::test]
 async fn test_create_executable(options: Options, required_fs_objects: Vec<&'static str>) {
     let mut pack_options = options.pack_options;
     pack_options.create_executable = true;
-    pack_options.output_file = options.output_dir.path().join("environment.sh");
+    pack_options.output_file = options.output_dir.path().join(if cfg!(windows) {
+        "environment.ps1"
+    } else {
+        "environment.sh"
+    });
 
     let pack_file = pack_options.output_file.clone();
 
@@ -288,7 +291,10 @@ async fn test_create_executable(options: Options, required_fs_objects: Vec<&'sta
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
     assert!(pack_file.exists());
-    assert_eq!(pack_file.extension().unwrap(), "sh");
+    assert_eq!(
+        pack_file.extension().unwrap(),
+        if cfg!(windows) { "ps1" } else { "sh" }
+    );
 
     #[cfg(unix)]
     {
@@ -303,7 +309,11 @@ async fn test_create_executable(options: Options, required_fs_objects: Vec<&'sta
     let unpack_options = UnpackOptions {
         pack_file,
         output_directory: unpack_dir_path.to_path_buf(),
-        shell: Some(ShellEnum::Bash(Bash)),
+        shell: Some(if cfg!(windows) {
+            ShellEnum::PowerShell(PowerShell::default())
+        } else {
+            ShellEnum::Bash(Bash)
+        }),
     };
 
     let unpack_result = pixi_pack::unpack(unpack_options).await;
@@ -312,7 +322,11 @@ async fn test_create_executable(options: Options, required_fs_objects: Vec<&'sta
     let env_dir = unpack_dir_path.join("env");
     assert!(env_dir.exists());
 
-    let activate_file = unpack_dir_path.join("activate.sh");
+    let activate_file = unpack_dir_path.join(if cfg!(windows) {
+        "activate.ps1"
+    } else {
+        "activate.sh"
+    });
     assert!(activate_file.exists());
 
     required_fs_objects
@@ -325,11 +339,19 @@ async fn test_create_executable(options: Options, required_fs_objects: Vec<&'sta
 
 #[rstest]
 #[tokio::test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
     let mut pack_options = options.pack_options;
     pack_options.create_executable = true;
-    pack_options.output_file = options.output_dir.path().join("environment.sh");
+
+    #[cfg(target_os = "windows")]
+    {
+        pack_options.output_file = options.output_dir.path().join("environment.ps1");
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        pack_options.output_file = options.output_dir.path().join("environment.sh");
+    }
 
     let pack_file = pack_options.output_file.clone();
 
@@ -337,24 +359,46 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
     assert!(pack_file.exists());
-    assert_eq!(pack_file.extension().unwrap(), "sh");
 
-    let output = Command::new("sh")
-        .arg(pack_file)
-        .arg("-af")
-        .arg("-p")
-        .arg(options.output_dir.path().join("env"))
-        .output()
-        .expect("Failed to execute packed file for extraction");
-
-    assert!(output.status.success(), "Extraction failed: {:?}", output);
+    #[cfg(target_os = "windows")]
+    {
+        assert_eq!(pack_file.extension().unwrap(), "ps1");
+        let output = Command::new("powershell")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&pack_file)
+            .arg("-f")
+            .arg("-o")
+            .arg(options.output_dir.path().join("env"))
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(output.status.success(), "Extraction failed: {:?}", output);
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        assert_eq!(pack_file.extension().unwrap(), "sh");
+        let output = Command::new("sh")
+            .arg(pack_file)
+            .arg("-f")
+            .arg("-o")
+            .arg(options.output_dir.path().join("env"))
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(output.status.success(), "Extraction failed: {:?}", output);
+    }
 
     let env_dir = options.output_dir.path().join("env");
     assert!(
         env_dir.exists(),
         "Environment directory not found after extraction"
     );
-    let activate_file = options.output_dir.path().join("activate.sh");
+
+    #[cfg(target_os = "windows")]
+    let activate_file = env_dir.join("activate.bat");
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let activate_file = env_dir.join("activate.sh");
+
     assert!(
         activate_file.exists(),
         "Activation script not found after extraction"

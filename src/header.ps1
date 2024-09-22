@@ -1,5 +1,9 @@
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+function New-TemporaryDirectory {
+    $parent = [System.IO.Path]::GetTempPath()
+    [string] $name = [System.Guid]::NewGuid()
+    $tempDir = New-Item -ItemType Directory -Path (Join-Path $parent $name)
+    return $tempDir.FullName
+}
 
 $TEMPDIR = New-TemporaryDirectory
 $PREFIX = ""
@@ -21,6 +25,7 @@ Unpacks an environment packed using pixi-pack
 -q, --quiet                 Decrease logging verbosity
 "@
 
+# Parse command-line arguments
 $args = $MyInvocation.UnboundArguments
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch ($args[$i]) {
@@ -39,57 +44,89 @@ for ($i = 0; $i -lt $args.Count; $i++) {
     }
 }
 
-if (-not $FORCE -and (Test-Path $PREFIX)) {
-    Write-Error "ERROR: File or directory already exists: '$PREFIX'"
-    Write-Error "If you want to update an existing environment, use the -f option."
-    exit 1
-}
-
-if ($FORCE -and (Test-Path $PREFIX)) {
-    Remove-Item -Recurse -Force $PREFIX
-}
-
-Write-Host "Unpacking payload ..."
-$scriptContent = Get-Content -Raw -Path $MyInvocation.MyCommand.Path
-$headerEnd = $scriptContent.IndexOf("__END_HEADER__")
-$archiveEnd = $scriptContent.IndexOf("__END_ARCHIVE__", $headerEnd)
-
-# Extract the base64-encoded archive data between __END_HEADER__ and __END_ARCHIVE__
-$archiveContent = $scriptContent.Substring($headerEnd + "__END_HEADER__".Length, $archiveEnd - $headerEnd - "__END_HEADER__".Length)
-[System.IO.File]::WriteAllBytes("$TEMPDIR\archive.tar", [System.Convert]::FromBase64String($archiveContent.Trim()))
-
-Write-Host "Creating environment..."
-
-# Extract the base64-encoded pixi-pack binary after __END_ARCHIVE__
-$pixiPackContent = $scriptContent.Substring($archiveEnd + "__END_ARCHIVE__".Length)
-[System.IO.File]::WriteAllBytes("$TEMPDIR\pixi-pack.exe", [System.Convert]::FromBase64String($pixiPackContent.Trim()))
-
+# Check if verbose and quiet are both set
 if ($VERBOSE -and $QUIET) {
     Write-Error "ERROR: Verbose and quiet options cannot be used together."
     exit 1
 }
 
-$VERBOSITY_FLAG = ""
-if ($VERBOSE) { $VERBOSITY_FLAG = "--verbose" }
-if ($QUIET) { $VERBOSITY_FLAG = "--quiet" }
+# Step 1: Extract the archive and pixi-pack executable, and decode them
+$scriptContent = Get-Content -Raw -Path $MyInvocation.MyCommand.Path
+$lines = $scriptContent -split "`r?`n"
 
-$OUTPUT_DIR_FLAG = ""
-if ($PREFIX) { $OUTPUT_DIR_FLAG = "--output-directory $PREFIX" }
+$headerLine = $null
+$archiveLine = $null
 
-$SHELL_FLAG = ""
-if ($UNPACK_SHELL) { $SHELL_FLAG = "--shell $UNPACK_SHELL" }
+# Find the lines where __END_HEADER__ and __END_ARCHIVE__ occur
+for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -like "*__END_HEADER__*") {
+        $headerLine = $i + 1
+    }
+    if ($lines[$i] -like "*__END_ARCHIVE__*") {
+        $archiveLine = $i + 1
+    }
+}
 
-$CMD = "& `"$TEMPDIR\pixi-pack.exe`" unpack $OUTPUT_DIR_FLAG $VERBOSITY_FLAG $SHELL_FLAG `"$TEMPDIR\archive.tar`""
+if (-not $headerLine -or -not $archiveLine) {
+    Write-Error "Markers __END_HEADER__ or __END_ARCHIVE__ not found."
+    exit 1
+}
 
-# Execute the command
-Invoke-Expression $CMD
+# Extract Base64 content for the tar archive
+$archiveContent = $lines[($headerLine)..($archiveLine - 2)] -join ""
+$archiveContent = $archiveContent.Trim()
+
+# Decode Base64 content into tar file
+try {
+    $decodedArchive = [System.Convert]::FromBase64String($archiveContent)
+    $archivePath = "$TEMPDIR\archive.tar"
+    [System.IO.File]::WriteAllBytes($archivePath, $decodedArchive)
+} catch {
+    Write-Error "Failed to decode Base64 archive content: $_"
+    exit 1
+}
+
+# Extract Base64 content for pixi-pack executable
+$pixiPackContent = $lines[($archiveLine)..($lines.Count - 1)] -join ""
+$pixiPackContent = $pixiPackContent.Trim()
+
+# Decode Base64 content into the pixi-pack executable file
+try {
+    $decodedPixiPack = [System.Convert]::FromBase64String($pixiPackContent)
+    $pixiPackPath = "$TEMPDIR\pixi-pack.exe"
+    [System.IO.File]::WriteAllBytes($pixiPackPath, $decodedPixiPack)
+} catch {
+    Write-Error "Failed to decode Base64 pixi-pack content: $_"
+    exit 1
+}
+
+# Step 2: Build the command with flags
+$arguments = @("unpack")
+
+# Use $PREFIX for output directory if it is provided
+if ($PREFIX) {
+    $arguments += "--output-directory"
+    $arguments += $PREFIX
+}
+
+# Handle verbosity/quiet flags
+if ($VERBOSE) {
+    $arguments += "--verbose"
+} elseif ($QUIET) {
+    $arguments += "--quiet"
+}
+
+# Add shell flag if provided
+if ($UNPACK_SHELL) {
+    $arguments += "--shell"
+    $arguments += $UNPACK_SHELL
+}
+
+# Finally, add the path to the archive
+$arguments += $archivePath
+
+& $pixiPackPath @arguments
 
 exit 0
-
-function New-TemporaryDirectory {
-    $parent = [System.IO.Path]::GetTempPath()
-    [string] $name = [System.Guid]::NewGuid()
-    New-Item -ItemType Directory -Path (Join-Path $parent $name)
-}
 
 __END_HEADER__

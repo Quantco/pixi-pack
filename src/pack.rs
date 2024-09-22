@@ -22,8 +22,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::Builder;
 
 use crate::{
-    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME,
-    PIXI_PACK_METADATA_PATH,
+    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -382,21 +381,25 @@ async fn create_self_extracting_executable(
 
     final_executable.write_all(header.as_bytes()).await?;
     final_executable.write_all(b"\n").await?; // Add a newline after the header
-    
+
     // Encode the archive to base64
     let archive_base64 = STANDARD.encode(&compressor);
-    final_executable.write_all(archive_base64.as_bytes()).await?;
-    
+    final_executable
+        .write_all(archive_base64.as_bytes())
+        .await?;
+
     final_executable.write_all(b"\n").await?;
     if platform.is_windows() {
         final_executable.write_all(b"__END_ARCHIVE__\n").await?;
     } else {
         final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
     }
-    
+
     // Encode the executable to base64
     let executable_base64 = STANDARD.encode(&executable_bytes);
-    final_executable.write_all(executable_base64.as_bytes()).await?;
+    final_executable
+        .write_all(executable_base64.as_bytes())
+        .await?;
 
     Ok(())
 }

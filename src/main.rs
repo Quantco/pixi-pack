@@ -111,11 +111,7 @@ async fn main() -> Result<()> {
             create_executable,
         } => {
             let output_file_with_extension = if create_executable {
-                output_file.with_extension(if platform.is_windows() {
-                    "ps1"
-                } else {
-                    "sh"
-                })
+                output_file.with_extension(if platform.is_windows() { "ps1" } else { "sh" })
             } else {
                 output_file.with_extension("tar")
             };
