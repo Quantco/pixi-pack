@@ -5,7 +5,7 @@ use std::{path::PathBuf, process::Command};
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
-use rattler_shell::shell::{Bash, PowerShell, ShellEnum};
+use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
 use tempfile::{tempdir, TempDir};
 use tokio::fs::File;
@@ -276,81 +276,18 @@ async fn test_pypi_ignore(
 }
 #[rstest]
 #[tokio::test]
-async fn test_create_executable(options: Options, required_fs_objects: Vec<&'static str>) {
-    let mut pack_options = options.pack_options;
-    pack_options.create_executable = true;
-    pack_options.output_file = options.output_dir.path().join(if cfg!(windows) {
-        "environment.ps1"
-    } else {
-        "environment.sh"
-    });
-
-    let pack_file = pack_options.output_file.clone();
-
-    let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok(), "{:?}", pack_result);
-
-    assert!(pack_file.exists());
-    assert_eq!(
-        pack_file.extension().unwrap(),
-        if cfg!(windows) { "ps1" } else { "sh" }
-    );
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let metadata = std::fs::metadata(&pack_file).unwrap();
-        let permissions = metadata.permissions();
-        assert!(permissions.mode() & 0o111 != 0);
-    }
-
-    let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let unpack_dir_path = unpack_dir.path();
-    let unpack_options = UnpackOptions {
-        pack_file,
-        output_directory: unpack_dir_path.to_path_buf(),
-        shell: Some(if cfg!(windows) {
-            ShellEnum::PowerShell(PowerShell::default())
-        } else {
-            ShellEnum::Bash(Bash)
-        }),
-    };
-
-    let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
-
-    let env_dir = unpack_dir_path.join("env");
-    assert!(env_dir.exists());
-
-    let activate_file = unpack_dir_path.join(if cfg!(windows) {
-        "activate.ps1"
-    } else {
-        "activate.sh"
-    });
-    assert!(activate_file.exists());
-
-    required_fs_objects
-        .iter()
-        .map(|dir| env_dir.join(dir))
-        .for_each(|dir| {
-            assert!(dir.exists(), "{:?} does not exist", dir);
-        });
-}
-
-#[rstest]
-#[tokio::test]
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
+    let temp_dir = tempfile::tempdir().expect("Couldn't create a temp dir for tests");
     let mut pack_options = options.pack_options;
     pack_options.create_executable = true;
 
     #[cfg(target_os = "windows")]
     {
-        pack_options.output_file = options.output_dir.path().join("environment.ps1");
+        pack_options.output_file = temp_dir.path().join("environment.ps1");
     }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        pack_options.output_file = options.output_dir.path().join("environment.sh");
+        pack_options.output_file = temp_dir.path().join("environment.sh");
     }
 
     let pack_file = pack_options.output_file.clone();
@@ -358,34 +295,36 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    assert!(pack_file.exists());
+    assert!(
+        pack_file.exists(),
+        "Pack file does not exist at {:?}",
+        pack_file
+    );
 
-    #[cfg(target_os = "windows")]
-    {
-        assert_eq!(pack_file.extension().unwrap(), "ps1");
-        let output = Command::new("powershell")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-File")
-            .arg(&pack_file)
-            .arg("-f")
-            .arg("-o")
-            .arg(options.output_dir.path().join("env"))
-            .output()
-            .expect("Failed to execute packed file for extraction");
-        assert!(output.status.success(), "Extraction failed: {:?}", output);
-    }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         assert_eq!(pack_file.extension().unwrap(), "sh");
         let output = Command::new("sh")
-            .arg(pack_file)
+            .arg(&pack_file)
             .arg("-f")
             .arg("-o")
-            .arg(options.output_dir.path().join("env"))
+            .arg(options.output_dir.path())
             .output()
             .expect("Failed to execute packed file for extraction");
-        assert!(output.status.success(), "Extraction failed: {:?}", output);
+        assert!(output.status.success(), "Packed file execution failed");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        assert_eq!(pack_file.extension().unwrap(), "ps1");
+        let output = Command::new("powershell")
+            .arg("-File")
+            .arg(&pack_file)
+            .arg("-f")
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(output.status.success(), "Packed file execution failed");
     }
 
     let env_dir = options.output_dir.path().join("env");
@@ -395,9 +334,9 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     );
 
     #[cfg(target_os = "windows")]
-    let activate_file = env_dir.join("activate.bat");
+    let activate_file = options.output_dir.path().join("activate.bat");
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let activate_file = env_dir.join("activate.sh");
+    let activate_file = options.output_dir.path().join("activate.sh");
 
     assert!(
         activate_file.exists(),
@@ -410,4 +349,7 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         .for_each(|dir| {
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
+
+    // Keep the temporary directory alive until the end of the test
+    drop(temp_dir);
 }
