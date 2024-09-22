@@ -50,7 +50,7 @@ enum Commands {
         manifest_path: PathBuf,
 
         /// Output file to write the pack to (will be an archive)
-        #[arg(short, long, default_value = cwd().join("environment.tar").into_os_string())]
+        #[arg(short, long, default_value = cwd().join("environment").into_os_string())]
         output_file: PathBuf,
 
         /// Inject an additional conda package into the final prefix
@@ -61,6 +61,11 @@ enum Commands {
         /// This flag allows packing even if PyPI dependencies are present.
         #[arg(long, default_value = "false")]
         ignore_pypi_errors: bool,
+
+        /// Create self-extracting executable
+        /// This feature is only available on macOS and Linux.
+        #[arg(long, default_value = "false")]
+        create_executable: bool,
     },
 
     /// Unpack a pixi environment
@@ -103,12 +108,19 @@ async fn main() -> Result<()> {
             output_file,
             inject,
             ignore_pypi_errors,
+            create_executable,
         } => {
+            let output_file_with_extension = if create_executable {
+                output_file.with_extension(if platform.is_windows() { "ps1" } else { "sh" })
+            } else {
+                output_file.with_extension("tar")
+            };
+
             let options = PackOptions {
                 environment,
                 platform,
                 auth_file,
-                output_file,
+                output_file: output_file_with_extension,
                 manifest_path,
                 metadata: PixiPackMetadata {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
@@ -116,6 +128,7 @@ async fn main() -> Result<()> {
                 },
                 injected_packages: inject,
                 ignore_pypi_errors,
+                create_executable,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

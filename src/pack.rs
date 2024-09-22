@@ -13,6 +13,7 @@ use tokio::{
 };
 
 use anyhow::Result;
+use base64::engine::{general_purpose::STANDARD, Engine};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
 use rattler_lock::{CondaPackage, LockFile, Package};
@@ -36,6 +37,7 @@ pub struct PackOptions {
     pub metadata: PixiPackMetadata,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
+    pub create_executable: bool,
 }
 
 /// Pack a pixi environment.
@@ -170,10 +172,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating archive at {}", options.output_file.display());
-    archive_directory(output_folder.path(), &options.output_file)
-        .await
-        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    tracing::info!("Creating pack at {}", options.output_file.display());
+    archive_directory(
+        output_folder.path(),
+        &options.output_file,
+        options.create_executable,
+        options.platform,
+    )
+    .await
+    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
     let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
     tracing::info!(
@@ -243,8 +250,21 @@ async fn download_package(
     Ok(())
 }
 
-/// Archive a directory into a tarball.
-async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()> {
+async fn archive_directory(
+    input_dir: &Path,
+    archive_target: &Path,
+    create_executable: bool,
+    platform: Platform,
+) -> Result<()> {
+    if create_executable {
+        eprintln!("📦 Creating self-extracting executable");
+        create_self_extracting_executable(input_dir, archive_target, platform).await
+    } else {
+        create_tarball(input_dir, archive_target).await
+    }
+}
+
+async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
     let outfile = fs::File::create(archive_target).await.map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",
@@ -270,6 +290,116 @@ async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()
         .shutdown()
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    Ok(())
+}
+
+async fn create_self_extracting_executable(
+    input_dir: &Path,
+    target: &Path,
+    platform: Platform,
+) -> Result<()> {
+    let tarbytes = Vec::new();
+    let mut archive = Builder::new(tarbytes);
+
+    archive
+        .append_dir_all(".", input_dir)
+        .await
+        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+
+    let mut compressor = archive
+        .into_inner()
+        .await
+        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
+
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    let windows_header = include_str!("header.ps1");
+    let unix_header = include_str!("header.sh");
+
+    let header = if platform.is_windows() {
+        windows_header
+    } else {
+        unix_header
+    };
+
+    let executable_path = target.with_extension(if platform.is_windows() { "ps1" } else { "sh" });
+
+    // Determine the target OS and architecture
+    let (os, arch) = match platform {
+        Platform::Linux64 => ("unknown-linux-musl", "x86_64"),
+        Platform::LinuxAarch64 => ("unknown-linux-musl", "aarch64"),
+        Platform::Osx64 => ("apple-darwin", "x86_64"),
+        Platform::OsxArm64 => ("apple-darwin", "aarch64"),
+        Platform::Win64 => ("pc-windows-msvc", "x86_64"),
+        Platform::WinArm64 => ("pc-windows-msvc", "aarch64"),
+        _ => return Err(anyhow!("Unsupported platform: {}", platform)),
+    };
+
+    let executable_name = format!("pixi-pack-{}-{}", arch, os);
+    let extension = if platform.is_windows() { ".exe" } else { "" };
+
+    let version = env!("CARGO_PKG_VERSION");
+    let url = format!(
+        "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
+        version, executable_name, extension
+    );
+
+    eprintln!("📥 Downloading pixi-pack executable...");
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await?;
+    if !response.status().is_success() {
+        return Err(anyhow!("Failed to download pixi-pack executable"));
+    }
+
+    let total_size = response
+        .content_length()
+        .ok_or_else(|| anyhow!("Failed to get content length"))?;
+
+    let bar = ProgressReporter::new(total_size);
+    bar.pb.set_message("Downloading");
+
+    let mut executable_bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        executable_bytes.extend_from_slice(&chunk);
+        bar.pb.inc(chunk.len() as u64);
+    }
+
+    bar.pb.finish_with_message("Download complete");
+
+    eprintln!("✅ Pixi-pack executable downloaded successfully");
+
+    let mut final_executable = File::create(&executable_path)
+        .await
+        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+
+    final_executable.write_all(header.as_bytes()).await?;
+    final_executable.write_all(b"\n").await?; // Add a newline after the header
+
+    // Encode the archive to base64
+    let archive_base64 = STANDARD.encode(&compressor);
+    final_executable
+        .write_all(archive_base64.as_bytes())
+        .await?;
+
+    final_executable.write_all(b"\n").await?;
+    if platform.is_windows() {
+        final_executable.write_all(b"__END_ARCHIVE__\n").await?;
+    } else {
+        final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
+    }
+
+    // Encode the executable to base64
+    let executable_base64 = STANDARD.encode(&executable_bytes);
+    final_executable
+        .write_all(executable_base64.as_bytes())
+        .await?;
 
     Ok(())
 }

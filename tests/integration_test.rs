@@ -27,9 +27,14 @@ fn options(
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
+    #[default(false)] create_executable: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = output_dir.path().join("environment.tar");
+    let pack_file = if create_executable {
+        output_dir.path().join("environment.sh")
+    } else {
+        output_dir.path().join("environment.tar")
+    };
     Options {
         pack_options: PackOptions {
             environment,
@@ -40,6 +45,7 @@ fn options(
             metadata,
             injected_packages: vec![],
             ignore_pypi_errors,
+            create_executable,
         },
         unpack_options: UnpackOptions {
             pack_file,
@@ -204,7 +210,7 @@ async fn test_compatibility(
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    println!("{:?}", pack_result);
+
     assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
     assert!(pack_file.exists());
@@ -267,4 +273,83 @@ async fn test_pypi_ignore(
     pack_options.ignore_pypi_errors = ignore_pypi_errors;
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
+}
+#[rstest]
+#[tokio::test]
+async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
+    let temp_dir = tempfile::tempdir().expect("Couldn't create a temp dir for tests");
+    let mut pack_options = options.pack_options;
+    pack_options.create_executable = true;
+
+    #[cfg(target_os = "windows")]
+    {
+        pack_options.output_file = temp_dir.path().join("environment.ps1");
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        pack_options.output_file = temp_dir.path().join("environment.sh");
+    }
+
+    let pack_file = pack_options.output_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert!(
+        pack_file.exists(),
+        "Pack file does not exist at {:?}",
+        pack_file
+    );
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        assert_eq!(pack_file.extension().unwrap(), "sh");
+        let output = Command::new("sh")
+            .arg(&pack_file)
+            .arg("-f")
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(output.status.success(), "Packed file execution failed");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        assert_eq!(pack_file.extension().unwrap(), "ps1");
+        let output = Command::new("powershell")
+            .arg("-File")
+            .arg(&pack_file)
+            .arg("-f")
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(output.status.success(), "Packed file execution failed");
+    }
+
+    let env_dir = options.output_dir.path().join("env");
+    assert!(
+        env_dir.exists(),
+        "Environment directory not found after extraction"
+    );
+
+    #[cfg(target_os = "windows")]
+    let activate_file = options.output_dir.path().join("activate.bat");
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let activate_file = options.output_dir.path().join("activate.sh");
+
+    assert!(
+        activate_file.exists(),
+        "Activation script not found after extraction"
+    );
+
+    required_fs_objects
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+
+    // Keep the temporary directory alive until the end of the test
+    drop(temp_dir);
 }
