@@ -23,29 +23,29 @@ rustls-tls = [
 
 [dependencies]
 anyhow = "1.*"
-clap = { version = "4.5.16", features = ["derive", "string"] }
-clap-verbosity-flag = "2.2.1"
+clap = { version = "4.5.19", features = ["derive", "string"] }
+clap-verbosity-flag = "2.2.2"
 futures = "0.3.30"
 indicatif = "0.17.8"
 rattler = { version = "0.27.6", default-features = false }
-rattler_digest = "1.0.1"
-rattler_conda_types = "0.27.2"
+rattler_digest = "1.0.2"
+rattler_conda_types = "0.27.4"
 rattler_index = "0.19.24"
-rattler_lock = "0.22.20"
-rattler_networking = { version = "0.21.1", default-features = false }
-rattler_package_streaming = { version = "0.22.3", default-features = false }
-rattler_shell = "0.21.6"
-reqwest = { version = "0.12.7", default-features = false, features = [
+rattler_lock = "0.22.22"
+rattler_networking = { version = "0.21.4", default-features = false }
+rattler_package_streaming = { version = "0.22.5", default-features = false }
+rattler_shell = "0.21.8"
+reqwest = { version = "0.12.8", default-features = false, features = [
   "http2",
   "macos-system-configuration",
 ] }
 reqwest-middleware = "0.3.3"
-serde = { version = "1.0.209", features = ["derive"] }
-serde_json = "1.0.127"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"
 serde_yaml = "0.9.34"
 tokio-tar = "0.3.1"
 tokio = { version = "1.40.0", features = ["rt-multi-thread"] }
-tokio-stream = { version = "0.1.15", features = ["fs"] }
+tokio-stream = { version = "0.1.16", features = ["fs"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [
   "default",
@@ -54,8 +54,8 @@ tracing-subscriber = { version = "0.3.18", features = [
 tracing-log = "0.2.0"
 url = "2.5.2"
 fxhash = "0.2.1"
-tempfile = "3.12.0"
+tempfile = "3.13.0"
 
 [dev-dependencies]
-async-std = "1.12.0"
-rstest = "0.22.0"
+async-std = "1.13.0"
+rstest = "0.23.0"
