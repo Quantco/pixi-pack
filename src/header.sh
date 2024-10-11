@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -eu
+set -euo pipefail
 TEMPDIR="$(mktemp -d)"
 PREFIX=""
 FORCE=0
