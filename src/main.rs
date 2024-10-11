@@ -63,7 +63,6 @@ enum Commands {
         ignore_pypi_errors: bool,
 
         /// Create self-extracting executable
-        /// This feature is only available on macOS and Linux.
         #[arg(long, default_value = "false")]
         create_executable: bool,
     },
