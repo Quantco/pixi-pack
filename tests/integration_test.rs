@@ -334,12 +334,12 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     );
 
     #[cfg(target_os = "windows")]
-    let activate_file = options.output_dir.path().join("activate.bat");
+    let activation_script = options.output_dir.path().join("activate.bat");
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let activate_file = options.output_dir.path().join("activate.sh");
+    let activation_script = options.output_dir.path().join("activate.sh");
 
     assert!(
-        activate_file.exists(),
+        activation_script.exists(),
         "Activation script not found after extraction"
     );
 
