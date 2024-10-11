@@ -277,7 +277,7 @@ async fn test_pypi_ignore(
 #[rstest]
 #[tokio::test]
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
-    let temp_dir = tempfile::tempdir().expect("Couldn't create a temp dir for tests");
+    let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options;
     pack_options.create_executable = true;
 
