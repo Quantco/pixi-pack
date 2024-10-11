@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set -eu
-TEMPDIR=$(mktemp -d)
+TEMPDIR="$(mktemp -d)"
 PREFIX=""
 FORCE=0
 VERBOSE=0
