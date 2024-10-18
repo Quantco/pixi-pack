@@ -14,7 +14,10 @@ use tokio::{
 
 use anyhow::Result;
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
-use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
+use rattler_conda_types::{
+    package::ArchiveType, ChannelInfo, MatchSpec, Matches, PackageRecord, ParseStrictness,
+    Platform, RepoData,
+};
 use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
@@ -130,14 +133,14 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .collect();
 
     tracing::info!("Injecting {} packages", injected_packages.len());
-    for (path, archive_type) in injected_packages {
+    for (path, archive_type) in injected_packages.iter() {
         // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
             ArchiveType::TarBz2 => package_record_from_tar_bz2(&path),
             ArchiveType::Conda => package_record_from_conda(&path),
         }?;
 
-        // step 2: copy file into channel dir
+        // step 2: Copy file into channel dir
         let subdir = &package_record.subdir;
         let filename = path
             .file_name()
@@ -151,6 +154,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
 
         conda_packages.push((filename, package_record));
+    }
+
+    // In case we injected packages, we need to validate that these packages are solvable with the
+    // environment (i.e., that each packages dependencies and run constraints are still satisfied).
+    if injected_packages.len() > 0 {
+        let _ = validate_package_records(conda_packages.iter().map(|(_, p)| p.clone()).collect())?;
     }
 
     // Create `repodata.json` files.
@@ -355,5 +364,40 @@ async fn create_repodata_files(
             .await?;
     }
 
+    Ok(())
+}
+
+/// Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
+/// This might eventually be part of rattler, xref: https://github.com/conda/rattler/issues/906
+fn validate_package_records(package_records: Vec<PackageRecord>) -> Result<()> {
+    for package in package_records.iter() {
+        // First we check if all dependencies are in the environment.
+        for dep in package.depends.iter() {
+            let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
+            if !package_records.iter().any(|p| dep_spec.matches(p)) {
+                return Err(anyhow!(
+                    "package {} has dependency '{}', which is not in the environment",
+                    package.name.as_normalized(),
+                    dep
+                ));
+            }
+        }
+
+        // Then we check if all constraints are satisfied.
+        for constraint in package.constrains.iter() {
+            let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)?;
+            let matching_package = package_records
+                .iter()
+                .find(|record| Some(record.name.clone()) == constraint_spec.name);
+            if matching_package.is_some_and(|p| !constraint_spec.matches(p)) {
+                return Err(anyhow!(
+                    "package {} has constraint '{}', which is not satisfied by {} in the environment",
+                    package.name.as_normalized(),
+                    constraint,
+                    matching_package.unwrap().name.as_normalized()
+                ));
+            }
+        }
+    }
     Ok(())
 }

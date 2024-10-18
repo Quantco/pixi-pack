@@ -21,6 +21,8 @@ requirements:
   run:
     - python >=3.12
     - fastapi
+  run_constraints:
+    - fastapi >=0.110
 
 tests:
   - python:
