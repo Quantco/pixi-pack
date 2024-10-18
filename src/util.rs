@@ -34,21 +34,11 @@ pub fn get_size<P: AsRef<Path>>(path: P) -> std::io::Result<u64> {
 
 /// Set the modified, accessed, created time for a file.
 pub fn set_default_file_times<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
-    // TODO: This will only change the times for files not for directories.
-    // let file_default_time = std::time::SystemTime::UNIX_EPOCH;
-    // let file_times = FileTimes::new()
-    //     .set_accessed(file_default_time)
-    //     .set_modified(file_default_time);
-    // let dest = std::fs::File::open(path)?;
-    // dest.set_times(file_times)?;
-    println!("Changing times for {:?}", path.as_ref());
-    // TODO: Supposedly this external crate also supports changing mtime, atime for directories
-    // but it doesn't fix it.
+    tracing::debug!("Changing times for {:?}", path.as_ref());
     set_times(
         path,
         Some(SystemTimeSpec::Absolute(std::time::SystemTime::UNIX_EPOCH)),
         Some(SystemTimeSpec::Absolute(std::time::SystemTime::UNIX_EPOCH)),
     )?;
-
     Ok(())
 }

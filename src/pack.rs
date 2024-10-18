@@ -175,7 +175,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .follow_links(true)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.path() != output_folder.path())
     {
         match entry.path().extension().and_then(|e| e.to_str()) {
             Some("bz2") | Some("conda") => continue,
