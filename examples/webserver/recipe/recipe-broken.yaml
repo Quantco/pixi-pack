@@ -21,6 +21,8 @@ requirements:
   run:
     - python >=3.12
     - fastapi >=0.112
+  run_constraints:
+    - pydantic >=2,<3
 
 tests:
   - python:

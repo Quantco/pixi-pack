@@ -22,7 +22,7 @@ requirements:
     - python >=3.12
     - fastapi
   run_constraints:
-    - fastapi >=0.110
+    - pydantic >=2,<3
 
 tests:
   - python:
