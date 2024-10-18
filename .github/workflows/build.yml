@@ -1,10 +1,8 @@
 name: Build
 on:
-  merge_group:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   metadata:
