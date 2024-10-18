@@ -154,6 +154,25 @@ async fn test_inject(
 
 #[rstest]
 #[tokio::test]
+async fn test_inject_failure(options: Options) {
+    let mut pack_options = options.pack_options;
+    pack_options.injected_packages.push(PathBuf::from(
+        "examples/webserver/my-webserver-broken-0.1.0-pyh4616a5c_0.conda",
+    ));
+    pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+
+    assert!(pack_result.is_err());
+    assert!(pack_result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("package my-webserver-broken has dependency 'fastapi >=0.112'"));
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_includes_repodata_patches(options: Options) {
     let mut pack_options = options.pack_options;
     pack_options.platform = Platform::Win64;
