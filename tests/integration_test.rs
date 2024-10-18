@@ -268,3 +268,18 @@ async fn test_pypi_ignore(
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_non_authenticated(
+    #[with(PathBuf::from("examples/auth/pixi.toml"))] options: Options,
+) {
+    let pack_options = options.pack_options;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_err());
+    assert!(pack_result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("failed to download"));
+}
