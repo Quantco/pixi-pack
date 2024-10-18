@@ -373,6 +373,10 @@ fn validate_package_records(package_records: Vec<PackageRecord>) -> Result<()> {
     for package in package_records.iter() {
         // First we check if all dependencies are in the environment.
         for dep in package.depends.iter() {
+            // We ignore virtual packages, e.g. `__unix`.
+            if dep.starts_with("__") {
+                continue;
+            }
             let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
             if !package_records.iter().any(|p| dep_spec.matches(p)) {
                 return Err(anyhow!(

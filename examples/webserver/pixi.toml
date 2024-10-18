@@ -8,7 +8,7 @@ dev = "uvicorn my_project:app --reload"
 start = "uvicorn my_project:app --host 0.0.0.0"
 
 [dependencies]
-fastapi = "*"
+fastapi = ">=0.111,<0.112"
 uvicorn = "*"
 
 [feature.dev.dependencies]

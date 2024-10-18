@@ -131,6 +131,7 @@ pixi-pack pack --inject local-package-1.0.0-hbefa133_0.conda --manifest-pack pix
 ```
 
 This can be particularly useful if you build the project itself and want to include the built package in the environment but still want to use `pixi.lock` from the project.
+Before creating the pack, `pixi-pack` will ensure that the injected packages' dependencies and constraints are compatible with the packages in the environment.
 
 ### Unpacking without `pixi-pack`
 
