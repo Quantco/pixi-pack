@@ -136,8 +136,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     for (path, archive_type) in injected_packages.iter() {
         // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
-            ArchiveType::TarBz2 => package_record_from_tar_bz2(&path),
-            ArchiveType::Conda => package_record_from_conda(&path),
+            ArchiveType::TarBz2 => package_record_from_tar_bz2(path),
+            ArchiveType::Conda => package_record_from_conda(path),
         }?;
 
         // step 2: Copy file into channel dir
@@ -158,8 +158,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // In case we injected packages, we need to validate that these packages are solvable with the
     // environment (i.e., that each packages dependencies and run constraints are still satisfied).
-    if injected_packages.len() > 0 {
-        let _ = validate_package_records(conda_packages.iter().map(|(_, p)| p.clone()).collect())?;
+    if !injected_packages.is_empty() {
+        validate_package_records(conda_packages.iter().map(|(_, p)| p.clone()).collect())?;
     }
 
     // Create `repodata.json` files.
