@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
+use sha2::{Digest, Sha256};
+use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
@@ -267,6 +269,37 @@ async fn test_pypi_ignore(
     pack_options.ignore_pypi_errors = ignore_pypi_errors;
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
+}
+
+fn sha256_digest_bytes(path: &PathBuf) -> String {
+    let mut hasher = Sha256::new();
+    let mut file = fs::File::open(path).unwrap();
+    let _bytes_written = io::copy(&mut file, &mut hasher).unwrap();
+    let digest = hasher.finalize();
+    format!("{:X}", digest)
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_reproducible_shasum(options: Options) {
+    let mut pack_options = options.pack_options;
+    let output_file1 = options.output_dir.path().join("environment1.tar");
+    let output_file2 = options.output_dir.path().join("environment2.tar");
+
+    // First pack.
+    pack_options.output_file = output_file1.clone();
+    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    // Second pack.
+    pack_options.output_file = output_file2.clone();
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert_eq!(
+        sha256_digest_bytes(&output_file1),
+        sha256_digest_bytes(&output_file2)
+    );
 }
 
 #[rstest]
