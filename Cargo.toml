@@ -61,3 +61,4 @@ fs-set-times = "0.20.1"
 [dev-dependencies]
 async-std = "1.13.0"
 rstest = "0.23.0"
+sha2 = "0.10.8"
