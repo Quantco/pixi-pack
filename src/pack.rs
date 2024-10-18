@@ -256,6 +256,13 @@ async fn download_package(
 
     tracing::debug!("Fetching package {}", package.url());
     let mut response = client.get(package.url().to_string()).send().await?;
+    if response.status().is_client_error() {
+        return Err(anyhow!(
+            "failed to download {}: {}",
+            package.url().to_string(),
+            response.text().await?
+        ));
+    }
 
     while let Some(chunk) = response.chunk().await? {
         dest.write_all(&chunk).await?;

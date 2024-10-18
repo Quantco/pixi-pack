@@ -301,3 +301,18 @@ async fn test_reproducible_shasum(options: Options) {
         sha256_digest_bytes(&output_file2)
     );
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_non_authenticated(
+    #[with(PathBuf::from("examples/auth/pixi.toml"))] options: Options,
+) {
+    let pack_options = options.pack_options;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_err());
+    assert!(pack_result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("failed to download"));
+}
