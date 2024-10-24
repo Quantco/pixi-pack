@@ -71,6 +71,10 @@ enum Commands {
         #[arg(short, long, default_value = cwd().into_os_string())]
         output_directory: PathBuf,
 
+        /// Name of the environment
+        #[arg(short, long, default_value = "env")]
+        env_name: String,
+
         /// Path to the pack file
         #[arg()]
         pack_file: PathBuf,
@@ -122,12 +126,14 @@ async fn main() -> Result<()> {
         }
         Commands::Unpack {
             output_directory,
+            env_name,
             pack_file,
             shell,
         } => {
             let options = UnpackOptions {
                 pack_file,
                 output_directory,
+                env_name,
                 shell,
             };
             tracing::debug!("Running unpack command with options: {:?}", options);

@@ -29,6 +29,7 @@ fn options(
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
+    #[default("env")] env_name: String,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar");
@@ -46,6 +47,7 @@ fn options(
         unpack_options: UnpackOptions {
             pack_file,
             output_directory: output_dir.path().to_path_buf(),
+            env_name,
             shell,
         },
         output_dir,
@@ -334,4 +336,20 @@ async fn test_non_authenticated(
         .unwrap()
         .to_string()
         .contains("failed to download"));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_custom_env_name(options: Options) {
+    let env_name = "custom";
+    let pack_options = options.pack_options;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let mut unpack_options = options.unpack_options;
+    unpack_options.env_name = env_name.to_string();
+    let env_dir = unpack_options.output_directory.join(env_name);
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+    assert!(env_dir.is_dir());
 }
