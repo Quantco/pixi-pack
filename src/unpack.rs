@@ -31,6 +31,7 @@ use crate::{
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
     pub output_directory: PathBuf,
+    pub env_name: String,
     pub shell: Option<ShellEnum>,
 }
 
@@ -47,7 +48,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
-    let target_prefix = options.output_directory.join("env");
+    let target_prefix = options.output_directory.join(options.env_name);
 
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);

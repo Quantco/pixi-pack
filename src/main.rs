@@ -66,10 +66,15 @@ enum Commands {
     /// Unpack a pixi environment
     Unpack {
         /// Where to unpack the environment.
-        /// The environment will be unpacked into a `env` subdirectory of this path.
+        /// The environment will be unpacked into a subdirectory of this path
+        /// (default `env`, change with `--env-name`).
         /// The activation script will be written to the root of this path.
         #[arg(short, long, default_value = cwd().into_os_string())]
         output_directory: PathBuf,
+
+        /// Name of the environment
+        #[arg(short, long, default_value = "env")]
+        env_name: String,
 
         /// Path to the pack file
         #[arg()]
@@ -122,12 +127,14 @@ async fn main() -> Result<()> {
         }
         Commands::Unpack {
             output_directory,
+            env_name,
             pack_file,
             shell,
         } => {
             let options = UnpackOptions {
                 pack_file,
                 output_directory,
+                env_name,
                 shell,
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
