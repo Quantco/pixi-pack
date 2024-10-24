@@ -136,7 +136,7 @@ Before creating the pack, `pixi-pack` will ensure that the injected packages' de
 ### Unpacking without `pixi-pack`
 
 If you don't have `pixi-pack` available on your target system, you can still install the environment if you have `conda` or `micromamba` available.
-Just unarchive the `environment.tar`, then you have a local channel on your system where all necessary packages are available.
+Just unarchive the `environment.tar`, then you have a local channel named `pixi-pack` on your system where all necessary packages are available.
 Next to this local channel, you will find an `environment.yml` file that contains the environment specification.
 You can then install the environment using `conda` or `micromamba`:
 
