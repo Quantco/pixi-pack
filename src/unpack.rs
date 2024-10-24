@@ -191,7 +191,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
                 package_record,
                 file_name,
                 url,
-                channel: "local".to_string(),
+                channel: "pixi-pack".to_string(),
             };
 
             async {
