@@ -66,7 +66,8 @@ enum Commands {
     /// Unpack a pixi environment
     Unpack {
         /// Where to unpack the environment.
-        /// The environment will be unpacked into a `env` subdirectory of this path.
+        /// The environment will be unpacked into a subdirectory of this path
+        /// (default `env`, change with `--env-name`).
         /// The activation script will be written to the root of this path.
         #[arg(short, long, default_value = cwd().into_os_string())]
         output_directory: PathBuf,
