@@ -281,11 +281,10 @@ async fn download_package(
     let package_timestamp = package
         .package_record()
         .timestamp
-        .map_or({
+        .map(|ts| ts.into())
+        .unwrap_or_else(|| {
             tracing::error!("could not get timestamp of {:?}, using default", package.file_name());
             std::time::SystemTime::UNIX_EPOCH
-        }, |ts| {
-            ts.into()
         });
     let file_times = FileTimes::new()
         .set_modified(package_timestamp)
