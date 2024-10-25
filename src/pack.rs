@@ -283,7 +283,10 @@ async fn download_package(
         .timestamp
         .map(|ts| ts.into())
         .unwrap_or_else(|| {
-            tracing::error!("could not get timestamp of {:?}, using default", package.file_name());
+            tracing::error!(
+                "could not get timestamp of {:?}, using default",
+                package.file_name()
+            );
             std::time::SystemTime::UNIX_EPOCH
         });
     let file_times = FileTimes::new()
