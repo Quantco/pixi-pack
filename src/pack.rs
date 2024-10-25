@@ -281,10 +281,15 @@ async fn download_package(
     let package_timestamp = package
         .package_record()
         .timestamp
-        .ok_or_else(|| anyhow!("could not read package timestamp"))?;
+        .map_or({
+            tracing::error!("could not get timestamp of {:?}, using default", package.file_name());
+            std::time::SystemTime::UNIX_EPOCH
+        }, |ts| {
+            ts.into()
+        });
     let file_times = FileTimes::new()
-        .set_modified(package_timestamp.into())
-        .set_accessed(package_timestamp.into());
+        .set_modified(package_timestamp)
+        .set_accessed(package_timestamp);
 
     // Make sure to write all data and metadata to disk before modifying timestamp.
     dest.sync_all().await?;
