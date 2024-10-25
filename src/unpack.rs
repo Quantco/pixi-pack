@@ -23,7 +23,7 @@ use url::Url;
 
 use crate::{
     PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_METADATA_PATH,
+    PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
 };
 
 /// Options for unpacking a pixi environment.
@@ -115,6 +115,14 @@ async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
     }
     if metadata.platform != Platform::current() {
         anyhow::bail!("The pack was created for a different platform");
+    }
+
+    tracing::debug!("pack metadata: {:?}", metadata);
+    if metadata.pixi_pack_version != Some(PIXI_PACK_VERSION.to_string()) {
+        tracing::warn!(
+            "The pack was created with a different version of pixi-pack: {:?}",
+            metadata.pixi_pack_version
+        );
     }
 
     Ok(())
@@ -274,6 +282,8 @@ async fn create_activation_script(
 
 #[cfg(test)]
 mod tests {
+    use crate::PIXI_PACK_VERSION;
+
     use super::*;
     use rstest::*;
     use serde_json::json;
@@ -293,7 +303,11 @@ mod tests {
         #[default(Platform::current())] platform: Platform,
     ) -> NamedTempFile {
         let mut metadata_file = NamedTempFile::new().unwrap();
-        let metadata = PixiPackMetadata { version, platform };
+        let metadata = PixiPackMetadata {
+            version,
+            pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
+            platform,
+        };
         let buffer = metadata_file.as_file_mut();
         buffer
             .write_all(json!(metadata).to_string().as_bytes())
