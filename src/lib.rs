@@ -53,7 +53,13 @@ mod tests {
             platform: Platform::Linux64,
         };
         let result = json!(metadata).to_string();
-        assert_eq!(result, format!("{{\"version\":\"1\",\"pixi-pack-version\":\"{}\",\"platform\":\"linux-64\"}}", PIXI_PACK_VERSION));
+        assert_eq!(
+            result,
+            format!(
+                "{{\"version\":\"1\",\"pixi-pack-version\":\"{}\",\"platform\":\"linux-64\"}}",
+                PIXI_PACK_VERSION
+            )
+        );
         assert_eq!(
             serde_json::from_str::<PixiPackMetadata>(&result).unwrap(),
             metadata
@@ -62,7 +68,9 @@ mod tests {
 
     #[test]
     fn test_metadata_serialization_no_pixi_pack_version() {
-        let metadata = serde_json::from_str::<PixiPackMetadata>(&json!({"version": "1", "platform": "linux-64"}).to_string());
+        let metadata = serde_json::from_str::<PixiPackMetadata>(
+            &json!({"version": "1", "platform": "linux-64"}).to_string(),
+        );
         assert!(metadata.is_ok());
         let metadata = metadata.unwrap();
         assert_eq!(metadata.version, "1");

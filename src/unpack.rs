@@ -23,7 +23,7 @@ use url::Url;
 
 use crate::{
     PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION
+    PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
 };
 
 /// Options for unpacking a pixi environment.
@@ -303,7 +303,11 @@ mod tests {
         #[default(Platform::current())] platform: Platform,
     ) -> NamedTempFile {
         let mut metadata_file = NamedTempFile::new().unwrap();
-        let metadata = PixiPackMetadata { version, pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()), platform };
+        let metadata = PixiPackMetadata {
+            version,
+            pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
+            platform,
+        };
         let buffer = metadata_file.as_file_mut();
         buffer
             .write_all(json!(metadata).to_string().as_bytes())
