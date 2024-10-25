@@ -1,0 +1,7 @@
+[project]
+channels = ["conda-forge"]
+name = "no-timestamp"
+platforms = ["osx-64"]
+
+[dependencies]
+mpi = { version = "1.0", build = "openmpi" }

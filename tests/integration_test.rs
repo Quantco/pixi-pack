@@ -340,6 +340,17 @@ async fn test_non_authenticated(
 
 #[rstest]
 #[tokio::test]
+async fn test_no_timestamp(
+    #[with(PathBuf::from("examples/no-timestamp/pixi.toml"))] options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.platform = Platform::Osx64;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_custom_env_name(options: Options) {
     let env_name = "custom";
     let pack_options = options.pack_options;
