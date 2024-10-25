@@ -6,7 +6,7 @@ use rattler_conda_types::Platform;
 
 use anyhow::Result;
 use pixi_pack::{
-    pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
+    pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION,
 };
 use rattler_shell::shell::ShellEnum;
 use tracing_log::AsTrace;
@@ -117,6 +117,7 @@ async fn main() -> Result<()> {
                 manifest_path,
                 metadata: PixiPackMetadata {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+                    pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
                     platform,
                 },
                 injected_packages: inject,
