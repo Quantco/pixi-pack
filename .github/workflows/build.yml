@@ -76,6 +76,9 @@ jobs:
           ${{ matrix.cross && 'cross' || 'cargo' }} build --profile ${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release'}} --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
           mv target/${{ matrix.target }}/${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release' }}/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
+      - name: Cargo publish dry-run
+        run: cargo publish --dry-run
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -87,6 +90,7 @@ jobs:
     name: Create Release
     needs: [metadata, build]
     if: needs.metadata.outputs.release == 'true'
+    environment: crates-io
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +103,9 @@ jobs:
         run: |
           git tag v${{ needs.metadata.outputs.version }}
           git push origin v${{ needs.metadata.outputs.version }}
+      - name: Publish Release
+        run: |
+          cargo publish --token "${{ secrets.CARGO_PUBLISH_TOKEN }}"
       - name: Create Release
         uses: softprops/action-gh-release@e7a8f85e1c67a31e6ed99a94b41bd0b71bbee6b8
         with:
