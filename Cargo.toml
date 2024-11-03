@@ -2,7 +2,12 @@
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
 version = "0.2.2"
+license = "BSD-3-Clause"
+license-file = "LICENSE"
 edition = "2021"
+repository = "https://github.com/quantco/pixi-pack"
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 [features]
 default = ["native-tls"]
