@@ -208,21 +208,22 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
                 // We can only do so by calling `get_or_fetch` on each package, which will
                 // use the provided closure to fetch the package and insert it into the cache.
                 package_cache
-                        .get_or_fetch(
-                            cache_key,
-                            |destination| async move {
-                                extract(&package_path, &destination).map(|_| ())
-                            },
-                            None,
+                    .get_or_fetch(
+                        cache_key,
+                        move |destination| {
+                            let value = package_path.clone();
+                            async move { extract(&value, &destination).map(|_| ()) }
+                        },
+                        None,
+                    )
+                    .await
+                    .map_err(|e| {
+                        anyhow!(
+                            "could not extract \"{}\": {}",
+                            repodata_record.as_ref().name.as_source(),
+                            e
                         )
-                        .await
-                        .map_err(|e| {
-                            anyhow!(
-                                "could not extract \"{}\": {}",
-                                repodata_record.as_ref().name.as_source(),
-                                e
-                            )
-                        })?;
+                    })?;
                 reporter.pb.inc(1);
 
                 Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
