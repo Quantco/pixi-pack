@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Check valid conventional commit message
         id: lint
-        uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017
+        uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
         with:
           subjectPattern: ^[A-Za-z].+[^. ]$ # subject must start with letter and may not end with a dot/space
         env:
@@ -26,7 +26,7 @@ jobs:
 
       - name: Post comment about invalid PR title
         if: failure()
-        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
+        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31 # v2.9.0
         with:
           header: conventional-commit-pr-title
           message: |
@@ -44,13 +44,13 @@ jobs:
 
       - name: Delete comment about invalid PR title
         if: success()
-        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
+        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31 # v2.9.0
         with:
           header: conventional-commit-pr-title
           delete: true
 
       - name: Assign labels
-        uses: release-drafter/release-drafter@3f0f87098bd6b5c5b9a36d49c41d998ea58f9348
+        uses: release-drafter/release-drafter@3f0f87098bd6b5c5b9a36d49c41d998ea58f9348 # v6.0.0
         with:
           disable-releaser: true
           disable-autolabeler: false
