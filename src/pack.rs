@@ -395,17 +395,25 @@ async fn download_package(
         }
     }
 
-    let mut dest = File::create(&output_path).await?;
+    let url = package.location.try_into_url()?;
+    match url.scheme() {
+        "file" => {
+            let local_path = url
+                .to_file_path()
+                .map_err(|_| anyhow!("could not convert url: {} to file path", url))?;
+            tracing::debug!("Copying from path: {}", local_path.display());
+            // Copy file
+            fs::copy(local_path, &output_path).await?;
+        }
+        _ => {
+            let mut dest = File::create(&output_path).await?;
 
-    tracing::debug!("Fetching package {}", package.location);
-    let url = match &package.location {
-        UrlOrPath::Url(url) => url,
-        UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
-    };
-
-    let mut response = client.get(url.clone()).send().await?.error_for_status()?;
-    while let Some(chunk) = response.chunk().await? {
-        dest.write_all(&chunk).await?;
+            tracing::debug!("Fetching package {}", package.location);
+            let mut response = client.get(url.clone()).send().await?.error_for_status()?;
+            while let Some(chunk) = response.chunk().await? {
+                dest.write_all(&chunk).await?;
+            }
+        }
     }
 
     // Save to cache if enabled
