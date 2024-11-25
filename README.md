@@ -131,11 +131,12 @@ pixi-pack pack --inject local-package-1.0.0-hbefa133_0.conda --manifest-pack pix
 ```
 
 This can be particularly useful if you build the project itself and want to include the built package in the environment but still want to use `pixi.lock` from the project.
+Before creating the pack, `pixi-pack` will ensure that the injected packages' dependencies and constraints are compatible with the packages in the environment.
 
 ### Unpacking without `pixi-pack`
 
 If you don't have `pixi-pack` available on your target system, you can still install the environment if you have `conda` or `micromamba` available.
-Just unarchive the `environment.tar`, then you have a local channel on your system where all necessary packages are available.
+Just unarchive the `environment.tar`, then you have a local channel named `pixi-pack` on your system where all necessary packages are available.
 Next to this local channel, you will find an `environment.yml` file that contains the environment specification.
 You can then install the environment using `conda` or `micromamba`:
 

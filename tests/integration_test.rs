@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
+use sha2::{Digest, Sha256};
+use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 
 use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
@@ -27,6 +29,7 @@ fn options(
     #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
+    #[default("env")] env_name: String,
     #[default(false)] create_executable: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
@@ -50,6 +53,7 @@ fn options(
         unpack_options: UnpackOptions {
             pack_file,
             output_directory: output_dir.path().to_path_buf(),
+            env_name,
             shell,
         },
         output_dir,
@@ -154,6 +158,23 @@ async fn test_inject(
         .for_each(|dir| {
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_inject_failure(options: Options) {
+    let mut pack_options = options.pack_options;
+    pack_options.injected_packages.push(PathBuf::from(
+        "examples/webserver/my-webserver-broken-0.1.0-pyh4616a5c_0.conda",
+    ));
+    pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+
+    assert!(pack_result.is_err());
+    assert!(
+        pack_result.err().unwrap().to_string() == "package 'my-webserver-broken=0.1.0=pyh4616a5c_0' has dependency 'fastapi >=0.112', which is not in the environment"
+    );
 }
 
 #[rstest]
@@ -274,6 +295,80 @@ async fn test_pypi_ignore(
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
 }
+
+fn sha256_digest_bytes(path: &PathBuf) -> String {
+    let mut hasher = Sha256::new();
+    let mut file = fs::File::open(path).unwrap();
+    let _bytes_written = io::copy(&mut file, &mut hasher).unwrap();
+    let digest = hasher.finalize();
+    format!("{:X}", digest)
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_reproducible_shasum(options: Options) {
+    let mut pack_options = options.pack_options;
+    let output_file1 = options.output_dir.path().join("environment1.tar");
+    let output_file2 = options.output_dir.path().join("environment2.tar");
+
+    // First pack.
+    pack_options.output_file = output_file1.clone();
+    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    // Second pack.
+    pack_options.output_file = output_file2.clone();
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert_eq!(
+        sha256_digest_bytes(&output_file1),
+        sha256_digest_bytes(&output_file2)
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_non_authenticated(
+    #[with(PathBuf::from("examples/auth/pixi.toml"))] options: Options,
+) {
+    let pack_options = options.pack_options;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_err());
+    assert!(pack_result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("failed to download"));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_no_timestamp(
+    #[with(PathBuf::from("examples/no-timestamp/pixi.toml"))] options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.platform = Platform::Osx64;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_custom_env_name(options: Options) {
+    let env_name = "custom";
+    let pack_options = options.pack_options;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let mut unpack_options = options.unpack_options;
+    unpack_options.env_name = env_name.to_string();
+    let env_dir = unpack_options.output_directory.join(env_name);
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+    assert!(env_dir.is_dir());
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {

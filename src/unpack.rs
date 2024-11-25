@@ -24,7 +24,7 @@ use url::Url;
 
 use crate::{
     PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_METADATA_PATH,
+    PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
 };
 
 /// Options for unpacking a pixi environment.
@@ -32,6 +32,7 @@ use crate::{
 pub struct UnpackOptions {
     pub pack_file: PathBuf,
     pub output_directory: PathBuf,
+    pub env_name: String,
     pub shell: Option<ShellEnum>,
 }
 
@@ -49,7 +50,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
-    let target_prefix = options.output_directory.join("env");
+    let target_prefix = options.output_directory.join(options.env_name);
 
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
@@ -116,6 +117,14 @@ async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
     }
     if metadata.platform != Platform::current() {
         anyhow::bail!("The pack was created for a different platform");
+    }
+
+    tracing::debug!("pack metadata: {:?}", metadata);
+    if metadata.pixi_pack_version != Some(PIXI_PACK_VERSION.to_string()) {
+        tracing::warn!(
+            "The pack was created with a different version of pixi-pack: {:?}",
+            metadata.pixi_pack_version
+        );
     }
 
     Ok(())
@@ -193,7 +202,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
                 package_record,
                 file_name,
                 url,
-                channel: "local".to_string(),
+                channel: "pixi-pack".to_string(),
             };
 
             async {
@@ -204,8 +213,8 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
                     .get_or_fetch(
                         cache_key,
                         move |destination| {
-                            let package_path_clone = package_path.clone();
-                            async move { extract(&package_path_clone, &destination).map(|_| ()) }
+                            let value = package_path.clone();
+                            async move { extract(&value, &destination).map(|_| ()) }
                         },
                         None,
                     )
@@ -276,6 +285,8 @@ async fn create_activation_script(
 
 #[cfg(test)]
 mod tests {
+    use crate::PIXI_PACK_VERSION;
+
     use super::*;
     use rstest::*;
     use serde_json::json;
@@ -295,7 +306,11 @@ mod tests {
         #[default(Platform::current())] platform: Platform,
     ) -> NamedTempFile {
         let mut metadata_file = NamedTempFile::new().unwrap();
-        let metadata = PixiPackMetadata { version, platform };
+        let metadata = PixiPackMetadata {
+            version,
+            pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
+            platform,
+        };
         let buffer = metadata_file.as_file_mut();
         buffer
             .write_all(json!(metadata).to_string().as_bytes())
