@@ -318,6 +318,37 @@ async fn test_reproducible_shasum(options: Options) {
 
     // Second pack.
     pack_options.output_file = output_file2.clone();
+    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert_eq!(
+        sha256_digest_bytes(&output_file1),
+        sha256_digest_bytes(&output_file2)
+    );
+
+    // Test with create executable
+    pack_options.create_executable = true;
+
+    #[cfg(target_os = "windows")]
+    let output_file1 = options.output_dir.path().join("environment.ps1");
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let output_file1 = options.output_dir.path().join("environment.sh");
+
+    #[cfg(target_os = "windows")]
+    let output_file2 = options.output_dir.path().join("environment.ps1");
+    
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let output_file2 = options.output_dir.path().join("environment.sh");
+    
+
+    // First pack.
+    pack_options.output_file = output_file1.clone();
+    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    // Second pack.
+    pack_options.output_file = output_file2.clone();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
