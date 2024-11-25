@@ -127,9 +127,7 @@ async fn main() -> Result<()> {
             ignore_pypi_errors,
             create_executable,
         } => {
-            let output_file = output_file.unwrap_or_else(|| {
-                default_output_file(create_executable)
-            });
+            let output_file = output_file.unwrap_or_else(|| default_output_file(create_executable));
 
             let options = PackOptions {
                 environment,
