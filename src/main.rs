@@ -51,8 +51,8 @@ enum Commands {
         manifest_path: PathBuf,
 
         /// Output file to write the pack to (will be an archive)
-        #[arg(short, long, default_value = cwd().join("environment").into_os_string())]
-        output_file: PathBuf,
+        #[arg(short, long)]
+        output_file: Option<PathBuf>,
 
         /// Inject an additional conda package into the final prefix
         #[arg(short, long, num_args(0..))]
@@ -91,6 +91,18 @@ enum Commands {
     },
 }
 
+fn default_output_file(create_executable: bool) -> PathBuf {
+    if create_executable {
+        if cfg!(target_os = "windows") {
+            cwd().join("environment.ps1")
+        } else {
+            cwd().join("environment.sh")
+        }
+    } else {
+        cwd().join("environment.tar")
+    }
+}
+
 /* -------------------------------------------- MAIN ------------------------------------------- */
 
 /// The main entrypoint for the pixi-pack CLI.
@@ -115,17 +127,15 @@ async fn main() -> Result<()> {
             ignore_pypi_errors,
             create_executable,
         } => {
-            let output_file_with_extension = if create_executable {
-                output_file.with_extension(if platform.is_windows() { "ps1" } else { "sh" })
-            } else {
-                output_file.with_extension("tar")
-            };
+            let output_file = output_file.unwrap_or_else(|| {
+                default_output_file(create_executable)
+            });
 
             let options = PackOptions {
                 environment,
                 platform,
                 auth_file,
-                output_file: output_file_with_extension,
+                output_file,
                 manifest_path,
                 metadata: PixiPackMetadata {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
