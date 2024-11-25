@@ -337,10 +337,9 @@ async fn test_reproducible_shasum(options: Options) {
 
     #[cfg(target_os = "windows")]
     let output_file2 = options.output_dir.path().join("environment.ps1");
-    
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let output_file2 = options.output_dir.path().join("environment.sh");
-    
 
     // First pack.
     pack_options.output_file = output_file1.clone();
