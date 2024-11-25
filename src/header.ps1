@@ -10,7 +10,6 @@ $PREFIX = ""
 $VERBOSE = $false
 $QUIET = $false
 $UNPACK_SHELL = ""
-
 $USAGE = @"
 usage: $($MyInvocation.MyCommand.Name) [options]
 
@@ -64,7 +63,7 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
 }
 
 if (-not $headerLine -or -not $archiveLine) {
-    Write-Error "Markers __END_HEADER__ or __END_ARCHIVE__ not found."
+    Write-Error "ERROR: Markers __END_HEADER__ or __END_ARCHIVE__ not found."
     exit 1
 }
 

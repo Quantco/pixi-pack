@@ -401,7 +401,6 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         assert_eq!(pack_file.extension().unwrap(), "sh");
         let output = Command::new("sh")
             .arg(&pack_file)
-            .arg("-f")
             .arg("-o")
             .arg(options.output_dir.path())
             .output()
@@ -418,7 +417,6 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         let output = Command::new("powershell")
             .arg("-File")
             .arg(&pack_file)
-            .arg("-f")
             .arg("-o")
             .arg(options.output_dir.path())
             .output()

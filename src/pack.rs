@@ -321,6 +321,28 @@ async fn archive_directory(
     }
 }
 
+async fn write_archive<T>(mut archive: Builder<T>, input_dir: &Path) -> Result<T>
+where
+    T: tokio::io::AsyncWrite + Unpin + Send,
+{
+    archive
+        .append_dir_all(".", input_dir)
+        .await
+        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+
+    let mut compressor = archive
+        .into_inner()
+        .await
+        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
+
+    compressor
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    Ok(compressor)
+}
+
 async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
     let outfile = fs::File::create(archive_target).await.map_err(|e| {
         anyhow!(
@@ -331,22 +353,9 @@ async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
     })?;
 
     let writer = tokio::io::BufWriter::new(outfile);
-    let mut archive = Builder::new(writer);
+    let archive = Builder::new(writer);
 
-    archive
-        .append_dir_all(".", input_dir)
-        .await
-        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
-
-    let mut compressor = archive
-        .into_inner()
-        .await
-        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
-
-    compressor
-        .shutdown()
-        .await
-        .map_err(|e| anyhow!("could not flush output: {}", e))?;
+    write_archive(archive, input_dir).await?;
 
     Ok(())
 }
@@ -356,23 +365,9 @@ async fn create_self_extracting_executable(
     target: &Path,
     platform: Platform,
 ) -> Result<()> {
-    let tarbytes = Vec::new();
-    let mut archive = Builder::new(tarbytes);
+    let archive = Builder::new(Vec::new());
 
-    archive
-        .append_dir_all(".", input_dir)
-        .await
-        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
-
-    let mut compressor = archive
-        .into_inner()
-        .await
-        .map_err(|e| anyhow!("could not finish writing archive: {}", e))?;
-
-    compressor
-        .shutdown()
-        .await
-        .map_err(|e| anyhow!("could not flush output: {}", e))?;
+    let compressor = write_archive(archive, input_dir).await?;
 
     let windows_header = include_str!("header.ps1");
     let unix_header = include_str!("header.sh");
@@ -409,7 +404,10 @@ async fn create_self_extracting_executable(
     let client = reqwest::Client::new();
     let response = client.get(&url).send().await?;
     if !response.status().is_success() {
-        return Err(anyhow!("Failed to download pixi-pack executable"));
+        return Err(anyhow!(
+            "Failed to download pixi-pack executable. Status: {}",
+            response.status()
+        ));
     }
 
     let total_size = response
