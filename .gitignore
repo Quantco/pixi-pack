@@ -116,7 +116,6 @@ $RECYCLE.BIN/
 # pixi-pack
 activate.*
 cache/
-channel/
 env/
 environment.yml
 environment
