@@ -311,7 +311,11 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
             .arg(options.output_dir.path())
             .output()
             .expect("Failed to execute packed file for extraction");
-        assert!(output.status.success(), "Packed file execution failed");
+        assert!(
+            output.status.success(),
+            "Packed file execution failed: {:?}",
+            output
+        );
     }
     #[cfg(target_os = "windows")]
     {

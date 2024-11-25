@@ -20,41 +20,56 @@ Unpacks an environment packed using pixi-pack
 -v, --verbose               Increase logging verbosity
 -q, --quiet                 Decrease logging verbosity
 "
-# Parse command-line options
-while getopts ":hfvo:s:q" opt; do
-  case ${opt} in
-    h )
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h)
       echo "$USAGE"
       exit 0
       ;;
-    f )
+    -f)
       FORCE=1
+      shift
       ;;
-    v )
+    -v)
       VERBOSE=1
+      shift
       ;;
-    o )
-      PREFIX="$OPTARG"
+    -o)
+      if [[ -n "$2" && "$2" != -* ]]; then
+        PREFIX="$2"
+        shift 2
+      else
+        echo "Option -o requires an argument" >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
       ;;
-    s )
-      UNPACK_SHELL="$OPTARG"
+    -s)
+      if [[ -n "$2" && "$2" != -* ]]; then
+        UNPACK_SHELL="$2"
+        shift 2
+      else
+        echo "Option -s requires an argument" >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
       ;;
-    q )
+    -q)
       QUIET=1
+      shift
       ;;
-    \? )
-      echo "Invalid option: -$OPTARG" >&2
+    -*)
+      echo "Invalid option: $1" >&2
       echo "$USAGE" >&2
       exit 1
       ;;
-    : )
-      echo "Option -$OPTARG requires an argument" >&2
-      echo "$USAGE" >&2
-      exit 1
+    *)
+      # Stop parsing options when encountering a non-option argument
+      break
       ;;
   esac
 done
-shift $((OPTIND -1))
 
 # Validate shell option if provided
 if [ -n "$UNPACK_SHELL" ]; then
@@ -79,11 +94,12 @@ if [ "$FORCE" = "1" ] && [ -n "$PREFIX" ] && [ -e "$PREFIX" ]; then
     rm -rf "$PREFIX"
 fi
 
-archive_begin=$(($(grep -anm 1 "^@@END_HEADER@@" "$0" | sed 's/:.*//') + 1))
+archive_begin=$(($(grep -anm 1 "^@@END_HEADER@@" "$0" | sed 's/:.*//') + 2))
 archive_end=$(($(grep -anm 1 "^@@END_ARCHIVE@@" "$0" | sed 's/:.*//') - 1))
 
 echo "Unpacking payload ..."
-tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1)) | base64 -d > "$TEMPDIR/archive.tar"
+echo $(tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1))) > "$TEMPDIR/archive_temp"
+base64 -d "$TEMPDIR/archive_temp" > "$TEMPDIR/archive.tar"
 
 pixi_pack_start=$(($archive_end + 2))
 

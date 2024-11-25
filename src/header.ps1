@@ -7,7 +7,6 @@ function New-TemporaryDirectory {
 
 $TEMPDIR = New-TemporaryDirectory
 $PREFIX = ""
-$FORCE = $false
 $VERBOSE = $false
 $QUIET = $false
 $UNPACK_SHELL = ""
@@ -17,7 +16,6 @@ usage: $($MyInvocation.MyCommand.Name) [options]
 
 Unpacks an environment packed using pixi-pack
 
--f, --force                 No error if environment already exists
 -h, --help                  Print this help message and exit
 -o, --output-directory <DIR> Where to unpack the environment
 -s, --shell <SHELL>         Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
@@ -26,15 +24,13 @@ Unpacks an environment packed using pixi-pack
 "@
 
 # Parse command-line arguments
-$args = $MyInvocation.UnboundArguments
+$InputArgs = $MyInvocation.UnboundArguments
 for ($i = 0; $i -lt $args.Count; $i++) {
-    switch ($args[$i]) {
-        "-f" { $FORCE = $true }
-        "--force" { $FORCE = $true }
-        "-o" { $PREFIX = $args[++$i] }
-        "--output-directory" { $PREFIX = $args[++$i] }
-        "-s" { $UNPACK_SHELL = $args[++$i] }
-        "--shell" { $UNPACK_SHELL = $args[++$i] }
+    switch ($InputArgs[$i]) {
+        "-o" { $PREFIX = $InputArgs[++$i] }
+        "--output-directory" { $PREFIX = $InputArgs[++$i] }
+        "-s" { $UNPACK_SHELL = $InputArgs[++$i] }
+        "--shell" { $UNPACK_SHELL = $InputArgs[++$i] }
         "-v" { $VERBOSE = $true }
         "--verbose" { $VERBOSE = $true }
         "-q" { $QUIET = $true }
@@ -50,7 +46,7 @@ if ($VERBOSE -and $QUIET) {
     exit 1
 }
 
-# Step 1: Extract the archive and pixi-pack executable, and decode them
+# Extract the archive and pixi-pack executable, and decode them
 $scriptContent = Get-Content -Raw -Path $MyInvocation.MyCommand.Path
 $lines = $scriptContent -split "`r?`n"
 
@@ -60,7 +56,7 @@ $archiveLine = $null
 # Find the lines where __END_HEADER__ and __END_ARCHIVE__ occur
 for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -like "*__END_HEADER__*") {
-        $headerLine = $i + 1
+        $headerLine = $i + 2
     }
     if ($lines[$i] -like "*__END_ARCHIVE__*") {
         $archiveLine = $i + 1
@@ -100,7 +96,7 @@ try {
     exit 1
 }
 
-# Step 2: Build the command with flags
+# Build the command with flags
 $arguments = @("unpack")
 
 # Use $PREFIX for output directory if it is provided
