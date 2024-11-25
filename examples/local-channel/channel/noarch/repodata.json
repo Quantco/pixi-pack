@@ -1,0 +1,30 @@
+{
+    "info": {
+        "subdir": "noarch"
+    },
+    "packages": {},
+    "packages.conda": {
+        "my-webserver-0.1.0-pyh4616a5c_0.conda": {
+            "build": "pyh4616a5c_0",
+            "build_number": 0,
+            "constrains": [
+                "pydantic >=2,<3"
+            ],
+            "depends": [
+                "python >=3.12",
+                "fastapi",
+                "python"
+            ],
+            "md5": "243def6b96cf556936d075033a2f1ae4",
+            "name": "my-webserver",
+            "noarch": "python",
+            "sha256": "8bc75a2f9baab61004b02b022bb0c6a08fcc57dee5d521a5a61640f861f69da9",
+            "size": 6581,
+            "subdir": "noarch",
+            "timestamp": 1729264746409,
+            "version": "0.1.0"
+        }
+    },
+    "removed": [],
+    "repodata_version": 1
+}
