@@ -426,7 +426,7 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         pack_file
     );
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(not(target_os = "windows"))]
     {
         assert_eq!(pack_file.extension().unwrap(), "sh");
         let output = Command::new("bash")
