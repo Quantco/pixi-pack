@@ -299,26 +299,20 @@ fn sha256_digest_bytes(path: &PathBuf) -> String {
 }
 
 #[rstest]
+#[case(Platform::Linux64)]
+#[case(Platform::LinuxAarch64)]
+#[case(Platform::LinuxPpc64le)]
+#[case(Platform::OsxArm64)]
+#[case(Platform::Osx64)]
+#[case(Platform::Win64)]
+#[case(Platform::WinArm64)]
 #[tokio::test]
-async fn test_reproducible_shasum(options: Options) {
-    let mut pack_options = options.pack_options;
-    let output_file1 = options.output_dir.path().join("environment1.tar");
-    let output_file2 = options.output_dir.path().join("environment2.tar");
-
-    // First pack.
-    pack_options.output_file = output_file1.clone();
-    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+async fn test_reproducible_shasum(#[case] platform: Platform,#[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform.clone())] options: Options) {
+    let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    // Second pack.
-    pack_options.output_file = output_file2.clone();
-    let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok(), "{:?}", pack_result);
-
-    assert_eq!(
-        sha256_digest_bytes(&output_file1),
-        sha256_digest_bytes(&output_file2)
-    );
+    let sha256_digest = sha256_digest_bytes(&options.pack_options.output_file);
+    insta::assert_snapshot!(format!("sha256-{}", platform), &sha256_digest);
 }
 
 #[rstest]
