@@ -34,15 +34,9 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         "--verbose" { $VERBOSE = $true }
         "-q" { $QUIET = $true }
         "--quiet" { $QUIET = $true }
-        "-h" { Write-Output $USAGE; exit 2 }
-        "--help" { Write-Output $USAGE; exit 2 }
+        "-h" { Write-Output $USAGE; exit 0 }
+        "--help" { Write-Output $USAGE; exit 0 }
     }
-}
-
-# Check if verbose and quiet are both set
-if ($VERBOSE -and $QUIET) {
-    Write-Error "ERROR: Verbose and quiet options cannot be used together."
-    exit 1
 }
 
 # Extract the archive and pixi-pack executable, and decode them

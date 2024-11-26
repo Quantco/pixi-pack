@@ -93,11 +93,6 @@ fi
 
 chmod +x "$TEMPDIR/pixi-pack"
 
-if [ "$VERBOSE" = "1" ] && [ "$QUIET" = "1" ]; then
-    printf "ERROR: Verbose and quiet options cannot be used together.\n" >&2
-    exit 1
-fi
-
 VERBOSITY_FLAG=""
 [ "$VERBOSE" = "1" ] && VERBOSITY_FLAG="--verbose"
 [ "$QUIET" = "1" ] && VERBOSITY_FLAG="--quiet"
