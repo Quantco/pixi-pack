@@ -65,8 +65,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-archive_begin=$(grep -anm 1 "^@@END_HEADER@@" "$0" | sed 's/:.*//')
-archive_end=$(grep -anm 1 "^@@END_ARCHIVE@@" "$0" | sed 's/:.*//')
+archive_begin=$(grep -anm 1 "^@@END_HEADER@@" "$0" | awk -F: '{print $1}')
+archive_end=$(grep -anm 1 "^@@END_ARCHIVE@@" "$0" | awk -F: '{print $1}')
 
 if [ -z "$archive_begin" ] || [ -z "$archive_end" ]; then
   echo "ERROR: Markers @@END_HEADER@@ or @@END_ARCHIVE@@ not found." >&2
