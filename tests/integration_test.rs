@@ -305,7 +305,7 @@ fn sha256_digest_bytes(path: &PathBuf) -> String {
 #[case(Platform::OsxArm64)]
 #[case(Platform::Osx64)]
 #[case(Platform::Win64)]
-#[case(Platform::WinArm64)]
+// #[case(Platform::WinArm64)] depends on https://github.com/regro/cf-scripts/pull/3194
 #[tokio::test]
 async fn test_reproducible_shasum(#[case] platform: Platform,#[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform.clone())] options: Options) {
     let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
