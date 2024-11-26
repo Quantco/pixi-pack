@@ -429,7 +429,7 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         assert_eq!(pack_file.extension().unwrap(), "sh");
-        let output = Command::new("sh")
+        let output = Command::new("bash")
             .arg(&pack_file)
             .arg("-o")
             .arg(options.output_dir.path())
