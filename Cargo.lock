@@ -1027,17 +1027,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs-set-times"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "033b337d725b97690d86893f9de22b67b80dcc4e9ad815f348254c38119db8fb"
-dependencies = [
- "io-lifetimes",
- "rustix",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "fs4"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1722,12 +1711,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-lifetimes"
-version = "2.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a611371471e98973dbcab4e0ec66c31a10bc356eeb4d54a0e05eac8158fe38c"
-
-[[package]]
 name = "ipnet"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2372,7 +2355,6 @@ dependencies = [
  "async-std",
  "clap",
  "clap-verbosity-flag",
- "fs-set-times",
  "futures",
  "fxhash",
  "indicatif",
@@ -2400,7 +2382,6 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "url",
- "walkdir",
 ]
 
 [[package]]
