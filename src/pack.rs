@@ -258,44 +258,96 @@ async fn download_package(
     let file_name = package
         .file_name()
         .ok_or(anyhow!("could not get file name"))?;
-    let mut dest = File::create(output_dir.join(file_name)).await?;
+    let package_url = package.url();
 
-    tracing::debug!("Fetching package {}", package.url());
-    let mut response = client.get(package.url().to_string()).send().await?;
-    if response.status().is_client_error() {
-        return Err(anyhow!(
-            "failed to download {}: {}",
-            package.url().to_string(),
-            response.text().await?
-        ));
+    match package_url.scheme() {
+        "file" => {
+            // Handle file:// URLs
+            let local_path = package_url
+                .to_file_path()
+                .map_err(|_| anyhow!("Invalid file URL: {}", package_url))?;
+            tracing::debug!("Resolved local path: {}", local_path.display());
+
+            // Check file existence
+            if !local_path.exists() {
+                return Err(anyhow!(
+                    "File does not exist at path: {}",
+                    local_path.display()
+                ));
+            }
+
+            // Check file accessibility
+            if let Err(e) = tokio::fs::File::open(&local_path).await {
+                tracing::error!("Failed to open file {}: {:?}", local_path.display(), e);
+                return Err(anyhow!(
+                    "Could not access file at path {}: {:?}",
+                    local_path.display(),
+                    e
+                ));
+            }
+
+            // Ensure target directory exists
+            let target_path = output_dir.join(file_name);
+            create_dir_all(target_path.parent().unwrap_or_else(|| Path::new(".")))
+                .await
+                .map_err(|e| anyhow!("Could not create target directory: {}", e))?;
+
+            // Copy file
+            fs::copy(&local_path, &target_path)
+                .await
+                .map_err(|e| anyhow!(
+                    "Could not copy file from {} to {}: {}",
+                    local_path.display(),
+                    target_path.display(),
+                    e
+                ))?;
+        }
+        "http" | "https" => {
+            // Handle HTTP or HTTPS URLs
+            let mut dest = File::create(output_dir.join(file_name)).await?;
+
+            tracing::debug!("Fetching package {}", package.url());
+            let mut response = client.get(package_url.to_string()).send().await?;
+            if response.status().is_client_error() {
+                return Err(anyhow!(
+                    "failed to download {}: {}",
+                    package.url().to_string(),
+                    response.text().await?
+                ));
+            }
+
+            while let Some(chunk) = response.chunk().await? {
+                dest.write_all(&chunk).await?;
+            }
+
+            // Adjust file metadata (timestamps).
+            let package_timestamp = package
+                .package_record()
+                .timestamp
+                .map(|ts| ts.into())
+                .unwrap_or_else(|| {
+                    tracing::error!(
+                        "could not get timestamp of {:?}, using default",
+                        package.file_name()
+                    );
+                    std::time::SystemTime::UNIX_EPOCH
+                });
+            let file_times = FileTimes::new()
+                .set_modified(package_timestamp)
+                .set_accessed(package_timestamp);
+
+            // Make sure to write all data and metadata to disk before modifying timestamp.
+            dest.sync_all().await?;
+            let dest_file = dest
+                .try_into_std()
+                .map_err(|e| anyhow!("could not read standard file: {:?}", e))?;
+            dest_file.set_times(file_times)?;
+        }
+        other => {
+            // Handle unsupported URL schemes
+            return Err(anyhow!("unsupported URL scheme: {}", other));
+        }
     }
-
-    while let Some(chunk) = response.chunk().await? {
-        dest.write_all(&chunk).await?;
-    }
-
-    // Adjust file metadata (timestamps).
-    let package_timestamp = package
-        .package_record()
-        .timestamp
-        .map(|ts| ts.into())
-        .unwrap_or_else(|| {
-            tracing::error!(
-                "could not get timestamp of {:?}, using default",
-                package.file_name()
-            );
-            std::time::SystemTime::UNIX_EPOCH
-        });
-    let file_times = FileTimes::new()
-        .set_modified(package_timestamp)
-        .set_accessed(package_timestamp);
-
-    // Make sure to write all data and metadata to disk before modifying timestamp.
-    dest.sync_all().await?;
-    let dest_file = dest
-        .try_into_std()
-        .map_err(|e| anyhow!("could not read standard file: {:?}", e))?;
-    dest_file.set_times(file_times)?;
 
     Ok(())
 }

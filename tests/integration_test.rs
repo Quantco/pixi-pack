@@ -362,3 +362,47 @@ async fn test_custom_env_name(options: Options) {
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(env_dir.is_dir());
 }
+
+#[fixture]
+fn templated_pixi_toml() -> (PathBuf, TempDir) {
+    let temp_pixi_project = tempdir().expect("Couldn't create a temp dir for tests");
+    let absolute_path_to_local_channel = PathBuf::from("examples/local-channel/channel")
+        .canonicalize()
+        .unwrap();
+    let absolute_path_to_local_channel = absolute_path_to_local_channel.to_str().unwrap();
+    let pixi_toml = temp_pixi_project.path().join("pixi.toml");
+    let pixi_lock = temp_pixi_project.path().join("pixi.lock");
+    let pixi_toml_contents = fs::read_to_string("examples/local-channel/pixi.toml.template")
+        .unwrap()
+        .replace("<absolute-path-to-channel>", absolute_path_to_local_channel);
+    let pixi_lock_contents = fs::read_to_string("examples/local-channel/pixi.lock.template")
+        .unwrap()
+        .replace("<absolute-path-to-channel>", absolute_path_to_local_channel);
+
+    fs::write(&pixi_toml, pixi_toml_contents).unwrap();
+    fs::write(&pixi_lock, pixi_lock_contents).unwrap();
+
+    (pixi_toml, temp_pixi_project)
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_local_channel(
+    #[allow(unused_variables)] templated_pixi_toml: (PathBuf, TempDir),
+    #[with(templated_pixi_toml.0.clone())] options: Options,
+) {
+    let pack_options = options.pack_options;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let unpack_options = options.unpack_options;
+    let unpack_result = pixi_pack::unpack(unpack_options.clone()).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+
+    assert!(unpack_options
+        .output_directory
+        .join("env")
+        .join("conda-meta")
+        .join("my-webserver-0.1.0-pyh4616a5c_0.json")
+        .exists());
+}
