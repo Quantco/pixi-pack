@@ -83,8 +83,8 @@ echo $(tail -n +$pixi_pack_start "$0") > "$TEMPDIR/pixi-pack_temp"
 
 if [[ $(base64 --version | grep -q 'GNU') ]]; then
   # BSD/macOS version
-  base64 -d -i "$TEMPDIR/archive_temp" -o "$TEMPDIR/archive.tar"
-  base64 -d -i "$TEMPDIR/pixi-pack_temp" -o "$TEMPDIR/pixi-pack"
+  base64 -d -i "$TEMPDIR/archive_temp" > "$TEMPDIR/archive.tar"
+  base64 -d -i "$TEMPDIR/pixi-pack_temp" > "$TEMPDIR/pixi-pack"
 else
   # GNU version
   base64 -d "$TEMPDIR/archive_temp" > "$TEMPDIR/archive.tar"
