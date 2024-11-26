@@ -407,13 +407,9 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     pack_options.create_executable = true;
 
     #[cfg(target_os = "windows")]
-    {
-        pack_options.output_file = temp_dir.path().join("environment.ps1");
-    }
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    {
-        pack_options.output_file = temp_dir.path().join("environment.sh");
-    }
+    pack_options.output_file = temp_dir.path().join("environment.ps1");
+    #[cfg(not(target_os = "windows"))]
+    pack_options.output_file = temp_dir.path().join("environment.sh");
 
     let pack_file = pack_options.output_file.clone();
 
