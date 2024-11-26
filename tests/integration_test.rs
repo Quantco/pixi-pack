@@ -462,7 +462,7 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
 
     #[cfg(target_os = "windows")]
     let activation_script = options.output_dir.path().join("activate.bat");
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(not(target_os = "windows"))]
     let activation_script = options.output_dir.path().join("activate.sh");
 
     assert!(
