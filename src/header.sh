@@ -12,11 +12,11 @@ usage: $0 [options]
 
 Unpacks an environment packed using pixi-pack
 
--h, --help                  Print this help message and exit
+-h, --help                   Print this help message and exit
 -o, --output-directory <DIR> Where to unpack the environment
--s, --shell <SHELL>         Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
--v, --verbose               Increase logging verbosity
--q, --quiet                 Decrease logging verbosity
+-s, --shell <SHELL>          Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
+-v, --verbose                Increase logging verbosity
+-q, --quiet                  Decrease logging verbosity
 "
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
