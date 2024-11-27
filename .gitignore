@@ -120,8 +120,7 @@ env/
 environment.yml
 environment
 environment.tar
-environment.tar.zst
-environment.tar.zstd
+environment.sh
 pixi-pack.json
 unpack/
 
