@@ -4,7 +4,10 @@ use sha2::{Digest, Sha256};
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 
-use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
+use pixi_pack::{
+    unarchive, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
+    PIXI_PACK_VERSION,
+};
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
@@ -26,7 +29,6 @@ fn options(
     #[default("default")] environment: String,
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
-    #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
     #[default("env")] env_name: String,
@@ -42,6 +44,12 @@ fn options(
     } else {
         output_dir.path().join("environment.tar")
     };
+    let metadata = PixiPackMetadata {
+        version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+        pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
+        platform,
+    };
+
     Options {
         pack_options: PackOptions {
             environment,
@@ -309,56 +317,45 @@ fn sha256_digest_bytes(path: &PathBuf) -> String {
 }
 
 #[rstest]
+#[case(Platform::Linux64)]
+#[case(Platform::LinuxAarch64)]
+#[case(Platform::LinuxPpc64le)]
+#[case(Platform::OsxArm64)]
+#[case(Platform::Osx64)]
+#[case(Platform::Win64)]
+// #[case(Platform::WinArm64)] depends on https://github.com/regro/cf-scripts/pull/3194
 #[tokio::test]
-async fn test_reproducible_shasum(options: Options) {
-    let mut pack_options = options.pack_options;
-    let output_file1 = options.output_dir.path().join("environment1.tar");
-    let output_file2 = options.output_dir.path().join("environment2.tar");
-
-    // First pack.
-    pack_options.output_file = output_file1.clone();
-    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+async fn test_reproducible_shasum(
+    #[case] platform: Platform,
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform)]
+    options: Options,
+) {
+    let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    // Second pack.
-    pack_options.output_file = output_file2.clone();
-    let pack_result = pixi_pack::pack(pack_options.clone()).await;
-    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    let sha256_digest = sha256_digest_bytes(&options.pack_options.output_file);
+    insta::assert_snapshot!(format!("sha256-{}", platform), &sha256_digest);
 
-    assert_eq!(
-        sha256_digest_bytes(&output_file1),
-        sha256_digest_bytes(&output_file2)
-    );
+    if platform == Platform::LinuxPpc64le {
+        // pixi-pack not available for ppc64le for now
+        return;
+    }
 
     // Test with create executable
+    let output_file = options.output_dir.path().join(if platform.is_windows() {
+        "environment.ps1"
+    } else {
+        "environment.sh"
+    });
+
+    let mut pack_options = options.pack_options.clone();
     pack_options.create_executable = true;
-
-    #[cfg(target_os = "windows")]
-    let output_file1 = options.output_dir.path().join("environment.ps1");
-
-    #[cfg(not(target_os = "windows"))]
-    let output_file1 = options.output_dir.path().join("environment.sh");
-
-    #[cfg(target_os = "windows")]
-    let output_file2 = options.output_dir.path().join("environment.ps1");
-
-    #[cfg(not(target_os = "windows"))]
-    let output_file2 = options.output_dir.path().join("environment.sh");
-
-    // First pack.
-    pack_options.output_file = output_file1.clone();
-    let pack_result = pixi_pack::pack(pack_options.clone()).await;
-    assert!(pack_result.is_ok(), "{:?}", pack_result);
-
-    // Second pack.
-    pack_options.output_file = output_file2.clone();
+    pack_options.output_file = output_file.clone();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    assert_eq!(
-        sha256_digest_bytes(&output_file1),
-        sha256_digest_bytes(&output_file2)
-    );
+    let sha256_digest = sha256_digest_bytes(&output_file);
+    insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
 }
 
 #[rstest]
