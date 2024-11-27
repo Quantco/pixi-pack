@@ -38,7 +38,7 @@ fn options(
     let metadata = PixiPackMetadata {
         version: DEFAULT_PIXI_PACK_VERSION.to_string(),
         pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-        platform: platform,
+        platform,
     };
 
     Options {
