@@ -505,7 +505,7 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         );
     }
 
-    let env_dir = options.output_dir.path().join("env");
+    let env_dir = options.output_dir.path().join(options.unpack_options.env_name);
     assert!(
         env_dir.exists(),
         "Environment directory not found after extraction"
