@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::FileTimes,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -23,12 +22,11 @@ use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Plat
 use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
-use tokio_tar::Builder;
+use tokio_tar::{Builder, HeaderMode};
 use walkdir::WalkDir;
 
 use crate::{
-    get_size, util::set_default_file_times, PixiPackMetadata, ProgressReporter,
-    CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
+    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
 };
 use anyhow::anyhow;
 
@@ -181,26 +179,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     tracing::info!("Creating environment.yml file");
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
-    // Adjusting all timestamps of directories and files (excl. conda packages).
-    for entry in WalkDir::new(output_folder.path())
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        match entry.path().extension().and_then(|e| e.to_str()) {
-            Some("bz2") | Some("conda") => continue,
-            _ => {
-                set_default_file_times(entry.path()).map_err(|e| {
-                    anyhow!(
-                        "could not set default file times for path {}: {}",
-                        entry.path().display(),
-                        e
-                    )
-                })?;
-            }
-        }
-    }
-
     // Pack = archive the contents.
     tracing::info!("Creating pack at {}", options.output_file.display());
     archive_directory(
@@ -284,29 +262,6 @@ async fn download_package(
         dest.write_all(&chunk).await?;
     }
 
-    // Adjust file metadata (timestamps).
-    let package_timestamp = package
-        .package_record()
-        .timestamp
-        .map(|ts| ts.into())
-        .unwrap_or_else(|| {
-            tracing::error!(
-                "could not get timestamp of {:?}, using default",
-                package.file_name()
-            );
-            std::time::SystemTime::UNIX_EPOCH
-        });
-    let file_times = FileTimes::new()
-        .set_modified(package_timestamp)
-        .set_accessed(package_timestamp);
-
-    // Make sure to write all data and metadata to disk before modifying timestamp.
-    dest.sync_all().await?;
-    let dest_file = dest
-        .try_into_std()
-        .map_err(|e| anyhow!("could not read standard file: {:?}", e))?;
-    dest_file.set_times(file_times)?;
-
     Ok(())
 }
 
@@ -328,10 +283,27 @@ async fn write_archive<T>(mut archive: Builder<T>, input_dir: &Path) -> Result<T
 where
     T: tokio::io::AsyncWrite + Unpin + Send,
 {
-    archive
-        .append_dir_all(".", input_dir)
-        .await
-        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+    archive.mode(HeaderMode::Deterministic);
+    // need to sort files to ensure deterministic output
+    let files = WalkDir::new(input_dir)
+        .sort_by_file_name()
+        .into_iter()
+        .collect::<Result<Vec<_>, walkdir::Error>>()
+        .map_err(|e| anyhow!("could not walk directory: {}", e))?;
+    for file in files {
+        let path = file.path();
+        let relative_path = path
+            .strip_prefix(input_dir)
+            .map_err(|e| anyhow!("could not strip prefix: {}", e))?;
+        if relative_path == Path::new("") {
+            continue;
+        }
+        if path.is_dir() {
+            archive.append_dir(relative_path, input_dir).await?;
+        } else {
+            archive.append_path_with_name(path, relative_path).await?;
+        }
+    }
 
     let mut compressor = archive
         .into_inner()
