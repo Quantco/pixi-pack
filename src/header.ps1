@@ -82,12 +82,12 @@ try {
 
 # Build the command with flags
 $arguments = @("unpack")
-$arguments += $args -join ' '
+$arguments += $args
 
 # Add the path to the archive
 $arguments += $archivePath
 
-& $pixiPackPath $($arguments -join ' ')
+& $pixiPackPath $arguments
 if ($LASTEXITCODE -ne 0) {
     Remove-Item -Path $TEMPDIR -Recurse -Force
     exit $LASTEXITCODE
