@@ -87,6 +87,8 @@ $arguments += $archivePath
 
 & $pixiPackPath @arguments
 
+Remove-Item -Path $TEMPDIR -Recurse -Force
+
 exit 0
 
 __END_HEADER__

@@ -44,5 +44,7 @@ chmod +x "$TEMPDIR/pixi-pack"
 
 "$TEMPDIR/pixi-pack" unpack $@ "$TEMPDIR/archive.tar"
 
+rm -rf "$TEMPDIR"
+
 exit 0
 @@END_HEADER@@
