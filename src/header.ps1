@@ -1,3 +1,5 @@
+$ErrorActionPreference = "Stop"
+
 function New-TemporaryDirectory {
     $parent = [System.IO.Path]::GetTempPath()
     [string] $name = [System.Guid]::NewGuid()
@@ -80,7 +82,7 @@ try {
 
 # Build the command with flags
 $arguments = @("unpack")
-$arguments += $args | Join-String -Separator ' '
+$arguments += $args -join ' '
 
 # Add the path to the archive
 $arguments += $archivePath
