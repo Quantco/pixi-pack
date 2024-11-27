@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 
-use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions};
+use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION};
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
@@ -26,13 +26,18 @@ fn options(
     #[default("default")] environment: String,
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
-    #[default(PixiPackMetadata::default())] metadata: PixiPackMetadata,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
     #[default("env")] env_name: String,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = output_dir.path().join("environment.tar");
+    let metadata = PixiPackMetadata {
+        version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+        pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
+        platform: platform,
+    };
+
     Options {
         pack_options: PackOptions {
             environment,
