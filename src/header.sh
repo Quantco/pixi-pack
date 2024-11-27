@@ -35,16 +35,17 @@ fi
 
 archive_begin=$((archive_begin + 2))
 archive_end=$((archive_end - 1))
-pixi_pack_start=$(($archive_end + 2))
+pixi_pack_start=$((archive_end + 2))
 
 sed -n "$archive_begin,${archive_end}p" "$0" | base64 -d > "$TEMPDIR/archive.tar"
 sed -n "$pixi_pack_start,\$p" "$0" | base64 -d > "$TEMPDIR/pixi-pack"
 
 chmod +x "$TEMPDIR/pixi-pack"
 
-"$TEMPDIR/pixi-pack" unpack $@ "$TEMPDIR/archive.tar"
+"$TEMPDIR/pixi-pack" unpack "$@" "$TEMPDIR/archive.tar"
 
 rm -rf "$TEMPDIR"
 
 exit 0
+# shellcheck disable=SC2317
 @@END_HEADER@@
