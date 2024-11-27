@@ -6,36 +6,25 @@ function New-TemporaryDirectory {
 }
 
 $TEMPDIR = New-TemporaryDirectory
-$PREFIX = ""
-$VERBOSE = $false
-$QUIET = $false
-$UNPACK_SHELL = ""
 $USAGE = @"
-usage: $($MyInvocation.MyCommand.Name) [options]
+Usage: $($MyInvocation.MyCommand.Name) [OPTIONS]
 
-Unpacks an environment packed using pixi-pack
+Arguments:
+    Path to an environment packed using pixi-pack
 
--h, --help                   Print this help message and exit
--o, --output-directory <DIR> Where to unpack the environment
--s, --shell <SHELL>          Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
--v, --verbose                Increase logging verbosity
--q, --quiet                  Decrease logging verbosity
+Options:
+    -o, --output-directory <DIR>    Where to unpack the environment. The environment will be unpacked into a subdirectory of this path [default: env]
+    -e, --env-name <NAME>           Name of the environment [default: env]
+    -s, --shell <SHELL>             Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
+    -v, --verbose                   Increase logging verbosity
+    -q, --quiet                     Decrease logging verbosity
+    -h, --help                      Print help
 "@
 
-# Parse command-line arguments
-$InputArgs = $MyInvocation.UnboundArguments
-for ($i = 0; $i -lt $args.Count; $i++) {
-    switch ($InputArgs[$i]) {
-        "-o" { $PREFIX = $InputArgs[++$i] }
-        "--output-directory" { $PREFIX = $InputArgs[++$i] }
-        "-s" { $UNPACK_SHELL = $InputArgs[++$i] }
-        "--shell" { $UNPACK_SHELL = $InputArgs[++$i] }
-        "-v" { $VERBOSE = $true }
-        "--verbose" { $VERBOSE = $true }
-        "-q" { $QUIET = $true }
-        "--quiet" { $QUIET = $true }
-        "-h" { Write-Output $USAGE; exit 0 }
-        "--help" { Write-Output $USAGE; exit 0 }
+foreach ($arg in $args) {
+    if ($arg -eq "-h" -or $arg -eq "--help") {
+        Write-Output $USAGE
+        exit 0
     }
 }
 
@@ -91,27 +80,9 @@ try {
 
 # Build the command with flags
 $arguments = @("unpack")
+$arguments += $args | Join-String -Separator ' '
 
-# Use $PREFIX for output directory if it is provided
-if ($PREFIX) {
-    $arguments += "--output-directory"
-    $arguments += $PREFIX
-}
-
-# Handle verbosity/quiet flags
-if ($VERBOSE) {
-    $arguments += "--verbose"
-} elseif ($QUIET) {
-    $arguments += "--quiet"
-}
-
-# Add shell flag if provided
-if ($UNPACK_SHELL) {
-    $arguments += "--shell"
-    $arguments += $UNPACK_SHELL
-}
-
-# Finally, add the path to the archive
+# Add the path to the archive
 $arguments += $archivePath
 
 & $pixiPackPath @arguments

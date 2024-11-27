@@ -2,67 +2,27 @@
 
 set -euo pipefail
 TEMPDIR="$(mktemp -d)"
-PREFIX=""
-VERBOSE=0
-QUIET=0
-UNPACK_SHELL=""
-
 USAGE="
-usage: $0 [options]
+Usage: $0 [OPTIONS]
 
-Unpacks an environment packed using pixi-pack
+Arguments:
+  Path to an environment packed using pixi-pack
 
--h, --help                   Print this help message and exit
--o, --output-directory <DIR> Where to unpack the environment
--s, --shell <SHELL>          Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
--v, --verbose                Increase logging verbosity
--q, --quiet                  Decrease logging verbosity
+Options:
+  -o, --output-directory <DIR>    Where to unpack the environment. The environment will be unpacked into a subdirectory of this path [default: env]
+  -e, --env-name <NAME>           Name of the environment [default: env]
+  -s, --shell <SHELL>             Sets the shell [options: bash, zsh, xonsh, cmd, powershell, fish, nushell]
+  -v, --verbose                   Increase logging verbosity
+  -q, --quiet                     Decrease logging verbosity
+  -h, --help                      Print help
 "
-# Parse command-line arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -h)
-      echo "$USAGE"
-      exit 0
-      ;;
-    -v)
-      VERBOSE=1
-      shift
-      ;;
-    -o)
-      if [[ -n "$2" && "$2" != -* ]]; then
-        PREFIX="$2"
-        shift 2
-      else
-        echo "Option -o requires an argument" >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      ;;
-    -s)
-      if [[ -n "$2" && "$2" != -* ]]; then
-        UNPACK_SHELL="$2"
-        shift 2
-      else
-        echo "Option -s requires an argument" >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      ;;
-    -q)
-      QUIET=1
-      shift
-      ;;
-    -*)
-      echo "Invalid option: $1" >&2
-      echo "$USAGE" >&2
-      exit 1
-      ;;
-    *)
-      # Stop parsing options when encountering a non-option argument
-      break
-      ;;
-  esac
+
+# Check for help flag
+for arg in "$@"; do
+  if [ "$arg" = "-h" ] || [ "$arg" = "--help" ]; then
+    echo "$USAGE"
+    exit 0
+  fi
 done
 
 archive_begin=$(grep -anm 1 "^@@END_HEADER@@" "$0" | awk -F: '{print $1}')
@@ -93,21 +53,7 @@ fi
 
 chmod +x "$TEMPDIR/pixi-pack"
 
-VERBOSITY_FLAG=""
-[ "$VERBOSE" = "1" ] && VERBOSITY_FLAG="--verbose"
-[ "$QUIET" = "1" ] && VERBOSITY_FLAG="--quiet"
-
-OUTPUT_DIR_FLAG=""
-[ -n "$PREFIX" ] && OUTPUT_DIR_FLAG="--output-directory $PREFIX"
-
-SHELL_FLAG=""
-[ -n "$UNPACK_SHELL" ] && SHELL_FLAG="--shell $UNPACK_SHELL"
-
-CMD="\"$TEMPDIR/pixi-pack\" unpack $OUTPUT_DIR_FLAG $VERBOSITY_FLAG"
-if [ -n "$UNPACK_SHELL" ]; then
-    CMD="$CMD --shell $UNPACK_SHELL"
-fi
-CMD="$CMD \"$TEMPDIR/archive.tar\""
+CMD="\"$TEMPDIR/pixi-pack\" unpack $@ \"$TEMPDIR/archive.tar\""
 
 # Execute the command
 eval "$CMD"
