@@ -446,6 +446,20 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
 
         let pixi_pack_bits = &pack_file_contents[archive_end + "__END_ARCHIVE__".len()..];
         assert!(!pixi_pack_bits.is_empty());
+
+        assert_eq!(pack_file.extension().unwrap(), "ps1");
+        let output = Command::new("powershell")
+            .arg("-File")
+            .arg(&pack_file)
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(
+            output.status.success(),
+            "Packed file execution failed: {:?}",
+            output
+        );
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -464,13 +478,10 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
 
         let pixi_pack_bits = &pack_file_contents[archive_end + "@@END_ARCHIVE@@".len()..];
         assert!(!pixi_pack_bits.is_empty());
-    }
 
-    #[cfg(target_os = "windows")]
-    {
-        assert_eq!(pack_file.extension().unwrap(), "ps1");
-        let output = Command::new("powershell")
-            .arg("-File")
+        assert_eq!(pack_file.extension().unwrap(), "sh");
+
+        let output = Command::new("bash")
             .arg(&pack_file)
             .arg("-o")
             .arg(options.output_dir.path())
@@ -481,12 +492,8 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
             "Packed file execution failed: {:?}",
             output
         );
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        assert_eq!(pack_file.extension().unwrap(), "sh");
-        let output = Command::new("bash")
-            .arg(&pack_file)
+
+        let output = Command::new(&pack_file)
             .arg("-o")
             .arg(options.output_dir.path())
             .output()

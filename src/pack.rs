@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::FileTimes,
+    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -455,6 +456,13 @@ async fn create_self_extracting_executable(
     final_executable
         .write_all(executable_base64.as_bytes())
         .await?;
+
+    // Make the executable executable
+    if !platform.is_windows() {
+        let mut perms = final_executable.metadata().await?.permissions();
+        perms.set_mode(0o755);
+        final_executable.set_permissions(perms).await?;
+    }
 
     Ok(())
 }
