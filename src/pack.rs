@@ -19,6 +19,7 @@ use rattler_lock::{CondaPackage, LockFile, Package};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::{Builder, HeaderMode};
+use walkdir::WalkDir;
 
 use crate::{
     get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
@@ -268,10 +269,20 @@ async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()
     let mut archive = Builder::new(writer);
     archive.mode(HeaderMode::Deterministic);
 
-    archive
-        .append_dir_all(".", input_dir)
-        .await
-        .map_err(|e| anyhow!("could not append directory to archive: {}", e))?;
+    // need to sort files to ensure deterministic output
+    let files = WalkDir::new(input_dir).sort_by_file_name().into_iter().collect::<Result<Vec<_>, walkdir::Error>>().map_err(|e| anyhow!("could not walk directory: {}", e))?;
+    for file in files {
+        let path = file.path();
+        let relative_path = path.strip_prefix(input_dir).map_err(|e| anyhow!("could not strip prefix: {}", e))?;
+        if relative_path == Path::new("") {
+            continue;
+        }
+        if path.is_dir() {
+            archive.append_dir(relative_path, input_dir).await?;
+        } else {
+            archive.append_path_with_name(path, relative_path).await?;
+        }
+    }
 
     let mut compressor = archive
         .into_inner()
