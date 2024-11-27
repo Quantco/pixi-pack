@@ -407,9 +407,13 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     pack_options.create_executable = true;
 
     #[cfg(target_os = "windows")]
-    pack_options.output_file = temp_dir.path().join("environment.ps1");
+    {
+        pack_options.output_file = temp_dir.path().join("environment.ps1");
+    }
     #[cfg(not(target_os = "windows"))]
-    pack_options.output_file = temp_dir.path().join("environment.sh");
+    {
+        pack_options.output_file = temp_dir.path().join("environment.sh");
+    }
 
     let pack_file = pack_options.output_file.clone();
 
@@ -422,6 +426,18 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         pack_file
     );
 
+    #[cfg(target_os = "windows")]
+    {
+        assert_eq!(pack_file.extension().unwrap(), "ps1");
+        let output = Command::new("powershell")
+            .arg("-File")
+            .arg(&pack_file)
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(output.status.success(), "Packed file execution failed");
+    }
     #[cfg(not(target_os = "windows"))]
     {
         assert_eq!(pack_file.extension().unwrap(), "sh");
@@ -436,18 +452,6 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
             "Packed file execution failed: {:?}",
             output
         );
-    }
-    #[cfg(target_os = "windows")]
-    {
-        assert_eq!(pack_file.extension().unwrap(), "ps1");
-        let output = Command::new("powershell")
-            .arg("-File")
-            .arg(&pack_file)
-            .arg("-o")
-            .arg(options.output_dir.path())
-            .output()
-            .expect("Failed to execute packed file for extraction");
-        assert!(output.status.success(), "Packed file execution failed");
     }
 
     let env_dir = options.output_dir.path().join("env");
