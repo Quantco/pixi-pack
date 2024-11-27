@@ -336,11 +336,17 @@ async fn test_reproducible_shasum(
     let sha256_digest = sha256_digest_bytes(&options.pack_options.output_file);
     insta::assert_snapshot!(format!("sha256-{}", platform), &sha256_digest);
 
+    if platform == Platform::LinuxPpc64le {
+        // pixi-pack not available for ppc64le for now
+        return;
+    }
+
     // Test with create executable
-    #[cfg(target_os = "windows")]
-    let output_file = options.output_dir.path().join("environment.ps1");
-    #[cfg(not(target_os = "windows"))]
-    let output_file = options.output_dir.path().join("environment.sh");
+    let output_file = options.output_dir.path().join(if platform.is_windows() {
+        "environment.ps1"
+    } else {
+        "environment.sh"
+    });
     
     let mut pack_options = options.pack_options.clone();
     pack_options.create_executable = true;
