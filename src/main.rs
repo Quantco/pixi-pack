@@ -91,9 +91,9 @@ enum Commands {
     },
 }
 
-fn default_output_file(create_executable: bool) -> PathBuf {
+fn default_output_file(platform: Platform, create_executable: bool) -> PathBuf {
     if create_executable {
-        if cfg!(target_os = "windows") {
+        if platform.is_windows() {
             cwd().join("environment.ps1")
         } else {
             cwd().join("environment.sh")
@@ -127,7 +127,8 @@ async fn main() -> Result<()> {
             ignore_pypi_errors,
             create_executable,
         } => {
-            let output_file = output_file.unwrap_or_else(|| default_output_file(create_executable));
+            let output_file =
+                output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
 
             let options = PackOptions {
                 environment,
