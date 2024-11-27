@@ -37,8 +37,8 @@ archive_begin=$((archive_begin + 2))
 archive_end=$((archive_end - 1))
 pixi_pack_start=$(($archive_end + 2))
 
-echo $(tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1))) | base64 -d > "$TEMPDIR/archive.tar"
-echo $(tail -n +$pixi_pack_start "$0") | base64 -d > "$TEMPDIR/pixi-pack"
+sed -n "$archive_begin,${archive_end}p" "$0" | base64 -d > "$TEMPDIR/archive.tar"
+sed -n "$pixi_pack_start,\$p" "$0" | base64 -d > "$TEMPDIR/pixi-pack"
 
 chmod +x "$TEMPDIR/pixi-pack"
 
