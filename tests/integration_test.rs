@@ -34,7 +34,11 @@ fn options(
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = if create_executable {
-        output_dir.path().join(if platform.is_windows() { "environment.ps1"} else { "environment.sh" })
+        output_dir.path().join(if platform.is_windows() {
+            "environment.ps1"
+        } else {
+            "environment.sh"
+        })
     } else {
         output_dir.path().join("environment.tar")
     };
@@ -426,6 +430,42 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
         pack_file
     );
 
+    let pack_file_contents = fs::read_to_string(&pack_file).unwrap();
+
+    #[cfg(target_os = "windows")]
+    {
+        let archive_start = pack_file_contents
+            .find("__END_HEADER__")
+            .expect("Could not find header end marker")
+            + "__END_HEADER__".len();
+        let archive_end = pack_file_contents
+            .find("__END_ARCHIVE__")
+            .expect("Could not find archive end marker");
+        let archive_bits = &pack_file_contents[archive_start..archive_end];
+        assert!(!archive_bits.is_empty());
+
+        let pixi_pack_bits = &pack_file_contents[archive_end + "__END_ARCHIVE__".len()..];
+        assert!(!pixi_pack_bits.is_empty());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        assert!(pack_file_contents.contains("@@END_HEADER@@"));
+        assert!(pack_file_contents.contains("@@END_ARCHIVE@@"));
+
+        let archive_start = pack_file_contents
+            .find("@@END_HEADER@@")
+            .expect("Could not find header end marker")
+            + "@@END_HEADER@@".len();
+        let archive_end = pack_file_contents
+            .find("@@END_ARCHIVE@@")
+            .expect("Could not find archive end marker");
+        let archive_bits = &pack_file_contents[archive_start..archive_end];
+        assert!(!archive_bits.is_empty());
+
+        let pixi_pack_bits = &pack_file_contents[archive_end + "@@END_ARCHIVE@@".len()..];
+        assert!(!pixi_pack_bits.is_empty());
+    }
+
     #[cfg(target_os = "windows")]
     {
         assert_eq!(pack_file.extension().unwrap(), "ps1");
@@ -436,7 +476,11 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
             .arg(options.output_dir.path())
             .output()
             .expect("Failed to execute packed file for extraction");
-        assert!(output.status.success(), "Packed file execution failed");
+        assert!(
+            output.status.success(),
+            "Packed file execution failed: {:?}",
+            output
+        );
     }
     #[cfg(not(target_os = "windows"))]
     {
