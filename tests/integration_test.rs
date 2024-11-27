@@ -347,7 +347,7 @@ async fn test_reproducible_shasum(
     } else {
         "environment.sh"
     });
-    
+
     let mut pack_options = options.pack_options.clone();
     pack_options.create_executable = true;
     pack_options.output_file = output_file.clone();
