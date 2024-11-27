@@ -60,7 +60,7 @@ try {
     $archivePath = "$TEMPDIR\archive.tar"
     [System.IO.File]::WriteAllBytes($archivePath, $decodedArchive)
 } catch {
-    Write-Error "Failed to decode Base64 archive content: $_"
+    Write-Error "ERROR: Failed to decode Base64 archive content: $_"
     exit 1
 }
 
