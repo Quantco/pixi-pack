@@ -355,6 +355,14 @@ async fn test_reproducible_shasum(
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
     let sha256_digest = sha256_digest_bytes(&output_file);
+
+    #[cfg(target_os = "windows")]
+    insta::assert_snapshot!(
+        format!("built-on-win__sha256-{}-executable", platform),
+        &sha256_digest
+    );
+
+    #[cfg(not(target_os = "windows"))]
     insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
 }
 
