@@ -88,6 +88,9 @@ $arguments += $args -join ' '
 $arguments += $archivePath
 
 & $pixiPackPath @arguments
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 
 Remove-Item -Path $TEMPDIR -Recurse -Force
 
