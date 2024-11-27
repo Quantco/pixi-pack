@@ -34,7 +34,7 @@ fn options(
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let pack_file = if create_executable {
-        output_dir.path().join("environment.sh")
+        output_dir.path().join(if platform.is_windows() { "environment.ps1"} else { "environment.sh" })
     } else {
         output_dir.path().join("environment.tar")
     };
