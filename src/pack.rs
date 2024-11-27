@@ -1,10 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::FileTimes,
-    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+#[cfg(not(target_os = "windows"))]
+use std::os::unix::fs::PermissionsExt as _;
 
 use fxhash::FxHashMap;
 use indicatif::HumanBytes;
@@ -457,7 +459,8 @@ async fn create_self_extracting_executable(
         .write_all(executable_base64.as_bytes())
         .await?;
 
-    // Make the executable executable
+    // Make the script executable
+    #[cfg(not(target_os = "windows"))]
     if !platform.is_windows() {
         let mut perms = final_executable.metadata().await?.permissions();
         perms.set_mode(0o755);
