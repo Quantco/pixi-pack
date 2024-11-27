@@ -87,8 +87,12 @@ $arguments += $args -join ' '
 # Add the path to the archive
 $arguments += $archivePath
 
+# DEBUG
+Write-Output $arguments
+
 & $pixiPackPath @arguments
 if ($LASTEXITCODE -ne 0) {
+    Remove-Item -Path $TEMPDIR -Recurse -Force
     exit $LASTEXITCODE
 }
 
