@@ -460,6 +460,7 @@ async fn create_self_extracting_executable(
         .await?;
 
     // Make the script executable
+    // This won't be executed when cross-packing due to Windows FS not supporting Unix permissions
     #[cfg(not(target_os = "windows"))]
     if !platform.is_windows() {
         let mut perms = final_executable.metadata().await?.permissions();

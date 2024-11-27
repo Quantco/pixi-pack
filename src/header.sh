@@ -37,25 +37,12 @@ archive_begin=$((archive_begin + 2))
 archive_end=$((archive_end - 1))
 pixi_pack_start=$(($archive_end + 2))
 
-echo $(tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1))) > "$TEMPDIR/archive_temp"
-echo $(tail -n +$pixi_pack_start "$0") > "$TEMPDIR/pixi-pack_temp"
-
-if [[ $(base64 --version | grep -q 'GNU') ]]; then
-  # BSD/macOS version
-  base64 -d -i "$TEMPDIR/archive_temp" > "$TEMPDIR/archive.tar"
-  base64 -d -i "$TEMPDIR/pixi-pack_temp" > "$TEMPDIR/pixi-pack"
-else
-  # GNU version
-  base64 -d "$TEMPDIR/archive_temp" > "$TEMPDIR/archive.tar"
-  base64 -d "$TEMPDIR/pixi-pack_temp" > "$TEMPDIR/pixi-pack"
-fi
+echo $(tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1))) | base64 -d > "$TEMPDIR/archive.tar"
+echo $(tail -n +$pixi_pack_start "$0") | base64 -d > "$TEMPDIR/pixi-pack"
 
 chmod +x "$TEMPDIR/pixi-pack"
 
-CMD="\"$TEMPDIR/pixi-pack\" unpack $@ \"$TEMPDIR/archive.tar\""
-
-# Execute the command
-eval "$CMD"
+"$TEMPDIR/pixi-pack" unpack $@ "$TEMPDIR/archive.tar"
 
 exit 0
 @@END_HEADER@@
