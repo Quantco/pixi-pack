@@ -37,7 +37,6 @@ archive_begin=$((archive_begin + 2))
 archive_end=$((archive_end - 1))
 pixi_pack_start=$(($archive_end + 2))
 
-echo "Unpacking payload ..."
 echo $(tail -n +$archive_begin "$0" | head -n $(($archive_end - $archive_begin + 1))) > "$TEMPDIR/archive_temp"
 echo $(tail -n +$pixi_pack_start "$0") > "$TEMPDIR/pixi-pack_temp"
 
