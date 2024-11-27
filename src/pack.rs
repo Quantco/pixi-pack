@@ -270,10 +270,16 @@ async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()
     archive.mode(HeaderMode::Deterministic);
 
     // need to sort files to ensure deterministic output
-    let files = WalkDir::new(input_dir).sort_by_file_name().into_iter().collect::<Result<Vec<_>, walkdir::Error>>().map_err(|e| anyhow!("could not walk directory: {}", e))?;
+    let files = WalkDir::new(input_dir)
+        .sort_by_file_name()
+        .into_iter()
+        .collect::<Result<Vec<_>, walkdir::Error>>()
+        .map_err(|e| anyhow!("could not walk directory: {}", e))?;
     for file in files {
         let path = file.path();
-        let relative_path = path.strip_prefix(input_dir).map_err(|e| anyhow!("could not strip prefix: {}", e))?;
+        let relative_path = path
+            .strip_prefix(input_dir)
+            .map_err(|e| anyhow!("could not strip prefix: {}", e))?;
         if relative_path == Path::new("") {
             continue;
         }

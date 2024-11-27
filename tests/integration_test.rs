@@ -4,7 +4,10 @@ use sha2::{Digest, Sha256};
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 
-use pixi_pack::{unarchive, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION};
+use pixi_pack::{
+    unarchive, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
+    PIXI_PACK_VERSION,
+};
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
