@@ -51,8 +51,8 @@ enum Commands {
         manifest_path: PathBuf,
 
         /// Output file to write the pack to (will be an archive)
-        #[arg(short, long, default_value = cwd().join("environment.tar").into_os_string())]
-        output_file: PathBuf,
+        #[arg(short, long)]
+        output_file: Option<PathBuf>,
 
         /// Inject an additional conda package into the final prefix
         #[arg(short, long, num_args(0..))]
@@ -62,6 +62,10 @@ enum Commands {
         /// This flag allows packing even if PyPI dependencies are present.
         #[arg(long, default_value = "false")]
         ignore_pypi_errors: bool,
+
+        /// Create self-extracting executable
+        #[arg(long, default_value = "false")]
+        create_executable: bool,
     },
 
     /// Unpack a pixi environment
@@ -87,6 +91,18 @@ enum Commands {
     },
 }
 
+fn default_output_file(platform: Platform, create_executable: bool) -> PathBuf {
+    if create_executable {
+        if platform.is_windows() {
+            cwd().join("environment.ps1")
+        } else {
+            cwd().join("environment.sh")
+        }
+    } else {
+        cwd().join("environment.tar")
+    }
+}
+
 /* -------------------------------------------- MAIN ------------------------------------------- */
 
 /// The main entrypoint for the pixi-pack CLI.
@@ -109,7 +125,11 @@ async fn main() -> Result<()> {
             output_file,
             inject,
             ignore_pypi_errors,
+            create_executable,
         } => {
+            let output_file =
+                output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
+
             let options = PackOptions {
                 environment,
                 platform,
@@ -123,6 +143,7 @@ async fn main() -> Result<()> {
                 },
                 injected_packages: inject,
                 ignore_pypi_errors,
+                create_executable,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

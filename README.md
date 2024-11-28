@@ -122,6 +122,38 @@ pixi-pack pack --platform win-64
 > [!NOTE]
 > You can only `unpack` a pack on a system that has the same platform as the pack was created for.
 
+### Self-extracting binaries
+
+You can create a self-extracting binary that contains the packed environment and a script that unpacks the environment.
+This can be useful if you want to distribute the environment to users that don't have `pixi-pack` installed.
+
+```bash
+# unix
+$ pixi-pack pack --create-executable
+$ ls
+environment.sh
+$ ./environment.sh
+$ ls
+env/
+activate.sh
+environment.sh
+```
+
+```powershell
+# windows
+PS > pixi-pack pack --create-executable
+PS > ls
+environment.ps1
+PS > .\environment.ps1
+PS > ls
+env/
+activate.sh
+environment.ps1
+```
+
+> [!TIP]
+> The produced executable is a simple shell script that contains both the `pixi-pack` binary as well as the packed environment.
+
 ### Inject additional packages
 
 You can inject additional packages into the environment that are not specified in `pixi.lock` by using the `--inject` flag:

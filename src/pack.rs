@@ -4,6 +4,9 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(not(target_os = "windows"))]
+use std::os::unix::fs::PermissionsExt as _;
+
 use fxhash::FxHashMap;
 use indicatif::HumanBytes;
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
@@ -13,6 +16,7 @@ use tokio::{
 };
 
 use anyhow::Result;
+use base64::engine::{general_purpose::STANDARD, Engine};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
 use rattler_lock::{CondaPackage, LockFile, Package};
@@ -37,6 +41,7 @@ pub struct PackOptions {
     pub metadata: PixiPackMetadata,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
+    pub create_executable: bool,
 }
 
 /// Pack a pixi environment.
@@ -175,10 +180,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating archive at {}", options.output_file.display());
-    archive_directory(output_folder.path(), &options.output_file)
-        .await
-        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    tracing::info!("Creating pack at {}", options.output_file.display());
+    archive_directory(
+        output_folder.path(),
+        &options.output_file,
+        options.create_executable,
+        options.platform,
+    )
+    .await
+    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
     let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
     tracing::info!(
@@ -255,20 +265,25 @@ async fn download_package(
     Ok(())
 }
 
-/// Archive a directory into a tarball.
-async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()> {
-    let outfile = fs::File::create(archive_target).await.map_err(|e| {
-        anyhow!(
-            "could not create archive file at {}: {}",
-            archive_target.display(),
-            e
-        )
-    })?;
+async fn archive_directory(
+    input_dir: &Path,
+    archive_target: &Path,
+    create_executable: bool,
+    platform: Platform,
+) -> Result<()> {
+    if create_executable {
+        eprintln!("📦 Creating self-extracting executable");
+        create_self_extracting_executable(input_dir, archive_target, platform).await
+    } else {
+        create_tarball(input_dir, archive_target).await
+    }
+}
 
-    let writer = tokio::io::BufWriter::new(outfile);
-    let mut archive = Builder::new(writer);
+async fn write_archive<T>(mut archive: Builder<T>, input_dir: &Path) -> Result<T>
+where
+    T: tokio::io::AsyncWrite + Unpin + Send,
+{
     archive.mode(HeaderMode::Deterministic);
-
     // need to sort files to ensure deterministic output
     let files = WalkDir::new(input_dir)
         .sort_by_file_name()
@@ -299,6 +314,138 @@ async fn archive_directory(input_dir: &Path, archive_target: &Path) -> Result<()
         .shutdown()
         .await
         .map_err(|e| anyhow!("could not flush output: {}", e))?;
+
+    Ok(compressor)
+}
+
+async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
+    let outfile = fs::File::create(archive_target).await.map_err(|e| {
+        anyhow!(
+            "could not create archive file at {}: {}",
+            archive_target.display(),
+            e
+        )
+    })?;
+
+    let writer = tokio::io::BufWriter::new(outfile);
+    let archive = Builder::new(writer);
+
+    write_archive(archive, input_dir).await?;
+
+    Ok(())
+}
+
+async fn create_self_extracting_executable(
+    input_dir: &Path,
+    target: &Path,
+    platform: Platform,
+) -> Result<()> {
+    let line_ending = if platform.is_windows() {
+        b"\r\n".to_vec()
+    } else {
+        b"\n".to_vec()
+    };
+
+    let archive = Builder::new(Vec::new());
+
+    let compressor = write_archive(archive, input_dir).await?;
+
+    let windows_header = include_str!("header.ps1");
+    let unix_header = include_str!("header.sh");
+
+    let header = if platform.is_windows() {
+        windows_header
+    } else {
+        unix_header
+    };
+
+    let executable_path = target.with_extension(if platform.is_windows() { "ps1" } else { "sh" });
+
+    // Determine the target OS and architecture
+    let (os, arch) = match platform {
+        Platform::Linux64 => ("unknown-linux-musl", "x86_64"),
+        Platform::LinuxAarch64 => ("unknown-linux-musl", "aarch64"),
+        Platform::Osx64 => ("apple-darwin", "x86_64"),
+        Platform::OsxArm64 => ("apple-darwin", "aarch64"),
+        Platform::Win64 => ("pc-windows-msvc", "x86_64"),
+        Platform::WinArm64 => ("pc-windows-msvc", "aarch64"),
+        _ => return Err(anyhow!("Unsupported platform: {}", platform)),
+    };
+
+    let executable_name = format!("pixi-pack-{}-{}", arch, os);
+    let extension = if platform.is_windows() { ".exe" } else { "" };
+
+    let version = env!("CARGO_PKG_VERSION");
+    let url = format!(
+        "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
+        version, executable_name, extension
+    );
+
+    eprintln!("📥 Downloading pixi-pack executable...");
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await?;
+    if !response.status().is_success() {
+        return Err(anyhow!(
+            "Failed to download pixi-pack executable. Status: {}",
+            response.status()
+        ));
+    }
+
+    let total_size = response
+        .content_length()
+        .ok_or_else(|| anyhow!("Failed to get content length"))?;
+
+    let bar = ProgressReporter::new(total_size);
+    bar.pb.set_message("Downloading");
+
+    let mut executable_bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        executable_bytes.extend_from_slice(&chunk);
+        bar.pb.inc(chunk.len() as u64);
+    }
+
+    bar.pb.finish_with_message("Download complete");
+
+    eprintln!("✅ Pixi-pack executable downloaded successfully");
+
+    let mut final_executable = File::create(&executable_path)
+        .await
+        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+
+    final_executable.write_all(header.as_bytes()).await?;
+    final_executable.write_all(&line_ending).await?; // Add a newline after the header
+
+    // Encode the archive to base64
+    let archive_base64 = STANDARD.encode(&compressor);
+    final_executable
+        .write_all(archive_base64.as_bytes())
+        .await?;
+
+    final_executable.write_all(&line_ending).await?;
+    if platform.is_windows() {
+        final_executable.write_all(b"__END_ARCHIVE__").await?;
+    } else {
+        final_executable.write_all(b"@@END_ARCHIVE@@").await?;
+    }
+    final_executable.write_all(&line_ending).await?;
+
+    // Encode the executable to base64
+    let executable_base64 = STANDARD.encode(&executable_bytes);
+    final_executable
+        .write_all(executable_base64.as_bytes())
+        .await?;
+
+    // Make the script executable
+    // This won't be executed when cross-packing due to Windows FS not supporting Unix permissions
+    #[cfg(not(target_os = "windows"))]
+    if !platform.is_windows() {
+        let mut perms = final_executable.metadata().await?.permissions();
+        perms.set_mode(0o755);
+        final_executable.set_permissions(perms).await?;
+    }
 
     Ok(())
 }

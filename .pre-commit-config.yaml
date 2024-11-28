@@ -52,3 +52,9 @@ repos:
         entry: pixi run -e lint taplo format
         language: system
         types: [toml]
+      # shellcheck
+      - id: shellcheck
+        name: shellcheck
+        entry: pixi run -e lint shellcheck
+        language: system
+        types: [shell]

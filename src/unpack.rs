@@ -16,6 +16,7 @@ use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell::{Shell, ShellEnum},
 };
+
 use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
@@ -42,6 +43,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let unpack_dir = tmp_dir.path();
 
     tracing::info!("Unarchiving pack to {}", unpack_dir.display());
+
     unarchive(&options.pack_file, unpack_dir)
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;

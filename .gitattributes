@@ -1,2 +1,5 @@
 # GitHub syntax highlighting
 pixi.lock linguist-language=YAML
+
+src/header.ps1 text eol=crlf
+src/header.sh text eol=lf

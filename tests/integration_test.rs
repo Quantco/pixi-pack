@@ -32,9 +32,18 @@ fn options(
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_errors: bool,
     #[default("env")] env_name: String,
+    #[default(false)] create_executable: bool,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = output_dir.path().join("environment.tar");
+    let pack_file = if create_executable {
+        output_dir.path().join(if platform.is_windows() {
+            "environment.ps1"
+        } else {
+            "environment.sh"
+        })
+    } else {
+        output_dir.path().join("environment.tar")
+    };
     let metadata = PixiPackMetadata {
         version: DEFAULT_PIXI_PACK_VERSION.to_string(),
         pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
@@ -51,6 +60,7 @@ fn options(
             metadata,
             injected_packages: vec![],
             ignore_pypi_errors,
+            create_executable,
         },
         unpack_options: UnpackOptions {
             pack_file,
@@ -233,7 +243,7 @@ async fn test_compatibility(
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    println!("{:?}", pack_result);
+
     assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
     assert!(pack_file.exists());
@@ -325,6 +335,51 @@ async fn test_reproducible_shasum(
 
     let sha256_digest = sha256_digest_bytes(&options.pack_options.output_file);
     insta::assert_snapshot!(format!("sha256-{}", platform), &sha256_digest);
+
+    if platform == Platform::LinuxPpc64le {
+        // pixi-pack not available for ppc64le for now
+        return;
+    }
+
+    // Test with create executable
+    let output_file = options.output_dir.path().join(if platform.is_windows() {
+        "environment.ps1"
+    } else {
+        "environment.sh"
+    });
+
+    let mut pack_options = options.pack_options.clone();
+    pack_options.create_executable = true;
+    pack_options.output_file = output_file.clone();
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let sha256_digest = sha256_digest_bytes(&output_file);
+    insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
+}
+
+#[rstest]
+#[case(Platform::Linux64)]
+#[case(Platform::Win64)]
+#[tokio::test]
+async fn test_line_endings(
+    #[case] platform: Platform,
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), true)]
+    options: Options,
+) {
+    let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let out_file = options.pack_options.output_file.clone();
+    let output = fs::read_to_string(&out_file).unwrap();
+
+    if platform.is_windows() {
+        let num_crlf = output.matches("\r\n").count();
+        let num_lf = output.matches("\n").count();
+        assert_eq!(num_crlf, num_lf);
+    } else {
+        assert!(!output.contains("\r\n"));
+    }
 }
 
 #[rstest]
@@ -367,4 +422,136 @@ async fn test_custom_env_name(options: Options) {
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(env_dir.is_dir());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut pack_options = options.pack_options;
+    pack_options.create_executable = true;
+
+    #[cfg(target_os = "windows")]
+    {
+        pack_options.output_file = temp_dir.path().join("environment.ps1");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        pack_options.output_file = temp_dir.path().join("environment.sh");
+    }
+
+    let pack_file = pack_options.output_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    assert!(
+        pack_file.exists(),
+        "Pack file does not exist at {:?}",
+        pack_file
+    );
+
+    let pack_file_contents = fs::read_to_string(&pack_file).unwrap();
+
+    #[cfg(target_os = "windows")]
+    {
+        let archive_start = pack_file_contents
+            .find("__END_HEADER__")
+            .expect("Could not find header end marker")
+            + "__END_HEADER__".len();
+        let archive_end = pack_file_contents
+            .find("__END_ARCHIVE__")
+            .expect("Could not find archive end marker");
+        let archive_bits = &pack_file_contents[archive_start..archive_end];
+        assert!(!archive_bits.is_empty());
+
+        let pixi_pack_bits = &pack_file_contents[archive_end + "__END_ARCHIVE__".len()..];
+        assert!(!pixi_pack_bits.is_empty());
+
+        assert_eq!(pack_file.extension().unwrap(), "ps1");
+        let output = Command::new("powershell")
+            .arg("-File")
+            .arg(&pack_file)
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(
+            output.status.success(),
+            "Packed file execution failed: {:?}",
+            output
+        );
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        assert!(pack_file_contents.contains("@@END_HEADER@@"));
+        assert!(pack_file_contents.contains("@@END_ARCHIVE@@"));
+
+        let archive_start = pack_file_contents
+            .find("@@END_HEADER@@")
+            .expect("Could not find header end marker")
+            + "@@END_HEADER@@".len();
+        let archive_end = pack_file_contents
+            .find("@@END_ARCHIVE@@")
+            .expect("Could not find archive end marker");
+        let archive_bits = &pack_file_contents[archive_start..archive_end];
+        assert!(!archive_bits.is_empty());
+
+        let pixi_pack_bits = &pack_file_contents[archive_end + "@@END_ARCHIVE@@".len()..];
+        assert!(!pixi_pack_bits.is_empty());
+
+        assert_eq!(pack_file.extension().unwrap(), "sh");
+
+        let output = Command::new("bash")
+            .arg(&pack_file)
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(
+            output.status.success(),
+            "Packed file execution failed: {:?}",
+            output
+        );
+
+        let output = Command::new(&pack_file)
+            .arg("-o")
+            .arg(options.output_dir.path())
+            .output()
+            .expect("Failed to execute packed file for extraction");
+        assert!(
+            output.status.success(),
+            "Packed file execution failed: {:?}",
+            output
+        );
+    }
+
+    let env_dir = options
+        .output_dir
+        .path()
+        .join(options.unpack_options.env_name);
+    assert!(
+        env_dir.exists(),
+        "Environment directory not found after extraction"
+    );
+
+    #[cfg(target_os = "windows")]
+    let activation_script = options.output_dir.path().join("activate.bat");
+    #[cfg(not(target_os = "windows"))]
+    let activation_script = options.output_dir.path().join("activate.sh");
+
+    assert!(
+        activation_script.exists(),
+        "Activation script not found after extraction"
+    );
+
+    required_fs_objects
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+
+    // Keep the temporary directory alive until the end of the test
+    drop(temp_dir);
 }
