@@ -1,7 +1,7 @@
 ---
 source: tests/integration_test.rs
-assertion_line: 366
+assertion_line: 358
 expression: "&sha256_digest"
 snapshot_kind: text
 ---
-D651688B08263EA415C95AF1298D337088953CD260BFFC1AB287D75E2F467D2A
+66EE65C5068E586279361987E7F3921F9159619827439946FE32A61C2A8B5C39
