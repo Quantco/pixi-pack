@@ -340,6 +340,12 @@ async fn create_self_extracting_executable(
     target: &Path,
     platform: Platform,
 ) -> Result<()> {
+    let line_ending = if platform.is_windows() {
+        b"\r\n".to_vec()
+    } else {
+        b"\n".to_vec()
+    };
+
     let archive = Builder::new(Vec::new());
 
     let compressor = write_archive(archive, input_dir).await?;
@@ -410,7 +416,7 @@ async fn create_self_extracting_executable(
         .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
 
     final_executable.write_all(header.as_bytes()).await?;
-    final_executable.write_all(b"\n").await?; // Add a newline after the header
+    final_executable.write_all(&line_ending).await?; // Add a newline after the header
 
     // Encode the archive to base64
     let archive_base64 = STANDARD.encode(&compressor);
@@ -418,12 +424,13 @@ async fn create_self_extracting_executable(
         .write_all(archive_base64.as_bytes())
         .await?;
 
-    final_executable.write_all(b"\n").await?;
+    final_executable.write_all(&line_ending).await?;
     if platform.is_windows() {
-        final_executable.write_all(b"__END_ARCHIVE__\n").await?;
+        final_executable.write_all(b"__END_ARCHIVE__").await?;
     } else {
-        final_executable.write_all(b"@@END_ARCHIVE@@\n").await?;
+        final_executable.write_all(b"@@END_ARCHIVE@@").await?;
     }
+    final_executable.write_all(&line_ending).await?;
 
     // Encode the executable to base64
     let executable_base64 = STANDARD.encode(&executable_bytes);
