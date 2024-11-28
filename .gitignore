@@ -121,6 +121,7 @@ environment.yml
 environment
 environment.tar
 environment.sh
+environment.ps1
 pixi-pack.json
 unpack/
 
