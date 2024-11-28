@@ -359,6 +359,30 @@ async fn test_reproducible_shasum(
 }
 
 #[rstest]
+#[case(Platform::Linux64)]
+#[case(Platform::Win64)]
+#[tokio::test]
+async fn test_line_endings(
+    #[case] platform: Platform,
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), true)]
+    options: Options,
+) {
+    let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let out_file = options.pack_options.output_file.clone();
+    let output = fs::read_to_string(&out_file).unwrap();
+
+    if platform.is_windows() {
+        let num_crlf = output.matches("\r\n").count();
+        let num_lf = output.matches("\n").count();
+        assert_eq!(num_crlf, num_lf);
+    } else {
+        assert!(!output.contains("\r\n"));
+    }
+}
+
+#[rstest]
 #[tokio::test]
 async fn test_non_authenticated(
     #[with(PathBuf::from("examples/auth/pixi.toml"))] options: Options,
