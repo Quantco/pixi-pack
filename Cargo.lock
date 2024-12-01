@@ -2360,7 +2360,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_shell",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.4.0",
  "rstest",
  "serde",
  "serde_json",
@@ -2570,7 +2570,7 @@ dependencies = [
  "reflink-copy",
  "regex",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.3",
  "simple_spawn_blocking",
  "smallvec",
  "tempfile",
@@ -2601,7 +2601,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.3",
  "simple_spawn_blocking",
  "thiserror 1.0.68",
  "tokio",
@@ -2728,7 +2728,7 @@ dependencies = [
  "keyring",
  "netrc-rs",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.3",
  "retry-policies",
  "serde",
  "serde_json",
@@ -2752,7 +2752,7 @@ dependencies = [
  "rattler_networking",
  "rattler_redaction",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.3",
  "serde_json",
  "tar",
  "tempfile",
@@ -2772,7 +2772,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa822f7a897914ff30e372814234047d556c98f3813fad616c93147b38dab7e7"
 dependencies = [
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.3",
  "url",
 ]
 
@@ -2961,6 +2961,21 @@ name = "reqwest-middleware"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "562ceb5a604d3f7c885a792d42c199fd8af239d0a51b2fa6a78aafa092452b04"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest",
+ "serde",
+ "thiserror 1.0.68",
+ "tower-service",
+]
+
+[[package]]
+name = "reqwest-middleware"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1ccd3b55e711f91a9885a2fa6fbbb2e39db1776420b062efc058c6410f7e5e3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3857,9 +3872,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.18"
+version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0f048c97dbd9faa9b7df56362b8ebcaa52adb06b498c050d2f4e32f90a7a8b"
+checksum = "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
 dependencies = [
  "matchers",
  "nu-ansi-term",
