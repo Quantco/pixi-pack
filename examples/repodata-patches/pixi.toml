@@ -13,8 +13,6 @@ platforms = [
 [tasks]
 
 [dependencies]
-python = ">=3.12"
-# specifically pin this version as we are hardcoding it in the tests
-openssl = { version = "3.3.1", build = "*_0" }
+python = ">=3.12.3,<3.13"
 # needed because conda and micromamba include pip by default when installing python, pixi doesn't
 pip = "*"
