@@ -82,8 +82,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     for package in packages {
         match package {
-            LockedPackageRef::Conda(CondaPackageData::Binary(binary_data)) => conda_packages_from_lockfile.push(binary_data.clone()),
-            LockedPackageRef::Conda(CondaPackageData::Source(_)) => anyhow::bail!("Conda source packages are not yet supported by pixi-pack"),
+            LockedPackageRef::Conda(CondaPackageData::Binary(binary_data)) => {
+                conda_packages_from_lockfile.push(binary_data.clone())
+            }
+            LockedPackageRef::Conda(CondaPackageData::Source(_)) => {
+                anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
+            }
             LockedPackageRef::Pypi(_, _) => {
                 if options.ignore_pypi_errors {
                     tracing::warn!(
