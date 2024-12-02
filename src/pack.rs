@@ -19,7 +19,7 @@ use anyhow::Result;
 use base64::engine::{general_purpose::STANDARD, Engine};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
-use rattler_lock::{CondaPackage, LockFile, Package};
+use rattler_lock::{CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, UrlOrPath};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::{Builder, HeaderMode};
@@ -78,12 +78,17 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
 
-    let mut conda_packages_from_lockfile: Vec<CondaPackage> = Vec::new();
+    let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
 
     for package in packages {
         match package {
-            Package::Conda(p) => conda_packages_from_lockfile.push(p),
-            Package::Pypi(_) => {
+            LockedPackageRef::Conda(CondaPackageData::Binary(binary_data)) => {
+                conda_packages_from_lockfile.push(binary_data.clone())
+            }
+            LockedPackageRef::Conda(CondaPackageData::Source(_)) => {
+                anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
+            }
+            LockedPackageRef::Pypi(_, _) => {
                 if options.ignore_pypi_errors {
                     tracing::warn!(
                         "ignoring PyPI package since PyPI packages are not supported by pixi-pack"
@@ -119,11 +124,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
     for package in conda_packages_from_lockfile {
-        let filename = package
-            .file_name()
-            .ok_or(anyhow!("could not get file name"))?
-            .to_string();
-        conda_packages.push((filename, package.package_record().clone()));
+        let filename = package.file_name;
+        conda_packages.push((filename, package.package_record));
     }
 
     let injected_packages: Vec<(PathBuf, ArchiveType)> = options
@@ -235,25 +237,27 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
 /// Download a conda package to a given output directory.
 async fn download_package(
     client: &ClientWithMiddleware,
-    package: &CondaPackage,
+    package: &CondaBinaryData,
     output_dir: &Path,
 ) -> Result<()> {
-    let output_dir = output_dir.join(&package.package_record().subdir);
+    let output_dir = output_dir.join(&package.package_record.subdir);
     create_dir_all(&output_dir)
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    let file_name = package
-        .file_name()
-        .ok_or(anyhow!("could not get file name"))?;
+    let file_name = &package.file_name;
     let mut dest = File::create(output_dir.join(file_name)).await?;
 
-    tracing::debug!("Fetching package {}", package.url());
-    let mut response = client.get(package.url().to_string()).send().await?;
+    tracing::debug!("Fetching package {}", package.location);
+    let url = match &package.location {
+        UrlOrPath::Url(url) => url,
+        UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
+    };
+    let mut response = client.get(url.clone()).send().await?;
     if response.status().is_client_error() {
         return Err(anyhow!(
             "failed to download {}: {}",
-            package.url().to_string(),
+            url,
             response.text().await?
         ));
     }

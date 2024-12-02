@@ -191,7 +191,9 @@ async fn test_inject_failure(options: Options) {
 
 #[rstest]
 #[tokio::test]
-async fn test_includes_repodata_patches(options: Options) {
+async fn test_includes_repodata_patches(
+    #[with(PathBuf::from("examples/repodata-patches/pixi.toml"))] options: Options,
+) {
     let mut pack_options = options.pack_options;
     pack_options.platform = Platform::Win64;
     let pack_file = options.unpack_options.pack_file.clone();
