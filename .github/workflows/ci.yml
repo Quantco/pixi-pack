@@ -49,7 +49,7 @@ jobs:
           ls -la $HOME
           ls -la $HOME/.config
           ls -la /home
-          ls -la /home/runneradmin
+          # ls -la /home/runneradmin
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659 # v0.8.1
         with:
