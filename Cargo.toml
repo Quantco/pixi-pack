@@ -23,14 +23,14 @@ rustls-tls = [
 
 [dependencies]
 anyhow = "1.0.95"
-clap = { version = "4.5.23", features = ["derive", "string"] }
+clap = { version = "4.5.27", features = ["derive", "string"] }
 clap-verbosity-flag = "3.0.2"
 futures = "0.3.31"
-indicatif = "0.17.9"
-rattler = { version = "0.28.4", default-features = false }
-rattler_digest = "1.0.4"
+indicatif = "0.17.11"
+rattler = { version = "0.28.7", default-features = false }
+rattler_digest = "1.0.5"
 rattler_conda_types = "0.29.5"
-rattler_index = "0.19.37"
+rattler_index = "0.20.2"
 rattler_lock = "0.22.34"
 rattler_networking = { version = "0.21.8", default-features = false }
 rattler_package_streaming = { version = "0.22.18", default-features = false }
@@ -41,10 +41,10 @@ reqwest = { version = "0.12.12", default-features = false, features = [
 ] }
 reqwest-middleware = "0.4.0"
 serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.134"
+serde_json = "1.0.138"
 serde_yaml = "0.9.34"
 tokio-tar = "0.3.1"
-tokio = { version = "1.42.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
 tokio-stream = { version = "0.1.17", features = ["fs"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = [
@@ -54,7 +54,7 @@ tracing-subscriber = { version = "0.3.19", features = [
 tracing-log = "0.2.0"
 url = "2.5.4"
 fxhash = "0.2.1"
-tempfile = "3.14.0"
+tempfile = "3.16.0"
 walkdir = "2.5.0"
 base64 = "0.22.1"
 
@@ -62,4 +62,4 @@ base64 = "0.22.1"
 async-std = "1.13.0"
 rstest = "0.24.0"
 sha2 = "0.10.8"
-insta = "1.41.1"
+insta = "1.42.1"
