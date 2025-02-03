@@ -39,3 +39,6 @@ pre-commit-run = "pre-commit run -a"
 default = ["lint", "test"]
 demo = { features = ["demo"], no-default-feature = true }
 lint = { features = ["lint"], no-default-feature = true }
+
+[tool.update]
+autoupdate-commit-message = "chore: Update pixi lockfile"
