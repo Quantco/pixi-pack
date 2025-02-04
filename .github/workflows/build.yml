@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: Quantco/ui-actions/version-metadata@8c5c674fd27fb05a436387a14e98b386e0a01d78 # v1.0.17
+      - uses: Quantco/ui-actions/version-metadata@cd71d2a0e30b25569f6d723e57acca83347e58fc # v1.0.18
         id: version-metadata
         with:
           file: ./Cargo.toml
@@ -77,7 +77,7 @@ jobs:
           mv target/${{ matrix.target }}/${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release' }}/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: pixi-pack-${{ matrix.target }}
           path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
@@ -100,7 +100,7 @@ jobs:
           git tag v${{ needs.metadata.outputs.version }}
           git push origin v${{ needs.metadata.outputs.version }}
       - name: Create Release
-        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8bb048 # v2.2.0
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           generate_release_notes: true
           tag_name: v${{ needs.metadata.outputs.version }}
