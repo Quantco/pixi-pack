@@ -63,3 +63,13 @@ async-std = "1.13.0"
 rstest = "0.24.0"
 sha2 = "0.10.8"
 insta = "1.42.1"
+
+[workspace.metadata.cross.target]
+aarch64-unknown-linux-gnu.pre-build = [
+  "dpkg --add-architecture $CROSS_DEB_ARCH",
+  "apt-get update && apt-get install --assume-yes libssl-dev:$CROSS_DEB_ARCH",
+]
+x86_64-unknown-linux-gnu.pre-build = [
+  "dpkg --add-architecture $CROSS_DEB_ARCH",
+  "apt-get update && apt-get install --assume-yes libssl-dev:$CROSS_DEB_ARCH",
+]
