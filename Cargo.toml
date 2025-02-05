@@ -10,8 +10,8 @@ native-tls = [
   "reqwest/native-tls",
   "reqwest/native-tls-alpn",
   "rattler/native-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+  "rattler_networking/native-tls",
+  "rattler_package_streaming/native-tls",
 ]
 rustls-tls = [
   "reqwest/rustls-tls",
