@@ -44,21 +44,36 @@ pub struct PackOptions {
     pub create_executable: bool,
 }
 
-/// Pack a pixi environment.
-pub async fn pack(options: PackOptions) -> Result<()> {
-    let lockfile_path = options
-        .manifest_path
-        .parent()
-        .ok_or(anyhow!("could not get parent directory"))?
-        .join("pixi.lock");
+fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
+    if !manifest_path.exists() {
+        anyhow::bail!(
+            "manifest path does not exist at {}",
+            manifest_path.display()
+        );
+    }
 
-    let lockfile = LockFile::from_path(&lockfile_path).map_err(|e| {
+    let manifest_path = if !manifest_path.is_dir() {
+        manifest_path
+            .parent()
+            .ok_or(anyhow!("could not get parent directory"))?
+    } else {
+        manifest_path
+    };
+
+    let lockfile_path = manifest_path.join("pixi.lock");
+
+    LockFile::from_path(&lockfile_path).map_err(|e| {
         anyhow!(
             "could not read lockfile at {}: {}",
             lockfile_path.display(),
             e
         )
-    })?;
+    })
+}
+
+/// Pack a pixi environment.
+pub async fn pack(options: PackOptions) -> Result<()> {
+    let lockfile = load_lockfile(&options.manifest_path)?;
 
     let client = reqwest_client_from_auth_storage(options.auth_file)
         .map_err(|e| anyhow!("could not create reqwest client from auth storage: {e}"))?;
