@@ -557,3 +557,15 @@ async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&
     // Keep the temporary directory alive until the end of the test
     drop(temp_dir);
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_manifest_path_dir(#[with(PathBuf::from("examples/simple-python"))] options: Options) {
+    let pack_options = options.pack_options;
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    assert!(pack_file.is_file());
+}
