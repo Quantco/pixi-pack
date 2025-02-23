@@ -39,11 +39,11 @@ pub struct PackOptions {
     pub output_file: PathBuf,
     pub manifest_path: PathBuf,
     pub metadata: PixiPackMetadata,
+    pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
     pub create_executable: bool,
 }
-
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     if !manifest_path.exists() {
         anyhow::bail!(
@@ -128,13 +128,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     stream::iter(conda_packages_from_lockfile.iter())
         .map(Ok)
         .try_for_each_concurrent(50, |package| async {
-            download_package(&client, package, &channel_dir).await?;
+            download_package(&client, package, &channel_dir, options.cache_dir.as_deref()).await?;
             bar.pb.inc(1);
             Ok(())
         })
         .await
-        .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;
-    bar.pb.finish_and_clear();
+        .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;    bar.pb.finish_and_clear();
 
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
@@ -254,6 +253,7 @@ async fn download_package(
     client: &ClientWithMiddleware,
     package: &CondaBinaryData,
     output_dir: &Path,
+    cache_dir: Option<&Path>,
 ) -> Result<()> {
     let output_dir = output_dir.join(&package.package_record.subdir);
     create_dir_all(&output_dir)
@@ -261,7 +261,19 @@ async fn download_package(
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
     let file_name = &package.file_name;
-    let mut dest = File::create(output_dir.join(file_name)).await?;
+    let output_path = output_dir.join(file_name);
+
+    // Check cache first if enabled
+    if let Some(cache_dir) = cache_dir {
+        let cache_path = cache_dir.join(&package.package_record.subdir).join(file_name);
+        if cache_path.exists() {
+            tracing::debug!("Using cached package from {}", cache_path.display());
+            fs::copy(&cache_path, &output_path).await?;
+            return Ok(());
+        }
+    }
+
+    let mut dest = File::create(&output_path).await?;
 
     tracing::debug!("Fetching package {}", package.location);
     let url = match &package.location {
@@ -281,9 +293,16 @@ async fn download_package(
         dest.write_all(&chunk).await?;
     }
 
+    // Save to cache if enabled
+    if let Some(cache_dir) = cache_dir {
+        let cache_subdir = cache_dir.join(&package.package_record.subdir);
+        create_dir_all(&cache_subdir).await?;
+        let cache_path = cache_subdir.join(file_name);
+        fs::copy(&output_path, &cache_path).await?;
+    }
+
     Ok(())
 }
-
 async fn archive_directory(
     input_dir: &Path,
     archive_target: &Path,

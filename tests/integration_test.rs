@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use sha2::{Digest, Sha256};
+use walkdir::WalkDir;
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 
@@ -61,6 +62,7 @@ fn options(
             injected_packages: vec![],
             ignore_pypi_errors,
             create_executable,
+            cache_dir: None,
         },
         unpack_options: UnpackOptions {
             pack_file,
@@ -70,9 +72,7 @@ fn options(
         },
         output_dir,
     }
-}
-
-#[fixture]
+}#[fixture]
 fn required_fs_objects() -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
     let openssl_required_file = match Platform::current() {
@@ -568,4 +568,54 @@ async fn test_manifest_path_dir(#[with(PathBuf::from("examples/simple-python"))]
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_package_caching(
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"))] options: Options,
+) {
+    let temp_cache = tempdir().expect("Couldn't create a temp cache dir");
+    let cache_dir = temp_cache.path().to_path_buf();
+
+    // First pack with cache - should download packages
+    let mut pack_options = options.pack_options.clone();
+    pack_options.cache_dir = Some(cache_dir.clone());
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    // Get file count in cache after first pack
+    let cache_files_count = WalkDir::new(&cache_dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .count();
+    assert!(cache_files_count > 0, "Cache should contain downloaded files");
+
+    // Second pack with same cache - should use cached packages
+    let temp_dir2 = tempdir().expect("Couldn't create second temp dir");
+    let mut pack_options2 = options.pack_options.clone();
+    pack_options2.cache_dir = Some(cache_dir.clone());
+    let output_file2 = temp_dir2.path().join("environment.tar");
+    pack_options2.output_file = output_file2.clone();
+    
+    let pack_result2 = pixi_pack::pack(pack_options2).await;
+    assert!(pack_result2.is_ok(), "{:?}", pack_result2);
+
+    // Verify cache files weren't downloaded again by checking modification times
+    let cache_files: Vec<_> = WalkDir::new(&cache_dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .collect();
+
+    assert_eq!(
+        cache_files.len(),
+        cache_files_count,
+        "Cache file count should remain the same"
+    );
+
+    // Both output files should exist and be valid
+    assert!(options.pack_options.output_file.exists());
+    assert!(output_file2.exists());
 }

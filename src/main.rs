@@ -54,6 +54,10 @@ enum Commands {
         #[arg(short, long)]
         output_file: Option<PathBuf>,
 
+        /// Use a cache directory for downloaded packages
+        #[arg(long)]
+        use_cache: Option<PathBuf>,
+
         /// Inject an additional conda package into the final prefix
         #[arg(short, long, num_args(0..))]
         inject: Vec<PathBuf>,
@@ -67,7 +71,6 @@ enum Commands {
         #[arg(long, default_value = "false")]
         create_executable: bool,
     },
-
     /// Unpack a pixi environment
     Unpack {
         /// Where to unpack the environment.
@@ -126,6 +129,7 @@ async fn main() -> Result<()> {
             inject,
             ignore_pypi_errors,
             create_executable,
+            use_cache,
         } => {
             let output_file =
                 output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
@@ -144,11 +148,11 @@ async fn main() -> Result<()> {
                 injected_packages: inject,
                 ignore_pypi_errors,
                 create_executable,
+                cache_dir: use_cache,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?
-        }
-        Commands::Unpack {
+        }        Commands::Unpack {
             output_directory,
             env_name,
             pack_file,
