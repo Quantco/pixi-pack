@@ -152,7 +152,8 @@ async fn main() -> Result<()> {
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?
-        }        Commands::Unpack {
+        }
+        Commands::Unpack {
             output_directory,
             env_name,
             pack_file,

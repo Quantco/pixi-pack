@@ -133,7 +133,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             Ok(())
         })
         .await
-        .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;    bar.pb.finish_and_clear();
+        .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;
+    bar.pb.finish_and_clear();
 
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
@@ -265,7 +266,9 @@ async fn download_package(
 
     // Check cache first if enabled
     if let Some(cache_dir) = cache_dir {
-        let cache_path = cache_dir.join(&package.package_record.subdir).join(file_name);
+        let cache_path = cache_dir
+            .join(&package.package_record.subdir)
+            .join(file_name);
         if cache_path.exists() {
             tracing::debug!("Using cached package from {}", cache_path.display());
             fs::copy(&cache_path, &output_path).await?;

@@ -1,9 +1,9 @@
 #![allow(clippy::too_many_arguments)]
 
 use sha2::{Digest, Sha256};
-use walkdir::WalkDir;
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
+use walkdir::WalkDir;
 
 use pixi_pack::{
     unarchive, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
@@ -72,7 +72,8 @@ fn options(
         },
         output_dir,
     }
-}#[fixture]
+}
+#[fixture]
 fn required_fs_objects() -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
     let openssl_required_file = match Platform::current() {
@@ -590,7 +591,10 @@ async fn test_package_caching(
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
         .count();
-    assert!(cache_files_count > 0, "Cache should contain downloaded files");
+    assert!(
+        cache_files_count > 0,
+        "Cache should contain downloaded files"
+    );
 
     // Second pack with same cache - should use cached packages
     let temp_dir2 = tempdir().expect("Couldn't create second temp dir");
@@ -598,7 +602,7 @@ async fn test_package_caching(
     pack_options2.cache_dir = Some(cache_dir.clone());
     let output_file2 = temp_dir2.path().join("environment.tar");
     pack_options2.output_file = output_file2.clone();
-    
+
     let pack_result2 = pixi_pack::pack(pack_options2).await;
     assert!(pack_result2.is_ok(), "{:?}", pack_result2);
 
