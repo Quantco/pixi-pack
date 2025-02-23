@@ -595,11 +595,17 @@ async fn test_package_caching(
             initial_cache_files.insert(path, modified_time);
         }
     }
-    assert!(!initial_cache_files.is_empty(), "Cache should contain downloaded files");
+    assert!(
+        !initial_cache_files.is_empty(),
+        "Cache should contain downloaded files"
+    );
 
     // Calculate first pack's SHA256, reusing test_reproducible_shasum
     let first_sha256 = sha256_digest_bytes(&options.pack_options.output_file);
-    insta::assert_snapshot!(format!("sha256-{}", options.pack_options.platform), &first_sha256);
+    insta::assert_snapshot!(
+        format!("sha256-{}", options.pack_options.platform),
+        &first_sha256
+    );
 
     // Small delay to ensure any new writes would have different timestamps
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -610,7 +616,7 @@ async fn test_package_caching(
     pack_options2.cache_dir = Some(cache_dir.clone());
     let output_file2 = temp_dir2.path().join("environment.tar");
     pack_options2.output_file = output_file2.clone();
-    
+
     let pack_result2 = pixi_pack::pack(pack_options2).await;
     assert!(pack_result2.is_ok(), "{:?}", pack_result2);
 
@@ -618,7 +624,7 @@ async fn test_package_caching(
     for (path, initial_mtime) in initial_cache_files {
         let current_mtime = fs::metadata(&path).unwrap().modified().unwrap();
         assert_eq!(
-            initial_mtime, 
+            initial_mtime,
             current_mtime,
             "Cache file {} was modified when it should have been reused",
             path.display()
@@ -627,7 +633,10 @@ async fn test_package_caching(
 
     // Verify second pack produces identical output
     let second_sha256 = sha256_digest_bytes(&output_file2);
-    assert_eq!(first_sha256, second_sha256, "Pack outputs should be identical when using cache");
+    assert_eq!(
+        first_sha256, second_sha256,
+        "Pack outputs should be identical when using cache"
+    );
 
     // Both output files should exist and be valid
     assert!(options.pack_options.output_file.exists());
