@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
@@ -570,7 +571,6 @@ async fn test_manifest_path_dir(#[with(PathBuf::from("examples/simple-python"))]
     assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
 }
-
 #[rstest]
 #[tokio::test]
 async fn test_package_caching(
@@ -585,16 +585,24 @@ async fn test_package_caching(
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    // Get file count in cache after first pack
-    let cache_files_count = WalkDir::new(&cache_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-        .count();
-    assert!(
-        cache_files_count > 0,
-        "Cache should contain downloaded files"
-    );
+    // Get files and their modification times after first pack
+    let mut initial_cache_files = HashMap::new();
+    for entry in WalkDir::new(&cache_dir) {
+        let entry = entry.unwrap();
+        if entry.file_type().is_file() {
+            let path = entry.path().to_path_buf();
+            let modified_time = fs::metadata(&path).unwrap().modified().unwrap();
+            initial_cache_files.insert(path, modified_time);
+        }
+    }
+    assert!(!initial_cache_files.is_empty(), "Cache should contain downloaded files");
+
+    // Calculate first pack's SHA256, reusing test_reproducible_shasum
+    let first_sha256 = sha256_digest_bytes(&options.pack_options.output_file);
+    insta::assert_snapshot!(format!("sha256-{}", options.pack_options.platform), &first_sha256);
+
+    // Small delay to ensure any new writes would have different timestamps
+    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
     // Second pack with same cache - should use cached packages
     let temp_dir2 = tempdir().expect("Couldn't create second temp dir");
@@ -602,22 +610,24 @@ async fn test_package_caching(
     pack_options2.cache_dir = Some(cache_dir.clone());
     let output_file2 = temp_dir2.path().join("environment.tar");
     pack_options2.output_file = output_file2.clone();
-
+    
     let pack_result2 = pixi_pack::pack(pack_options2).await;
     assert!(pack_result2.is_ok(), "{:?}", pack_result2);
 
-    // Verify cache files weren't downloaded again by checking modification times
-    let cache_files: Vec<_> = WalkDir::new(&cache_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-        .collect();
+    // Check that cache files weren't modified
+    for (path, initial_mtime) in initial_cache_files {
+        let current_mtime = fs::metadata(&path).unwrap().modified().unwrap();
+        assert_eq!(
+            initial_mtime, 
+            current_mtime,
+            "Cache file {} was modified when it should have been reused",
+            path.display()
+        );
+    }
 
-    assert_eq!(
-        cache_files.len(),
-        cache_files_count,
-        "Cache file count should remain the same"
-    );
+    // Verify second pack produces identical output
+    let second_sha256 = sha256_digest_bytes(&output_file2);
+    assert_eq!(first_sha256, second_sha256, "Pack outputs should be identical when using cache");
 
     // Both output files should exist and be valid
     assert!(options.pack_options.output_file.exists());
