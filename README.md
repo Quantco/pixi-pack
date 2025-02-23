@@ -177,10 +177,10 @@ This will store all downloaded packages in the specified directory and reuse the
 
 Using a cache is particularly useful when:
 
-* Creating multiple packs with overlapping dependencies
-* Working with large packages that take time to download
-* Operating in environments with limited bandwidth
-* Running CI/CD pipelines where package caching can significantly improve build times
+- Creating multiple packs with overlapping dependencies
+- Working with large packages that take time to download
+- Operating in environments with limited bandwidth
+- Running CI/CD pipelines where package caching can significantly improve build times
 
 ### Unpacking without `pixi-pack`
 
