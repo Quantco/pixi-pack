@@ -10,7 +10,6 @@ use pixi_pack::{
     PIXI_PACK_VERSION,
 };
 use rattler_shell::shell::ShellEnum;
-use tracing_log::AsTrace;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
@@ -46,13 +45,17 @@ enum Commands {
         #[arg(long)] // TODO: Read from environment variable?
         auth_file: Option<PathBuf>,
 
-        /// The path to 'pixi.toml' or 'pyproject.toml'
-        #[arg(default_value = cwd().join("pixi.toml").into_os_string())]
+        /// The path to `pixi.toml`, `pyproject.toml`, or the project directory
+        #[arg(default_value = cwd().into_os_string())]
         manifest_path: PathBuf,
 
         /// Output file to write the pack to (will be an archive)
         #[arg(short, long)]
         output_file: Option<PathBuf>,
+
+        /// Use a cache directory for downloaded packages
+        #[arg(long)]
+        use_cache: Option<PathBuf>,
 
         /// Inject an additional conda package into the final prefix
         #[arg(short, long, num_args(0..))]
@@ -67,7 +70,6 @@ enum Commands {
         #[arg(long, default_value = "false")]
         create_executable: bool,
     },
-
     /// Unpack a pixi environment
     Unpack {
         /// Where to unpack the environment.
@@ -111,7 +113,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(cli.verbose.log_level_filter().as_trace())
+        .with_max_level(cli.verbose)
         .init();
 
     tracing::debug!("Starting pixi-pack CLI");
@@ -126,6 +128,7 @@ async fn main() -> Result<()> {
             inject,
             ignore_pypi_errors,
             create_executable,
+            use_cache,
         } => {
             let output_file =
                 output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
@@ -144,6 +147,7 @@ async fn main() -> Result<()> {
                 injected_packages: inject,
                 ignore_pypi_errors,
                 create_executable,
+                cache_dir: use_cache,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

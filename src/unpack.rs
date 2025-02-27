@@ -195,8 +195,22 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
             let cache_key = CacheKey::from(&package_record);
 
             let package_path = channel_dir.join(&package_record.subdir).join(&file_name);
+            let normalized_path = package_path.canonicalize().unwrap();
 
-            let url = Url::parse(&format!("file:///{}", file_name)).unwrap();
+            let url = Url::from_file_path(&normalized_path)
+                .map_err(|_| {
+                    anyhow!(
+                        "could not convert path to URL: {}",
+                        normalized_path.display()
+                    )
+                })
+                .unwrap();
+
+            tracing::debug!(
+                "Extracting package {} with URL {}",
+                package_record.name.as_normalized(),
+                url
+            );
 
             let repodata_record = RepoDataRecord {
                 package_record,
