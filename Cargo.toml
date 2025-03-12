@@ -24,7 +24,7 @@ rustls-tls = [
 [dependencies]
 anyhow = "1.0.96"
 clap = { version = "4.5.30", features = ["derive", "string"] }
-clap-verbosity-flag = "3.0.2"
+clap-verbosity-flag = { version = "3.0.2", features = ["tracing"] }
 futures = "0.3.31"
 indicatif = "0.17.11"
 rattler = { version = "0.28.7", default-features = false }
@@ -51,7 +51,6 @@ tracing-subscriber = { version = "0.3.19", features = [
   "default",
   "env-filter",
 ] }
-tracing-log = "0.2.0"
 url = "2.5.4"
 fxhash = "0.2.1"
 tempfile = "3.17.1"

@@ -10,7 +10,6 @@ use pixi_pack::{
     PIXI_PACK_VERSION,
 };
 use rattler_shell::shell::ShellEnum;
-use tracing_log::AsTrace;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
@@ -118,7 +117,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(cli.verbose.log_level_filter().as_trace())
+        .with_max_level(cli.verbose)
         .init();
 
     tracing::debug!("Starting pixi-pack CLI");
