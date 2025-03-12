@@ -70,6 +70,10 @@ enum Commands {
         /// Create self-extracting executable
         #[arg(long, default_value = "false")]
         create_executable: bool,
+
+        /// Experimental support for binary PyPI dependencies.
+        #[arg(long, default_value = "false")]
+        experimental_pypi_support: bool,
     },
     /// Unpack a pixi environment
     Unpack {
@@ -130,6 +134,7 @@ async fn main() -> Result<()> {
             ignore_pypi_errors,
             create_executable,
             use_cache,
+            experimental_pypi_support,
         } => {
             let output_file =
                 output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
@@ -149,6 +154,7 @@ async fn main() -> Result<()> {
                 ignore_pypi_errors,
                 create_executable,
                 cache_dir: use_cache,
+                experimental_pypi_support,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

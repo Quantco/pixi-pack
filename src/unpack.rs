@@ -7,10 +7,10 @@ use futures::{
 };
 use fxhash::FxHashMap;
 use rattler::{
-    install::Installer,
+    install::{Installer, PythonInfo},
     package_cache::{CacheKey, PackageCache},
 };
-use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
+use rattler_conda_types::{PackageRecord, Platform, PrefixRecord, RepoData, RepoDataRecord};
 use rattler_package_streaming::fs::extract;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
@@ -21,10 +21,19 @@ use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use url::Url;
+use uv_client::RegistryClientBuilder;
+use uv_configuration::{BuildOptions, NoBinary, NoBuild};
+use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::{DistExtension, WheelFilename};
+use uv_distribution_types::{Dist, Resolution};
+use uv_installer::Preparer;
+use uv_pep508::VerbatimUrl;
+use uv_python::{Interpreter, PythonEnvironment};
+use uv_types::{HashStrategy, InFlight};
 
 use crate::{
-    PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
+    build_context::DummyBuildContext, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME,
+    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION, PYPI_DIRECTORY_NAME,
 };
 
 /// Options for unpacking a pixi environment.
@@ -58,6 +67,10 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     create_prefix(&channel_directory, &target_prefix, &cache_dir)
         .await
         .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
+
+    install_pypi_packages(unpack_dir, &target_prefix)
+        .await
+        .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;
 
     tracing::info!("Generating activation script");
     create_activation_script(
@@ -291,6 +304,115 @@ async fn create_activation_script(
         .map_err(|e| anyhow!("Could not write activate script: {}", e))?;
 
     Ok(())
+}
+
+async fn install_pypi_packages(unpack_dir: &Path, target_prefix: &Path) -> Result<()> {
+    let pypi_directory = unpack_dir.join(PYPI_DIRECTORY_NAME);
+    if pypi_directory.exists() {
+        tracing::info!("Install pypi packages");
+        let conda_installed = PrefixRecord::collect_from_prefix(&target_prefix)
+            .map_err(|e| anyhow!(format!("Cannot collect pixi prefix: {}", e)))?;
+        // Find installed python in this prefix
+        let python_record = conda_installed
+            .iter()
+            .find(|x| x.repodata_record.package_record.name.as_normalized() == "python");
+        if let Some(python_record) = python_record {
+            let python_info = PythonInfo::from_python_record(
+                &python_record.repodata_record.package_record,
+                Platform::current(),
+            )?;
+            tracing::debug!("Current Python is {:?}", python_info);
+            let pypi_cache = uv_cache::Cache::temp()
+                .map_err(|e| anyhow!("Could not create cache folder: {}", e))?;
+            // Find a working python interpreter
+            let interpreter =
+                Interpreter::query(target_prefix.join(python_info.path()), &pypi_cache)
+                    .map_err(|e| anyhow!("Could not load python interpreter: {}", e))?;
+            let tags = interpreter.tags()?.clone();
+            let venv = PythonEnvironment::from_interpreter(interpreter);
+            // Collect all whl files in directory
+            let wheels = collect_pypi_packages(&pypi_directory)
+                .await
+                .map_err(|e| anyhow!("Could not find all pypi package files: {}", e))?;
+            for i in &wheels {
+                tracing::trace!("Package {}", i);
+            }
+            eprintln!(
+                "⏳ Extracting and installing {} pypi packages to {}...",
+                wheels.len(),
+                venv.root().display(),
+            );
+
+            let client = RegistryClientBuilder::new(pypi_cache.clone()).build();
+            let context = DummyBuildContext::new(pypi_cache.clone());
+            let distribute_database = DistributionDatabase::new(&client, &context, 1usize);
+            let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
+            let preparer = Preparer::new(
+                &pypi_cache,
+                &tags,
+                &HashStrategy::None,
+                &build_options,
+                distribute_database,
+            );
+            let resolution = Resolution::default();
+            let inflight = InFlight::default();
+            // unzip all whl package
+            let unzipped_dists = preparer
+                .prepare(wheels.clone(), &inflight, &resolution)
+                .await
+                .map_err(|e| anyhow!("Could not unzip all pypi packages: {}", e))?;
+            // install all whl package
+            uv_installer::Installer::new(&venv)
+                .install(unzipped_dists)
+                .await
+                .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;
+        } else {
+            tracing::debug!("Cannot find python in this environment.");
+        }
+    }
+
+    Ok(())
+}
+
+async fn collect_pypi_packages_in_subdir(subdir: &Path) -> Result<Vec<Dist>> {
+    let mut dirs = fs::read_dir(subdir).await?;
+    let mut ret = Vec::new();
+    while let Some(entry) = dirs.next_entry().await? {
+        let file_name = entry
+            .file_name()
+            .into_string()
+            .map_err(|x| anyhow!("Cannot convert filename {:?}", x))?;
+        if file_name == "index.html" {
+            continue;
+        }
+        let wheel_file_name = WheelFilename::from_stem(&file_name.as_str())
+            .map_err(|e| anyhow!("Failed to collect all whl file {}", e))?;
+        let dist = Dist::from_file_url(
+            wheel_file_name.name.clone(),
+            VerbatimUrl::from_absolute_path(entry.path().clone())?,
+            entry.path().as_path(),
+            DistExtension::Wheel,
+        )?;
+        ret.push(dist);
+    }
+
+    Ok(ret)
+}
+
+async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Dist>> {
+    let mut subdirs = fs::read_dir(package_dir)
+        .await
+        .map_err(|e| anyhow!("could not read channel directory: {}", e))?;
+    let mut ret = Vec::new();
+    while let Some(entry) = subdirs.next_entry().await? {
+        let file_type = entry.file_type().await?;
+        if file_type.is_dir() {
+            let mut wheels = collect_pypi_packages_in_subdir(entry.path().as_path()).await?;
+            ret.append(&mut wheels);
+        }
+    }
+
+    Ok(ret)
 }
 
 /* --------------------------------------------------------------------------------------------- */

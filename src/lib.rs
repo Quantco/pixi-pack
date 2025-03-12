@@ -1,6 +1,7 @@
 mod pack;
 mod unpack;
 mod util;
+mod build_context;
 
 pub use pack::{pack, PackOptions};
 use rattler_conda_types::Platform;
@@ -9,6 +10,7 @@ pub use unpack::{unarchive, unpack, UnpackOptions};
 pub use util::{get_size, ProgressReporter};
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
+pub const PYPI_DIRECTORY_NAME: &str = "simple";
 pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";
 pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
 pub const PIXI_PACK_VERSION: &str = env!("CARGO_PKG_VERSION");

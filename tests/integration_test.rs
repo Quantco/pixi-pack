@@ -64,6 +64,7 @@ fn options(
             ignore_pypi_errors,
             create_executable,
             cache_dir: None,
+            experimental_pypi_support: false,
         },
         unpack_options: UnpackOptions {
             pack_file,
