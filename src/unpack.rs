@@ -310,7 +310,7 @@ async fn install_pypi_packages(unpack_dir: &Path, target_prefix: &Path) -> Resul
     let pypi_directory = unpack_dir.join(PYPI_DIRECTORY_NAME);
     if pypi_directory.exists() {
         tracing::info!("Install pypi packages");
-        let conda_installed = PrefixRecord::collect_from_prefix(&target_prefix)
+        let conda_installed = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(|e| anyhow!(format!("Cannot collect pixi prefix: {}", e)))?;
         // Find installed python in this prefix
         let python_record = conda_installed
@@ -385,7 +385,7 @@ async fn collect_pypi_packages_in_subdir(subdir: &Path) -> Result<Vec<Dist>> {
         if file_name == "index.html" {
             continue;
         }
-        let wheel_file_name = WheelFilename::from_stem(&file_name.as_str())
+        let wheel_file_name = WheelFilename::from_stem(file_name.as_str())
             .map_err(|e| anyhow!("Failed to collect all whl file {}", e))?;
         let dist = Dist::from_file_url(
             wheel_file_name.name.clone(),

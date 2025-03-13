@@ -202,7 +202,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         PackageRecord::validate(conda_packages.iter().map(|(_, p)| p.clone()).collect())?;
     }
 
-    if pypi_packages_from_lockfile.len() > 0 {
+    if !pypi_packages_from_lockfile.is_empty() {
         // Download pypi packages.
         tracing::info!(
             "Downloading {} pypi packages...",
@@ -578,7 +578,7 @@ async fn create_environment_file(
         }
     }
 
-    if pypi_packages.len() > 0 {
+    if !pypi_packages.is_empty() {
         if !has_pip {
             tracing::warn!("conda/micromamba compatibility mode cannot work if no pip installed.");
             eprintln!("⚠️ conda/micromamba compatibility mode cannot work if no pip installed.");
@@ -708,7 +708,7 @@ async fn download_pypi_package(
 
 /// Create `index.html` files from the given packages
 async fn create_pypi_htmls(packages: &Vec<PypiPackageData>, output_dir: &Path) -> Result<()> {
-    if packages.len() == 0 {
+    if packages.is_empty() {
         return Ok(());
     }
     for p in packages {

@@ -1,7 +1,7 @@
+mod build_context;
 mod pack;
 mod unpack;
 mod util;
-mod build_context;
 
 pub use pack::{pack, PackOptions};
 use rattler_conda_types::Platform;

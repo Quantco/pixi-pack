@@ -1,4 +1,3 @@
-use uv_cache;
 use uv_dispatch::BuildDispatchError;
 use uv_git::GitResolver;
 use uv_pypi_types::Requirement;
@@ -55,28 +54,24 @@ impl BuildContext for DummyBuildContext {
         unimplemented!()
     }
 
-    fn resolve<'a>(
+    async fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
         build_stack: &'a uv_types::BuildStack,
-    ) -> impl std::future::Future<
-        Output = anyhow::Result<uv_distribution_types::Resolution, BuildDispatchError>,
-    > + 'a {
-        async { unimplemented!() }
+    ) -> anyhow::Result<uv_distribution_types::Resolution, BuildDispatchError> {
+        unimplemented!()
     }
 
-    fn install<'a>(
+    async fn install<'a>(
         &'a self,
         resolution: &'a uv_distribution_types::Resolution,
         venv: &'a uv_python::PythonEnvironment,
         build_stack: &'a uv_types::BuildStack,
-    ) -> impl std::future::Future<
-        Output = anyhow::Result<Vec<uv_distribution_types::CachedDist>, BuildDispatchError>,
-    > + 'a {
-        async { unimplemented!() }
+    ) -> anyhow::Result<Vec<uv_distribution_types::CachedDist>, BuildDispatchError> {
+        unimplemented!()
     }
 
-    fn setup_build<'a>(
+    async fn setup_build<'a>(
         &'a self,
         source: &'a std::path::Path,
         subdirectory: Option<&'a std::path::Path>,
@@ -87,21 +82,18 @@ impl BuildContext for DummyBuildContext {
         build_kind: uv_configuration::BuildKind,
         build_output: uv_configuration::BuildOutput,
         build_stack: uv_types::BuildStack,
-    ) -> impl std::future::Future<Output = anyhow::Result<Self::SourceDistBuilder, BuildDispatchError>>
-           + 'a {
-        async { unimplemented!() }
+    ) -> anyhow::Result<Self::SourceDistBuilder, BuildDispatchError> {
+        unimplemented!()
     }
 
-    fn direct_build<'a>(
+    async fn direct_build<'a>(
         &'a self,
         source: &'a std::path::Path,
         subdirectory: Option<&'a std::path::Path>,
         output_dir: &'a std::path::Path,
         build_kind: uv_configuration::BuildKind,
         version_id: Option<&'a str>,
-    ) -> impl std::future::Future<
-        Output = anyhow::Result<Option<uv_distribution_filename::DistFilename>, BuildDispatchError>,
-    > + 'a {
-        async { unimplemented!() }
+    ) -> anyhow::Result<Option<uv_distribution_filename::DistFilename>, BuildDispatchError> {
+        unimplemented!()
     }
 }
