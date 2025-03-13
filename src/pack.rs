@@ -202,34 +202,36 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         PackageRecord::validate(conda_packages.iter().map(|(_, p)| p.clone()).collect())?;
     }
 
-    // Download pypi packages.
-    tracing::info!(
-        "Downloading {} pypi packages...",
-        pypi_packages_from_lockfile.len()
-    );
-    eprintln!(
-        "⏳ Downloading {} pypi packages...",
-        pypi_packages_from_lockfile.len()
-    );
-    let bar = ProgressReporter::new(pypi_packages_from_lockfile.len() as u64);
-    stream::iter(pypi_packages_from_lockfile.iter())
-        .map(Ok)
-        .try_for_each_concurrent(50, |_package: &PypiPackageData| async {
-            download_pypi_package(
-                &client,
-                _package,
-                &pypi_directory,
-                options.cache_dir.as_deref(),
-            )
-            .await?;
-            bar.pb.inc(1);
-            Ok(())
-        })
-        .await
-        .map_err(|e: anyhow::Error| anyhow!("could not download pypi package: {}", e))?;
-    bar.pb.finish_and_clear();
-    // Create `index.html` files.
-    create_pypi_htmls(&pypi_packages_from_lockfile, &pypi_directory).await?;
+    if pypi_packages_from_lockfile.len() > 0 {
+        // Download pypi packages.
+        tracing::info!(
+            "Downloading {} pypi packages...",
+            pypi_packages_from_lockfile.len()
+        );
+        eprintln!(
+            "⏳ Downloading {} pypi packages...",
+            pypi_packages_from_lockfile.len()
+        );
+        let bar = ProgressReporter::new(pypi_packages_from_lockfile.len() as u64);
+        stream::iter(pypi_packages_from_lockfile.iter())
+            .map(Ok)
+            .try_for_each_concurrent(50, |_package: &PypiPackageData| async {
+                download_pypi_package(
+                    &client,
+                    _package,
+                    &pypi_directory,
+                    options.cache_dir.as_deref(),
+                )
+                .await?;
+                bar.pb.inc(1);
+                Ok(())
+            })
+            .await
+            .map_err(|e: anyhow::Error| anyhow!("could not download pypi package: {}", e))?;
+        bar.pb.finish_and_clear();
+        // Create `index.html` files.
+        create_pypi_htmls(&pypi_packages_from_lockfile, &pypi_directory).await?;
+    }
 
     // Create `repodata.json` files.
     tracing::info!("Creating repodata.json files");
