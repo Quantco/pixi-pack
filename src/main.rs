@@ -71,7 +71,7 @@ enum Commands {
         create_executable: bool,
 
         /// Experimental support for binary PyPI dependencies.
-        #[arg(long, default_value = "false")]
+        #[arg(long, default_value = "false", conflicts_with = "ignore_pypi_errors")]
         experimental_pypi_support: bool,
     },
     /// Unpack a pixi environment
