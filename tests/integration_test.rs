@@ -665,7 +665,7 @@ fn required_fs_objects_pypi() -> Vec<&'static str> {
         Platform::LinuxAarch64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
         Platform::OsxArm64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
         Platform::Osx64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
-        Platform::Win64 => "Lib/python3.11/site-packages/numpy-2.2.3.dist-info",
+        Platform::Win64 => "lib/site-packages/numpy-2.2.3.dist-info",
         _ => panic!("Unsupported platform"),
     };
     let torch_required_file = match Platform::current() {
@@ -673,7 +673,7 @@ fn required_fs_objects_pypi() -> Vec<&'static str> {
         Platform::LinuxAarch64 => "lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
         Platform::OsxArm64 => "lib/python3.11/site-packages/torch-2.6.0.dist-info",
         Platform::Osx64 => "lib/python3.11/site-packages/torch-2.2.2.dist-info",
-        Platform::Win64 => "Lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
+        Platform::Win64 => "lib/site-packages/torch-2.6.0+cpu.dist-info",
         _ => panic!("Unsupported platform"),
     };
     if cfg!(windows) {
