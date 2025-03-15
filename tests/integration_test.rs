@@ -794,3 +794,50 @@ async fn test_compatibility_with_pypi(
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
 }
+
+#[rstest]
+#[case(Platform::Linux64)]
+#[case(Platform::LinuxAarch64)]
+// #[case(Platform::LinuxPpc64le)]  // pytorch not available
+#[case(Platform::OsxArm64)]
+#[case(Platform::Osx64)]
+#[case(Platform::Win64)]
+// #[case(Platform::WinArm64)] depends on https://github.com/regro/cf-scripts/pull/3194
+#[tokio::test]
+async fn test_reproducible_shasum_pypi(
+    #[case] platform: Platform,
+    #[with(PathBuf::from("examples/pypi-bdist-packages/pixi.toml"), "default".to_string(), platform)]
+    options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.experimental_pypi_support = true;
+    let pack_result = pixi_pack::pack(pack_options.clone()).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let sha256_digest = sha256_digest_bytes(&pack_options.output_file);
+    insta::assert_snapshot!(format!("sha256-{}-pypi", platform), &sha256_digest);
+
+    if platform == Platform::LinuxPpc64le {
+        // pixi-pack not available for ppc64le for now
+        return;
+    }
+
+    // Test with create executable
+    let output_file = options.output_dir.path().join(if platform.is_windows() {
+        "environment.ps1"
+    } else {
+        "environment.sh"
+    });
+
+    let mut pack_options = pack_options.clone();
+    pack_options.create_executable = true;
+    pack_options.output_file = output_file.clone();
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    let sha256_digest = sha256_digest_bytes(&output_file);
+    insta::assert_snapshot!(
+        format!("sha256-{}-pypi-executable", platform),
+        &sha256_digest
+    );
+}
