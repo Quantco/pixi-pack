@@ -643,3 +643,154 @@ async fn test_package_caching(
     assert!(options.pack_options.output_file.exists());
     assert!(output_file2.exists());
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_pypi_sdist_fail(
+    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"))] options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.experimental_pypi_support = true;
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_err());
+    // Error: package pysdl2 is not a built distribution
+    assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
+}
+
+#[fixture]
+fn required_fs_objects_pypi() -> Vec<&'static str> {
+    let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
+    let numpy_required_file = match Platform::current() {
+        Platform::Linux64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
+        Platform::LinuxAarch64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
+        Platform::OsxArm64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
+        Platform::Osx64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
+        Platform::Win64 => "Lib/python3.11/site-packages/numpy-2.2.3.dist-info",
+        _ => panic!("Unsupported platform"),
+    };
+    let torch_required_file = match Platform::current() {
+        Platform::Linux64 => "lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
+        Platform::LinuxAarch64 => "lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
+        Platform::OsxArm64 => "lib/python3.11/site-packages/torch-2.6.0.dist-info",
+        Platform::Osx64 => "lib/python3.11/site-packages/torch-2.2.2.dist-info",
+        Platform::Win64 => "Lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
+        _ => panic!("Unsupported platform"),
+    };
+    if cfg!(windows) {
+        required_fs_objects.extend(vec![
+            "DLLs",
+            "etc",
+            "Lib",
+            "Library",
+            "libs",
+            "Scripts",
+            "Tools",
+            "python.exe",
+            numpy_required_file,
+            torch_required_file,
+        ])
+    } else {
+        required_fs_objects.extend(vec![
+            "bin/python",
+            "lib",
+            "man",
+            "ssl",
+            numpy_required_file,
+            torch_required_file,
+        ]);
+    }
+    required_fs_objects
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pypi_experimental_support(
+    #[with(PathBuf::from("examples/pypi-bdist-packages/pixi.toml"))] options: Options,
+    required_fs_objects_pypi: Vec<&'static str>,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.experimental_pypi_support = true;
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    assert!(pack_file.is_file());
+
+    let env_dir = unpack_options.output_directory.join("env");
+    let activate_file = unpack_options.output_directory.join("activate.sh");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+    assert!(activate_file.is_file());
+
+    required_fs_objects_pypi
+        .iter()
+        .map(|dir| env_dir.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+}
+
+#[rstest]
+#[case("conda")]
+#[case("micromamba")]
+#[tokio::test]
+async fn test_compatibility_with_pypi(
+    #[case] tool: &str,
+    #[with(PathBuf::from("examples/pypi-bdist-packages/pixi.toml"))] options: Options,
+    required_fs_objects_pypi: Vec<&'static str>,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.experimental_pypi_support = true;
+    let pack_file = options.unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    assert!(pack_file.is_file());
+    assert!(pack_file.exists());
+
+    let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
+    let unpack_dir = unpack_dir.path();
+    unarchive(pack_file.as_path(), unpack_dir)
+        .await
+        .expect("Failed to unarchive environment");
+    let environment_file = unpack_dir.join("environment.yml");
+    let channel = unpack_dir.join("channel");
+    assert!(environment_file.is_file());
+    assert!(environment_file.exists());
+    assert!(channel.is_dir());
+    assert!(channel.exists());
+
+    let create_prefix = tempdir().expect("Couldn't create a temp dir for tests");
+    let create_prefix = create_prefix.path().join(tool);
+    let prefix_str = create_prefix
+        .to_str()
+        .expect("Couldn't create conda prefix string");
+    let args = vec![
+        "env",
+        "create",
+        "-y",
+        "-p",
+        prefix_str,
+        "-f",
+        "environment.yml",
+    ];
+    let output = Command::new(tool)
+        .args(args)
+        .current_dir(unpack_dir)
+        .output()
+        .expect("Failed to run create command");
+    assert!(
+        output.status.success(),
+        "Failed to create environment: {:?}",
+        output
+    );
+
+    required_fs_objects_pypi
+        .iter()
+        .map(|dir| create_prefix.join(dir))
+        .for_each(|dir| {
+            assert!(dir.exists(), "{:?} does not exist", dir);
+        });
+}
