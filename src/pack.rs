@@ -123,7 +123,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                         .filter(|x| x.ends_with("whl"))
                         .ok_or_else(|| {
                             anyhow!(
-                                "package {} is not a built distribution",
+                                "package {} is not a wheel file, We currently require all dependencies to be wheels.",
                                 package_name.to_string()
                             )
                         })?;
