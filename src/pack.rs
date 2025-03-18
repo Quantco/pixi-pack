@@ -229,8 +229,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .await
             .map_err(|e: anyhow::Error| anyhow!("could not download pypi package: {}", e))?;
         bar.pb.finish_and_clear();
-        // Create `index.html` files.
-        create_pypi_htmls(&pypi_packages_from_lockfile, &pypi_directory).await?;
     }
 
     // Create `repodata.json` files.
@@ -585,7 +583,8 @@ async fn create_environment_file(
         }
 
         environment.push_str("  - pip:\n");
-        environment.push_str(&format!("    - --index-url ./{PYPI_DIRECTORY_NAME}\n"));
+        environment.push_str("    - --no-index\n");
+        environment.push_str(&format!("    - --find-links ./{PYPI_DIRECTORY_NAME}\n"));
 
         for p in pypi_packages {
             let match_spec_str = format!("{}=={}", p.name, p.version);
@@ -652,9 +651,7 @@ async fn download_pypi_package(
     output_dir: &Path,
     cache_dir: Option<&Path>,
 ) -> Result<()> {
-    let package_name = package.name.to_string();
-    let output_dir = output_dir.join(&package_name);
-    create_dir_all(output_dir.as_path())
+    create_dir_all(output_dir)
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
@@ -669,10 +666,7 @@ async fn download_pypi_package(
     let output_path = output_dir.join(&file_name);
 
     if let Some(cache_dir) = cache_dir {
-        let cache_path = cache_dir
-            .join(PYPI_DIRECTORY_NAME)
-            .join(&package_name)
-            .join(&file_name);
+        let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
         if cache_path.exists() {
             tracing::debug!("Using cached package from {}", cache_path.display());
             fs::copy(&cache_path, &output_path).await?;
@@ -697,45 +691,11 @@ async fn download_pypi_package(
     }
 
     if let Some(cache_dir) = cache_dir {
-        let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME).join(&package_name);
+        let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
         create_dir_all(&cache_subdir).await?;
         let cache_path = cache_subdir.join(&file_name);
         fs::copy(&output_path, &cache_path).await?;
     }
 
-    Ok(())
-}
-
-/// Create `index.html` files from the given packages
-async fn create_pypi_htmls(packages: &Vec<PypiPackageData>, output_dir: &Path) -> Result<()> {
-    if packages.is_empty() {
-        return Ok(());
-    }
-    for p in packages {
-        let package_name = p.name.to_string();
-        let file_name = p
-            .location
-            .file_name()
-            .ok_or_else(|| anyhow!("Package url is not a filename: {}", &package_name))?
-            .to_string();
-        let html_path = output_dir.join(p.name.as_ref()).join("index.html");
-        let mut content = String::new();
-        content.push_str("<!DOCTYPE html><html><body>\n");
-        content.push_str(format!(r#"<a href="{}">{}</a></br>\n"#, file_name, file_name).as_str());
-        content.push_str("</body></html>\n");
-        fs::write(html_path, content.as_bytes()).await?;
-    }
-
-    let mut content = String::new();
-    content.push_str("<!DOCTYPE html><html><body>\n");
-    for p in packages {
-        let package_name = p.name.to_string();
-        content.push_str(
-            format!(r#"<a href="{}">{}</a></br>\n"#, package_name, package_name).as_str(),
-        );
-    }
-    content.push_str("</body></html>\n");
-    let html_path = output_dir.join("index.html");
-    fs::write(html_path, content.as_bytes()).await?;
     Ok(())
 }

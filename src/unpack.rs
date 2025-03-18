@@ -374,17 +374,16 @@ async fn install_pypi_packages(unpack_dir: &Path, target_prefix: &Path) -> Resul
     Ok(())
 }
 
-async fn collect_pypi_packages_in_subdir(subdir: &Path) -> Result<Vec<Dist>> {
-    let mut dirs = fs::read_dir(subdir).await?;
+async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Dist>> {
+    let mut subdirs = fs::read_dir(package_dir)
+        .await
+        .map_err(|e| anyhow!("could not read pypi directory: {}", e))?;
     let mut ret = Vec::new();
-    while let Some(entry) = dirs.next_entry().await? {
+    while let Some(entry) = subdirs.next_entry().await? {
         let file_name = entry
             .file_name()
             .into_string()
             .map_err(|x| anyhow!("Cannot convert filename {:?}", x))?;
-        if file_name == "index.html" {
-            continue;
-        }
         let wheel_file_name = WheelFilename::from_stem(file_name.as_str())
             .map_err(|e| anyhow!("Failed to collect all whl file {}", e))?;
         let dist = Dist::from_file_url(
@@ -394,22 +393,6 @@ async fn collect_pypi_packages_in_subdir(subdir: &Path) -> Result<Vec<Dist>> {
             DistExtension::Wheel,
         )?;
         ret.push(dist);
-    }
-
-    Ok(ret)
-}
-
-async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Dist>> {
-    let mut subdirs = fs::read_dir(package_dir)
-        .await
-        .map_err(|e| anyhow!("could not read channel directory: {}", e))?;
-    let mut ret = Vec::new();
-    while let Some(entry) = subdirs.next_entry().await? {
-        let file_type = entry.file_type().await?;
-        if file_type.is_dir() {
-            let mut wheels = collect_pypi_packages_in_subdir(entry.path().as_path()).await?;
-            ret.append(&mut wheels);
-        }
     }
 
     Ok(ret)
