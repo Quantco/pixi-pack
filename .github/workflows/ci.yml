@@ -50,4 +50,4 @@ jobs:
         with:
           key: tests
       - name: Run test
-        run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu') && ' --no-default-features --features rustls-tls' || '' }} -- --test-threads=4
+        run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu') && ' --no-default-features --features rustls-tls' || '' }} -- --test-threads=1
