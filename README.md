@@ -6,6 +6,7 @@
 [![License][license-badge]](LICENSE)
 [![CI Status][ci-badge]][ci]
 [![Conda Platform][conda-badge]][conda-url]
+[![Conda Downloads][conda-downloads-badge]][conda-url]
 [![Project Chat][chat-badge]][chat-url]
 [![Pixi Badge][pixi-badge]][pixi-url]
 
@@ -13,6 +14,7 @@
 [ci-badge]: https://img.shields.io/github/actions/workflow/status/quantco/pixi-pack/ci.yml?style=flat-square&branch=main
 [ci]: https://github.com/quantco/pixi-pack/actions/
 [conda-badge]: https://img.shields.io/conda/vn/conda-forge/pixi-pack?style=flat-square
+[conda-downloads-badge]: https://img.shields.io/conda/dn/conda-forge/pixi-pack?style=flat-square
 [conda-url]: https://prefix.dev/channels/conda-forge/packages/pixi-pack
 [chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
 [chat-url]: https://discord.gg/kKV8ZxyzY4
