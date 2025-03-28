@@ -1,0 +1,5 @@
+---
+source: tests/integration_test.rs
+expression: "&sha256_digest"
+---
+75182FD36E9AC238E5E6B465B99198FF136D4D6F613CCAEAF0CA85B3D6137185
