@@ -398,7 +398,7 @@ async fn test_non_authenticated(
         .err()
         .unwrap()
         .to_string()
-        .contains("failed to download"));
+        .contains("could not download package"));
 }
 
 #[rstest]
