@@ -284,13 +284,7 @@ async fn download_package(
         UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
     };
     let mut response = client.get(url.clone()).send().await?;
-    if response.status().is_client_error() {
-        return Err(anyhow!(
-            "failed to download {}: {}",
-            url,
-            response.text().await?
-        ));
-    }
+    response = response.error_for_status()?;
 
     while let Some(chunk) = response.chunk().await? {
         dest.write_all(&chunk).await?;
