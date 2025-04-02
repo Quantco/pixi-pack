@@ -653,27 +653,19 @@ async fn test_pypi_sdist_fail(
     pack_options.experimental_pypi_support = true;
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_err());
-    // Error: package pysdl2 is not a built distribution
+    // Error: package pysdl2 is not a wheel file, We currently require all dependencies to be wheels.
     assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
 }
 
 #[fixture]
 fn required_fs_objects_pypi() -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
-    let numpy_required_file = match Platform::current() {
-        Platform::Linux64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
-        Platform::LinuxAarch64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
-        Platform::OsxArm64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
-        Platform::Osx64 => "lib/python3.11/site-packages/numpy-2.2.3.dist-info",
-        Platform::Win64 => "lib/site-packages/numpy-2.2.3.dist-info",
-        _ => panic!("Unsupported platform"),
-    };
-    let torch_required_file = match Platform::current() {
-        Platform::Linux64 => "lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
-        Platform::LinuxAarch64 => "lib/python3.11/site-packages/torch-2.6.0+cpu.dist-info",
-        Platform::OsxArm64 => "lib/python3.11/site-packages/torch-2.6.0.dist-info",
-        Platform::Osx64 => "lib/python3.11/site-packages/torch-2.2.2.dist-info",
-        Platform::Win64 => "lib/site-packages/torch-2.6.0+cpu.dist-info",
+    let ordered_enum_required_file = match Platform::current() {
+        Platform::Linux64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::LinuxAarch64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::OsxArm64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::Osx64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::Win64 => "lib/site-packages/ordered_enum-0.0.9.dist-info",
         _ => panic!("Unsupported platform"),
     };
     if cfg!(windows) {
@@ -686,8 +678,7 @@ fn required_fs_objects_pypi() -> Vec<&'static str> {
             "Scripts",
             "Tools",
             "python.exe",
-            numpy_required_file,
-            torch_required_file,
+            ordered_enum_required_file,
         ])
     } else {
         required_fs_objects.extend(vec![
@@ -695,8 +686,7 @@ fn required_fs_objects_pypi() -> Vec<&'static str> {
             "lib",
             "man",
             "ssl",
-            numpy_required_file,
-            torch_required_file,
+            ordered_enum_required_file,
         ]);
     }
     required_fs_objects

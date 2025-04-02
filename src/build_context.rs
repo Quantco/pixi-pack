@@ -4,18 +4,18 @@ use uv_pypi_types::Requirement;
 use uv_types::BuildContext;
 
 /// Create a dummy build context, because we don't need to build any package.
-pub struct DummyBuildContext {
+pub struct PixiPackBuildContext {
     pub cache: uv_cache::Cache,
 }
 
-impl DummyBuildContext {
+impl PixiPackBuildContext {
     pub fn new(cache: uv_cache::Cache) -> Self {
         Self { cache }
     }
 }
 
 #[allow(refining_impl_trait, unused_variables)]
-impl BuildContext for DummyBuildContext {
+impl BuildContext for PixiPackBuildContext {
     type SourceDistBuilder = uv_build_frontend::SourceBuild;
 
     fn interpreter(&self) -> &uv_python::Interpreter {

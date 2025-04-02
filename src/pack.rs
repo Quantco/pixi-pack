@@ -215,10 +215,10 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         let bar = ProgressReporter::new(pypi_packages_from_lockfile.len() as u64);
         stream::iter(pypi_packages_from_lockfile.iter())
             .map(Ok)
-            .try_for_each_concurrent(50, |_package: &PypiPackageData| async {
+            .try_for_each_concurrent(50, |package: &PypiPackageData| async {
                 download_pypi_package(
                     &client,
-                    _package,
+                    package,
                     &pypi_directory,
                     options.cache_dir.as_deref(),
                 )
@@ -572,7 +572,6 @@ async fn create_environment_file(
     if !pypi_packages.is_empty() {
         if !has_pip {
             tracing::warn!("conda/micromamba compatibility mode cannot work if no pip installed.");
-            eprintln!("⚠️ conda/micromamba compatibility mode cannot work if no pip installed.");
         }
 
         environment.push_str("  - pip:\n");
@@ -580,8 +579,7 @@ async fn create_environment_file(
         environment.push_str(&format!("    - --find-links ./{PYPI_DIRECTORY_NAME}\n"));
 
         for p in pypi_packages {
-            let match_spec_str = format!("{}=={}", p.name, p.version);
-            environment.push_str(&format!("    - {}\n", match_spec_str));
+            environment.push_str(&format!("    - {}=={}\n", p.name, p.version));
         }
     }
 
@@ -654,7 +652,7 @@ async fn download_pypi_package(
     };
 
     // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
-    // Because it maybe percent-encoded
+    // Because it may be percent-encoded
     let file_name = url.filename()?.to_string();
     let output_path = output_dir.join(&file_name);
 
@@ -670,14 +668,7 @@ async fn download_pypi_package(
     let mut dest = File::create(&output_path).await?;
     tracing::debug!("Fetching package {}", url);
 
-    let mut response = client.get(url.clone()).send().await?;
-    if response.status().is_client_error() {
-        return Err(anyhow!(
-            "failed to download {}: {}",
-            url,
-            response.text().await?
-        ));
-    }
+    let mut response = client.get(url.clone()).send().await?.error_for_status()?;
 
     while let Some(chunk) = response.chunk().await? {
         dest.write_all(&chunk).await?;

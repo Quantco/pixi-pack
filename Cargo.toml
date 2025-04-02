@@ -56,22 +56,22 @@ fxhash = "0.2.1"
 tempfile = "3.17.1"
 walkdir = "2.5.0"
 base64 = "0.22.1"
-uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
 uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
 uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
 uv-distribution-types = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-pypi-types = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
 uv-git = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
-uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-pypi-types = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
+uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.5.29" }
 
 [dev-dependencies]
 async-std = "1.13.0"
