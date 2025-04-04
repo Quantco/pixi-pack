@@ -389,7 +389,7 @@ async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Arc<Dist>>> {
             .map_err(|x| anyhow!("cannot convert filename {:?}", x))?;
         let file_base = file_name
             .strip_suffix(".whl")
-            .ok_or(anyhow!("filename does not end with .whl"))?;
+            .expect("filename does not end with .whl");
         let wheel_file_name = WheelFilename::from_stem(file_base)?;
         let dist = Arc::new(Dist::from_file_url(
             wheel_file_name.name.clone(),
