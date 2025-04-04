@@ -1,5 +1,6 @@
 use std::{
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -386,11 +387,8 @@ async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Arc<Dist>>> {
         let file_name = entry
             .file_name()
             .into_string()
-            .map_err(|x| anyhow!("cannot convert filename {:?}", x))?;
-        let file_base = file_name
-            .strip_suffix(".whl")
-            .expect("filename does not end with .whl");
-        let wheel_file_name = WheelFilename::from_stem(file_base)?;
+            .map_err(|x| anyhow!("cannot convert filename into string {:?}", x))?;
+        let wheel_file_name = WheelFilename::from_str(&file_name)?;
         let dist = Arc::new(Dist::from_file_url(
             wheel_file_name.name.clone(),
             VerbatimUrl::from_absolute_path(entry.path().clone())?,
