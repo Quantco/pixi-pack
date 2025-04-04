@@ -22,7 +22,7 @@ use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Plat
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
 };
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
+use rattler_networking::{authentication_storage, AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::{Builder, HeaderMode};
 use uv_distribution_types::RemoteSource;
@@ -275,10 +275,27 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
 /// Get the authentication storage from the given auth file path.
 fn get_auth_store(auth_file: Option<PathBuf>) -> Result<AuthenticationStorage> {
-    match auth_file {
-        Some(auth_file) => Ok(AuthenticationStorage::from_file(&auth_file)?),
-        None => Ok(rattler_networking::AuthenticationStorage::default()),
+    let mut store = AuthenticationStorage::from_env_and_defaults()?;
+    if let Some(auth_file) = auth_file {
+        tracing::info!("Loading authentication from file: {:?}", auth_file);
+
+        if !auth_file.exists() {
+            return Err(anyhow::anyhow!(
+                "Authentication file does not exist: {:?}",
+                auth_file
+            ));
+        }
+
+        store.backends.insert(
+            0,
+            Arc::from(
+                authentication_storage::backends::file::FileStorage::from_path(PathBuf::from(
+                    &auth_file,
+                ))?,
+            ),
+        );
     }
+    Ok(store)
 }
 
 /// Create a reqwest client (optionally including authentication middleware).
@@ -295,7 +312,9 @@ fn reqwest_client_from_auth_storage(auth_file: Option<PathBuf>) -> Result<Client
             .build()
             .map_err(|e| anyhow!("could not create download client: {}", e))?,
     )
-    .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+    .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+        auth_storage,
+    )))
     .build();
     Ok(client)
 }

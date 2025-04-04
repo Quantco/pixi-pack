@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 use anyhow::{anyhow, Result};
 use futures::{
@@ -320,7 +324,7 @@ async fn install_pypi_packages(
     if !pypi_directory.exists() {
         return Ok(());
     }
-    tracing::info!("Install pypi packages");
+    tracing::info!("Installing pypi packages");
 
     // Find installed python in this prefix
     let python_record = installed_conda_packages
@@ -328,7 +332,7 @@ async fn install_pypi_packages(
         .find(|x| x.name.as_normalized() == "python");
     let python_record = python_record.ok_or_else(|| anyhow!("No python record found."))?;
     let python_info = PythonInfo::from_python_record(python_record, Platform::current())?;
-    tracing::debug!("Current Python is {:?}", python_info);
+    tracing::debug!("Current Python is: {:?}", python_info);
     let pypi_cache =
         uv_cache::Cache::temp().map_err(|e| anyhow!("Could not create cache folder: {}", e))?;
     // Find a working python interpreter
@@ -373,24 +377,24 @@ async fn install_pypi_packages(
     Ok(())
 }
 
-async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Dist>> {
+async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Arc<Dist>>> {
     let mut entries = fs::read_dir(package_dir)
         .await
         .map_err(|e| anyhow!("could not read pypi directory: {}", e))?;
     let mut ret = Vec::new();
     while let Some(entry) = entries.next_entry().await? {
+        tracing::trace!("Processing file: {:?}", entry.path());
         let file_name = entry
             .file_name()
             .into_string()
-            .map_err(|x| anyhow!("cannot convert filename {:?}", x))?;
-        let wheel_file_name = WheelFilename::from_stem(file_name.as_str())
-            .map_err(|e| anyhow!("failed to collect all wheel file: {}", e))?;
-        let dist = Dist::from_file_url(
+            .map_err(|x| anyhow!("cannot convert filename into string {:?}", x))?;
+        let wheel_file_name = WheelFilename::from_str(&file_name)?;
+        let dist = Arc::new(Dist::from_file_url(
             wheel_file_name.name.clone(),
             VerbatimUrl::from_absolute_path(entry.path().clone())?,
             entry.path().as_path(),
             DistExtension::Wheel,
-        )?;
+        )?);
         ret.push(dist);
     }
 
