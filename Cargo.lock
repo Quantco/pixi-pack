@@ -2979,9 +2979,9 @@ dependencies = [
  "uv-install-wheel",
  "uv-installer",
  "uv-pep508",
- "uv-pypi-types",
  "uv-python",
  "uv-types",
+ "uv-workspace",
  "walkdir",
 ]
 

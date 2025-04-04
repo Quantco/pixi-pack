@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{anyhow, Result};
 use futures::{
@@ -373,7 +376,7 @@ async fn install_pypi_packages(
     Ok(())
 }
 
-async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Dist>> {
+async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Arc<Dist>>> {
     let mut entries = fs::read_dir(package_dir)
         .await
         .map_err(|e| anyhow!("could not read pypi directory: {}", e))?;
@@ -385,12 +388,12 @@ async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Dist>> {
             .map_err(|x| anyhow!("cannot convert filename {:?}", x))?;
         let wheel_file_name = WheelFilename::from_stem(file_name.as_str())
             .map_err(|e| anyhow!("failed to collect all wheel file: {}", e))?;
-        let dist = Dist::from_file_url(
+        let dist = Arc::new(Dist::from_file_url(
             wheel_file_name.name.clone(),
             VerbatimUrl::from_absolute_path(entry.path().clone())?,
             entry.path().as_path(),
             DistExtension::Wheel,
-        )?;
+        )?);
         ret.push(dist);
     }
 

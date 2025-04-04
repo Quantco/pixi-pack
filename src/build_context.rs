@@ -1,7 +1,7 @@
 use uv_dispatch::BuildDispatchError;
 use uv_git::GitResolver;
-use uv_pypi_types::Requirement;
 use uv_types::BuildContext;
+use uv_workspace::WorkspaceCache;
 
 /// Create a dummy build context, because we don't need to build any package.
 pub struct PixiPackBuildContext {
@@ -56,7 +56,7 @@ impl BuildContext for PixiPackBuildContext {
 
     async fn resolve<'a>(
         &'a self,
-        requirements: &'a [Requirement],
+        requirements: &'a [uv_distribution_types::Requirement],
         build_stack: &'a uv_types::BuildStack,
     ) -> anyhow::Result<uv_distribution_types::Resolution, BuildDispatchError> {
         unimplemented!()
@@ -94,6 +94,10 @@ impl BuildContext for PixiPackBuildContext {
         build_kind: uv_configuration::BuildKind,
         version_id: Option<&'a str>,
     ) -> anyhow::Result<Option<uv_distribution_filename::DistFilename>, BuildDispatchError> {
+        unimplemented!()
+    }
+
+    fn workspace_cache(&self) -> &WorkspaceCache {
         unimplemented!()
     }
 }
