@@ -10,7 +10,7 @@ use rattler::{
     install::{Installer, PythonInfo},
     package_cache::{CacheKey, PackageCache},
 };
-use rattler_conda_types::{PackageRecord, Platform, PrefixRecord, RepoData, RepoDataRecord};
+use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
 use rattler_package_streaming::fs::extract;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
@@ -65,11 +65,11 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
     let cache_dir = unpack_dir.join("cache");
-    create_prefix(&channel_directory, &target_prefix, &cache_dir)
+    let packages = create_prefix(&channel_directory, &target_prefix, &cache_dir)
         .await
         .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
 
-    install_pypi_packages(unpack_dir, &target_prefix)
+    install_pypi_packages(unpack_dir, &target_prefix, packages)
         .await
         .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;
 
@@ -188,7 +188,11 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Path) -> Result<()> {
+async fn create_prefix(
+    channel_dir: &Path,
+    target_prefix: &Path,
+    cache_dir: &Path,
+) -> Result<FxHashMap<String, PackageRecord>> {
     let packages = collect_packages(channel_dir)
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
@@ -204,7 +208,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
     tracing::info!("Creating cache with {} packages", packages.len());
     let package_cache = PackageCache::new(cache_dir);
 
-    let repodata_records: Vec<RepoDataRecord> = stream::iter(packages)
+    let repodata_records: Vec<RepoDataRecord> = stream::iter(packages.clone())
         .map(|(file_name, package_record)| {
             let cache_key = CacheKey::from(&package_record);
 
@@ -281,7 +285,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
     .map_err(|e| anyhow!("Could not write history file: {}", e))
     .await?;
 
-    Ok(())
+    Ok(packages)
 }
 
 async fn create_activation_script(
@@ -307,23 +311,23 @@ async fn create_activation_script(
     Ok(())
 }
 
-async fn install_pypi_packages(unpack_dir: &Path, target_prefix: &Path) -> Result<()> {
+async fn install_pypi_packages(
+    unpack_dir: &Path,
+    target_prefix: &Path,
+    installed_conda_packages: FxHashMap<String, PackageRecord>,
+) -> Result<()> {
     let pypi_directory = unpack_dir.join(PYPI_DIRECTORY_NAME);
     if !pypi_directory.exists() {
         return Ok(());
     }
     tracing::info!("Install pypi packages");
-    let installed_conda_packages = PrefixRecord::collect_from_prefix(target_prefix)
-        .map_err(|e| anyhow!(format!("Cannot collect pixi prefix: {}", e)))?;
+
     // Find installed python in this prefix
     let python_record = installed_conda_packages
-        .iter()
-        .find(|x| x.repodata_record.package_record.name.as_normalized() == "python");
+        .values()
+        .find(|x| x.name.as_normalized() == "python");
     let python_record = python_record.ok_or_else(|| anyhow!("No python record found."))?;
-    let python_info = PythonInfo::from_python_record(
-        &python_record.repodata_record.package_record,
-        Platform::current(),
-    )?;
+    let python_info = PythonInfo::from_python_record(python_record, Platform::current())?;
     tracing::debug!("Current Python is {:?}", python_info);
     let pypi_cache =
         uv_cache::Cache::temp().map_err(|e| anyhow!("Could not create cache folder: {}", e))?;
@@ -355,12 +359,12 @@ async fn install_pypi_packages(unpack_dir: &Path, target_prefix: &Path) -> Resul
     );
     let resolution = Resolution::default();
     let inflight = InFlight::default();
-    // unzip all wheel package
+    // unzip all wheel packages
     let unzipped_dists = preparer
         .prepare(wheels.clone(), &inflight, &resolution)
         .await
         .map_err(|e| anyhow!("Could not unzip all pypi packages: {}", e))?;
-    // install all wheel package
+    // install all wheel packages
     uv_installer::Installer::new(&venv)
         .install(unzipped_dists)
         .await

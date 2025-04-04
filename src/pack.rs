@@ -47,7 +47,6 @@ pub struct PackOptions {
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_errors: bool,
     pub create_executable: bool,
-    pub experimental_pypi_support: bool,
 }
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     if !manifest_path.exists() {
@@ -115,7 +114,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     tracing::warn!(
                         "ignoring PyPI package since PyPI packages are not supported by pixi-pack"
                     );
-                } else if options.experimental_pypi_support {
+                } else {
                     let package_name = pypi_data.name.clone();
                     let location = pypi_data.location.clone();
                     location
@@ -123,13 +122,11 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                         .filter(|x| x.ends_with("whl"))
                         .ok_or_else(|| {
                             anyhow!(
-                                "package {} is not a wheel file, We currently require all dependencies to be wheels.",
+                                "package {} is not a wheel file, we currently require all dependencies to be wheels.",
                                 package_name.to_string()
                             )
                         })?;
                     pypi_packages_from_lockfile.push(pypi_data.clone());
-                } else {
-                    anyhow::bail!("PyPI packages are not supported in pixi-pack");
                 }
             }
         }
