@@ -42,7 +42,7 @@ enum Commands {
         platform: Platform,
 
         /// Authentication file for fetching packages
-        #[arg(long)] // TODO: Read from environment variable?
+        #[arg(long)]
         auth_file: Option<PathBuf>,
 
         /// The path to `pixi.toml`, `pyproject.toml`, or the project directory
