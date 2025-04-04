@@ -19,14 +19,18 @@ use anyhow::Result;
 use base64::engine::{general_purpose::STANDARD, Engine};
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
-use rattler_lock::{CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, UrlOrPath};
+use rattler_lock::{
+    CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
+};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::{Builder, HeaderMode};
+use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
 
 use crate::{
     get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
+    PYPI_DIRECTORY_NAME,
 };
 use anyhow::anyhow;
 
@@ -92,8 +96,10 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
 
     let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
+    let pypi_directory = output_folder.path().join(PYPI_DIRECTORY_NAME);
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
+    let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
 
     for package in packages {
         match package {
@@ -103,13 +109,24 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             LockedPackageRef::Conda(CondaPackageData::Source(_)) => {
                 anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
             }
-            LockedPackageRef::Pypi(_, _) => {
+            LockedPackageRef::Pypi(pypi_data, _) => {
                 if options.ignore_pypi_errors {
                     tracing::warn!(
                         "ignoring PyPI package since PyPI packages are not supported by pixi-pack"
                     );
                 } else {
-                    anyhow::bail!("PyPI packages are not supported in pixi-pack");
+                    let package_name = pypi_data.name.clone();
+                    let location = pypi_data.location.clone();
+                    location
+                        .file_name()
+                        .filter(|x| x.ends_with("whl"))
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "package {} is not a wheel file, we currently require all dependencies to be wheels.",
+                                package_name.to_string()
+                            )
+                        })?;
+                    pypi_packages_from_lockfile.push(pypi_data.clone());
                 }
             }
         }
@@ -182,6 +199,35 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         PackageRecord::validate(conda_packages.iter().map(|(_, p)| p.clone()).collect())?;
     }
 
+    if !pypi_packages_from_lockfile.is_empty() {
+        // Download pypi packages.
+        tracing::info!(
+            "Downloading {} pypi packages...",
+            pypi_packages_from_lockfile.len()
+        );
+        eprintln!(
+            "⏳ Downloading {} pypi packages...",
+            pypi_packages_from_lockfile.len()
+        );
+        let bar = ProgressReporter::new(pypi_packages_from_lockfile.len() as u64);
+        stream::iter(pypi_packages_from_lockfile.iter())
+            .map(Ok)
+            .try_for_each_concurrent(50, |package: &PypiPackageData| async {
+                download_pypi_package(
+                    &client,
+                    package,
+                    &pypi_directory,
+                    options.cache_dir.as_deref(),
+                )
+                .await?;
+                bar.pb.inc(1);
+                Ok(())
+            })
+            .await
+            .map_err(|e: anyhow::Error| anyhow!("could not download pypi package: {}", e))?;
+        bar.pb.finish_and_clear();
+    }
+
     // Create `repodata.json` files.
     tracing::info!("Creating repodata.json files");
     create_repodata_files(conda_packages.iter(), &channel_dir).await?;
@@ -194,7 +240,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // Create environment file.
     tracing::info!("Creating environment.yml file");
-    create_environment_file(output_folder.path(), conda_packages.iter().map(|(_, p)| p)).await?;
+    create_environment_file(
+        output_folder.path(),
+        conda_packages.iter().map(|(_, p)| p),
+        &pypi_packages_from_lockfile,
+    )
+    .await?;
 
     // Pack = archive the contents.
     tracing::info!("Creating pack at {}", options.output_file.display());
@@ -488,6 +539,7 @@ async fn create_self_extracting_executable(
 async fn create_environment_file(
     destination: &Path,
     packages: impl IntoIterator<Item = &PackageRecord>,
+    pypi_packages: &Vec<PypiPackageData>,
 ) -> Result<()> {
     let environment_path = destination.join("environment.yml");
 
@@ -498,6 +550,7 @@ async fn create_environment_file(
     environment.push_str("  - nodefaults\n");
     environment.push_str("dependencies:\n");
 
+    let mut has_pip = false;
     for package in packages {
         let match_spec_str = format!(
             "{}={}={}",
@@ -507,6 +560,24 @@ async fn create_environment_file(
         );
 
         environment.push_str(&format!("  - {}\n", match_spec_str));
+
+        if package.name.as_normalized() == "pip" {
+            has_pip = true;
+        }
+    }
+
+    if !pypi_packages.is_empty() {
+        if !has_pip {
+            tracing::warn!("conda/micromamba compatibility mode cannot work if no pip installed.");
+        }
+
+        environment.push_str("  - pip:\n");
+        environment.push_str("    - --no-index\n");
+        environment.push_str(&format!("    - --find-links ./{PYPI_DIRECTORY_NAME}\n"));
+
+        for p in pypi_packages {
+            environment.push_str(&format!("    - {}=={}\n", p.name, p.version));
+        }
     }
 
     fs::write(environment_path.as_path(), environment)
@@ -556,6 +627,55 @@ async fn create_repodata_files(
         fs::write(repodata_path.as_path(), repodata_json)
             .map_err(|e| anyhow!("could not write repodata: {}", e))
             .await?;
+    }
+
+    Ok(())
+}
+
+/// Download a pypi package to a given output directory
+async fn download_pypi_package(
+    client: &ClientWithMiddleware,
+    package: &PypiPackageData,
+    output_dir: &Path,
+    cache_dir: Option<&Path>,
+) -> Result<()> {
+    create_dir_all(output_dir)
+        .await
+        .map_err(|e| anyhow!("could not create download directory: {}", e))?;
+
+    let url = match &package.location {
+        UrlOrPath::Url(url) => url,
+        UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
+    };
+
+    // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
+    // Because it may be percent-encoded
+    let file_name = url.filename()?.to_string();
+    let output_path = output_dir.join(&file_name);
+
+    if let Some(cache_dir) = cache_dir {
+        let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
+        if cache_path.exists() {
+            tracing::debug!("Using cached package from {}", cache_path.display());
+            fs::copy(&cache_path, &output_path).await?;
+            return Ok(());
+        }
+    }
+
+    let mut dest = File::create(&output_path).await?;
+    tracing::debug!("Fetching package {}", url);
+
+    let mut response = client.get(url.clone()).send().await?.error_for_status()?;
+
+    while let Some(chunk) = response.chunk().await? {
+        dest.write_all(&chunk).await?;
+    }
+
+    if let Some(cache_dir) = cache_dir {
+        let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
+        create_dir_all(&cache_subdir).await?;
+        let cache_path = cache_subdir.join(&file_name);
+        fs::copy(&output_path, &cache_path).await?;
     }
 
     Ok(())

@@ -14,6 +14,7 @@ use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
+use serial_test::serial;
 use tempfile::{tempdir, TempDir};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -75,7 +76,7 @@ fn options(
     }
 }
 #[fixture]
-fn required_fs_objects() -> Vec<&'static str> {
+fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
     let openssl_required_file = match Platform::current() {
         Platform::Linux64 => "conda-meta/openssl-3.3.1-h4ab18f5_0.json",
@@ -85,6 +86,19 @@ fn required_fs_objects() -> Vec<&'static str> {
         Platform::Win64 => "conda-meta/openssl-3.3.1-h2466b09_0.json",
         _ => panic!("Unsupported platform"),
     };
+    let ordered_enum_required_file = match Platform::current() {
+        Platform::Linux64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::LinuxAarch64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::OsxArm64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::Osx64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::Win64 => "lib/site-packages/ordered_enum-0.0.9.dist-info",
+        _ => panic!("Unsupported platform"),
+    };
+    if use_pypi {
+        required_fs_objects.push(ordered_enum_required_file);
+    } else {
+        required_fs_objects.push(openssl_required_file);
+    }
     if cfg!(windows) {
         required_fs_objects.extend(vec![
             "DLLs",
@@ -95,24 +109,27 @@ fn required_fs_objects() -> Vec<&'static str> {
             "Scripts",
             "Tools",
             "python.exe",
-            openssl_required_file,
         ])
     } else {
-        required_fs_objects.extend(vec![
-            "bin/python",
-            "lib",
-            "man",
-            "ssl",
-            openssl_required_file,
-        ]);
+        required_fs_objects.extend(vec!["bin/python", "lib", "man", "ssl"]);
     }
     required_fs_objects
 }
 
 #[rstest]
+#[case(false)]
+#[case(true)]
 #[tokio::test]
-async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static str>) {
-    let pack_options = options.pack_options;
+async fn test_simple_python(
+    #[case] use_pypi: bool,
+    options: Options,
+    #[with(use_pypi)] required_fs_objects: Vec<&'static str>,
+) {
+    let mut pack_options = options.pack_options;
+    if use_pypi {
+        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
+    }
+
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
@@ -235,15 +252,22 @@ async fn test_includes_repodata_patches(
 }
 
 #[rstest]
-#[case("conda")]
-#[case("micromamba")]
+#[case("conda", false)]
+#[case("micromamba", false)]
+#[case("conda", true)]
+#[case("micromamba", true)]
 #[tokio::test]
+#[serial]
 async fn test_compatibility(
     #[case] tool: &str,
+    #[case] use_pypi: bool,
     options: Options,
-    required_fs_objects: Vec<&'static str>,
+    #[with(use_pypi)] required_fs_objects: Vec<&'static str>,
 ) {
-    let pack_options = options.pack_options;
+    let mut pack_options = options.pack_options;
+    if use_pypi {
+        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
+    }
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
@@ -321,24 +345,39 @@ fn sha256_digest_bytes(path: &PathBuf) -> String {
 }
 
 #[rstest]
-#[case(Platform::Linux64)]
-#[case(Platform::LinuxAarch64)]
-#[case(Platform::LinuxPpc64le)]
-#[case(Platform::OsxArm64)]
-#[case(Platform::Osx64)]
-#[case(Platform::Win64)]
-// #[case(Platform::WinArm64)] depends on https://github.com/regro/cf-scripts/pull/3194
+#[case(Platform::Linux64, false)]
+#[case(Platform::Linux64, true)]
+#[case(Platform::LinuxAarch64, false)]
+#[case(Platform::LinuxAarch64, true)]
+#[case(Platform::LinuxPpc64le, false)]
+#[case(Platform::LinuxPpc64le, true)]
+#[case(Platform::OsxArm64, false)]
+#[case(Platform::OsxArm64, true)]
+#[case(Platform::Osx64, false)]
+#[case(Platform::Osx64, true)]
+#[case(Platform::Win64, false)]
+#[case(Platform::Win64, true)]
+// #[case(Platform::WinArm64, false)] depends on https://github.com/regro/cf-scripts/pull/3194
 #[tokio::test]
 async fn test_reproducible_shasum(
     #[case] platform: Platform,
+    #[case] use_pypi: bool,
     #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform)]
     options: Options,
 ) {
-    let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
+    let mut pack_options = options.pack_options.clone();
+    if use_pypi {
+        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
+    }
+    let pack_result = pixi_pack::pack(pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    let sha256_digest = sha256_digest_bytes(&options.pack_options.output_file);
-    insta::assert_snapshot!(format!("sha256-{}", platform), &sha256_digest);
+    let sha256_digest = sha256_digest_bytes(&pack_options.output_file);
+    let pypi_suffix = if use_pypi { "-pypi" } else { "" };
+    insta::assert_snapshot!(
+        format!("sha256-{}{}", platform, pypi_suffix),
+        &sha256_digest
+    );
 
     if platform == Platform::LinuxPpc64le {
         // pixi-pack not available for ppc64le for now
@@ -352,14 +391,16 @@ async fn test_reproducible_shasum(
         "environment.sh"
     });
 
-    let mut pack_options = options.pack_options.clone();
     pack_options.create_executable = true;
     pack_options.output_file = output_file.clone();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
     let sha256_digest = sha256_digest_bytes(&output_file);
-    insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
+    insta::assert_snapshot!(
+        format!("sha256-{}{}-executable", platform, pypi_suffix),
+        &sha256_digest
+    );
 }
 
 #[rstest]
@@ -641,4 +682,15 @@ async fn test_package_caching(
     // Both output files should exist and be valid
     assert!(options.pack_options.output_file.exists());
     assert!(output_file2.exists());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pypi_sdist_fail(
+    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"))] options: Options,
+) {
+    let pack_result = pixi_pack::pack(options.pack_options).await;
+    assert!(pack_result.is_err());
+    // Error: package pysdl2 is not a wheel file, we currently require all dependencies to be wheels.
+    assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
 }
