@@ -117,9 +117,19 @@ fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
 }
 
 #[rstest]
+#[case(false)]
+#[case(true)]
 #[tokio::test]
-async fn test_simple_python(options: Options, required_fs_objects: Vec<&'static str>) {
-    let pack_options = options.pack_options;
+async fn test_simple_python(
+    #[case] use_pypi: bool,
+    options: Options,
+    #[with(use_pypi)] required_fs_objects: Vec<&'static str>,
+) {
+    let mut pack_options = options.pack_options;
+    if use_pypi {
+        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
+    }
+
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
@@ -256,7 +266,7 @@ async fn test_compatibility(
 ) {
     let mut pack_options = options.pack_options;
     if use_pypi {
-        pack_options.manifest_path = PathBuf::from("examples/pypi-bdist-packages/pixi.toml")
+        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
     }
     let pack_file = options.unpack_options.pack_file.clone();
 
@@ -336,18 +346,18 @@ fn sha256_digest_bytes(path: &PathBuf) -> String {
 
 #[rstest]
 #[case(Platform::Linux64, false)]
-#[case(Platform::LinuxAarch64, false)]
-#[case(Platform::LinuxPpc64le, false)]
-#[case(Platform::OsxArm64, false)]
-#[case(Platform::Osx64, false)]
-#[case(Platform::Win64, false)]
 #[case(Platform::Linux64, true)]
+#[case(Platform::LinuxAarch64, false)]
 #[case(Platform::LinuxAarch64, true)]
+#[case(Platform::LinuxPpc64le, false)]
 #[case(Platform::LinuxPpc64le, true)]
+#[case(Platform::OsxArm64, false)]
 #[case(Platform::OsxArm64, true)]
+#[case(Platform::Osx64, false)]
 #[case(Platform::Osx64, true)]
+#[case(Platform::Win64, false)]
 #[case(Platform::Win64, true)]
-// #[case(Platform::WinArm64)] depends on https://github.com/regro/cf-scripts/pull/3194
+// #[case(Platform::WinArm64, false)] depends on https://github.com/regro/cf-scripts/pull/3194
 #[tokio::test]
 async fn test_reproducible_shasum(
     #[case] platform: Platform,
@@ -357,7 +367,7 @@ async fn test_reproducible_shasum(
 ) {
     let mut pack_options = options.pack_options.clone();
     if use_pypi {
-        pack_options.manifest_path = PathBuf::from("examples/pypi-bdist-packages/pixi.toml")
+        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
     }
     let pack_result = pixi_pack::pack(pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
@@ -683,32 +693,4 @@ async fn test_pypi_sdist_fail(
     assert!(pack_result.is_err());
     // Error: package pysdl2 is not a wheel file, we currently require all dependencies to be wheels.
     assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
-}
-
-#[rstest]
-#[tokio::test]
-async fn test_pypi_experimental_support(
-    #[with(PathBuf::from("examples/pypi-bdist-packages/pixi.toml"))] options: Options,
-    #[with(true)] required_fs_objects: Vec<&'static str>,
-) {
-    let pack_options = options.pack_options;
-    let unpack_options = options.unpack_options;
-    let pack_file = unpack_options.pack_file.clone();
-
-    let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok(), "{:?}", pack_result);
-    assert!(pack_file.is_file());
-
-    let env_dir = unpack_options.output_directory.join("env");
-    let activate_file = unpack_options.output_directory.join("activate.sh");
-    let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
-    assert!(activate_file.is_file());
-
-    required_fs_objects
-        .iter()
-        .map(|dir| env_dir.join(dir))
-        .for_each(|dir| {
-            assert!(dir.exists(), "{:?} does not exist", dir);
-        });
 }
