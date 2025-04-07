@@ -33,7 +33,7 @@ fn options(
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
-    #[default(false)] ignore_pypi_errors: bool,
+    #[default(false)] ignore_pypi_non_wheel: bool,
     #[default("env")] env_name: String,
     #[default(false)] create_executable: bool,
 ) -> Options {
@@ -62,7 +62,7 @@ fn options(
             manifest_path,
             metadata,
             injected_packages: vec![],
-            ignore_pypi_errors,
+            ignore_pypi_non_wheel,
             create_executable,
             cache_dir: None,
         },
@@ -325,15 +325,19 @@ async fn test_compatibility(
 #[case(true, false)]
 #[case(false, true)]
 #[tokio::test]
-async fn test_pypi_ignore(
-    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"))] options: Options,
-    #[case] ignore_pypi_errors: bool,
+async fn test_pypi_non_wheel_ignore(
+    #[with(PathBuf::from("examples/pypi-non-wheel-packages/pixi.toml"))] options: Options,
+    #[case] ignore_pypi_non_wheel: bool,
     #[case] should_fail: bool,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.ignore_pypi_errors = ignore_pypi_errors;
+    pack_options.ignore_pypi_non_wheel = ignore_pypi_non_wheel;
     let pack_result = pixi_pack::pack(pack_options).await;
     assert_eq!(pack_result.is_err(), should_fail);
+    // Error: package pysdl2 is not a wheel file, we require all dependencies to be wheels.
+    if should_fail {
+        assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
+    }
 }
 
 fn sha256_digest_bytes(path: &PathBuf) -> String {
@@ -682,15 +686,4 @@ async fn test_package_caching(
     // Both output files should exist and be valid
     assert!(options.pack_options.output_file.exists());
     assert!(output_file2.exists());
-}
-
-#[rstest]
-#[tokio::test]
-async fn test_pypi_sdist_fail(
-    #[with(PathBuf::from("examples/pypi-packages/pixi.toml"))] options: Options,
-) {
-    let pack_result = pixi_pack::pack(options.pack_options).await;
-    assert!(pack_result.is_err());
-    // Error: package pysdl2 is not a wheel file, we currently require all dependencies to be wheels.
-    assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
 }

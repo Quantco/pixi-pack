@@ -171,8 +171,8 @@ Before creating the pack, `pixi-pack` will ensure that the injected packages' de
 
 You can also pack PyPi wheel packages into your environment.
 `pixi-pack` only supports wheel packages and not source distributions.
-If you happen to use source distributions, you can ignore them by using the `--ignore-pypi` flag.
-This will skip the bundling of all PyPi packages.
+If you happen to use source distributions, you can ignore them by using the `--ignore-pypi-non-wheel` flag.
+This will skip the bundling of all PyPi source distributions.
 
 ### Cache downloaded packages
 
