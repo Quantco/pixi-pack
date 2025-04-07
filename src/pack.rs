@@ -45,7 +45,7 @@ pub struct PackOptions {
     pub metadata: PixiPackMetadata,
     pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
-    pub ignore_pypi_errors: bool,
+    pub ignore_pypi_non_wheel: bool,
     pub create_executable: bool,
 }
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
@@ -110,23 +110,24 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
             }
             LockedPackageRef::Pypi(pypi_data, _) => {
-                if options.ignore_pypi_errors {
+                let package_name = pypi_data.name.clone();
+                let location = pypi_data.location.clone();
+                let is_wheel = location
+                    .file_name()
+                    .filter(|x| x.ends_with("whl"))
+                    .is_some();
+                if is_wheel {
+                    pypi_packages_from_lockfile.push(pypi_data.clone());
+                } else if options.ignore_pypi_non_wheel {
                     tracing::warn!(
-                        "ignoring PyPI package since PyPI packages are not supported by pixi-pack"
+                        "ignoring PyPI package {} since it is not a wheel file",
+                        package_name.to_string()
                     );
                 } else {
-                    let package_name = pypi_data.name.clone();
-                    let location = pypi_data.location.clone();
-                    location
-                        .file_name()
-                        .filter(|x| x.ends_with("whl"))
-                        .ok_or_else(|| {
-                            anyhow!(
-                                "package {} is not a wheel file, we currently require all dependencies to be wheels.",
-                                package_name.to_string()
-                            )
-                        })?;
-                    pypi_packages_from_lockfile.push(pypi_data.clone());
+                    anyhow::bail!(
+                        "package {} is not a wheel file, we currently require all dependencies to be wheels.",
+                        package_name.to_string()
+                    );
                 }
             }
         }
