@@ -41,7 +41,9 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
           - target: aarch64-pc-windows-msvc
-            os: windows-11-arm
+            os: windows-latest
+            # https://github.com/dtolnay/rust-toolchain/issues/143
+            # os: windows-11-arm
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: x86_64-apple-darwin
@@ -53,6 +55,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: endsWith(matrix.target, 'musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - name: Rust cache
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
