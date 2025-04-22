@@ -6,6 +6,7 @@
 [![License][license-badge]](LICENSE)
 [![CI Status][ci-badge]][ci]
 [![Conda Platform][conda-badge]][conda-url]
+[![Conda Downloads][conda-downloads-badge]][conda-url]
 [![Project Chat][chat-badge]][chat-url]
 [![Pixi Badge][pixi-badge]][pixi-url]
 
@@ -13,6 +14,7 @@
 [ci-badge]: https://img.shields.io/github/actions/workflow/status/quantco/pixi-pack/ci.yml?style=flat-square&branch=main
 [ci]: https://github.com/quantco/pixi-pack/actions/
 [conda-badge]: https://img.shields.io/conda/vn/conda-forge/pixi-pack?style=flat-square
+[conda-downloads-badge]: https://img.shields.io/conda/dn/conda-forge/pixi-pack?style=flat-square
 [conda-url]: https://prefix.dev/channels/conda-forge/packages/pixi-pack
 [chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
 [chat-url]: https://discord.gg/kKV8ZxyzY4
@@ -165,6 +167,13 @@ pixi-pack pack --inject local-package-1.0.0-hbefa133_0.conda --manifest-pack pix
 This can be particularly useful if you build the project itself and want to include the built package in the environment but still want to use `pixi.lock` from the project.
 Before creating the pack, `pixi-pack` will ensure that the injected packages' dependencies and constraints are compatible with the packages in the environment.
 
+### PyPi support
+
+You can also pack PyPi wheel packages into your environment.
+`pixi-pack` only supports wheel packages and not source distributions.
+If you happen to use source distributions, you can ignore them by using the `--ignore-pypi-non-wheel` flag.
+This will skip the bundling of all PyPi source distributions.
+
 ### Cache downloaded packages
 
 You can cache downloaded packages to speed up subsequent pack operations by using the `--use-cache` flag:
@@ -201,7 +210,7 @@ conda env create -p ./env --file environment.yml
 
 > [!NOTE]
 > Both `conda` and `mamba` are always installing pip as a side effect when they install python, see [`conda`'s documentation](https://docs.conda.io/projects/conda/en/25.1.x/user-guide/configuration/settings.html#add-pip-as-python-dependency-add-pip-as-python-dependency).
-> This is not different from how `pixi` works and can lead to solver errors when using `pixi-pack`'s compatibility mode since `pixi-pack` doesn't include `pip` by default.
+> This is different from how `pixi` works and can lead to solver errors when using `pixi-pack`'s compatibility mode since `pixi-pack` doesn't include `pip` by default.
 > You can fix this issue in two ways:
 >
 > - Add `pip` to your `pixi.lock` file using `pixi add pip`.

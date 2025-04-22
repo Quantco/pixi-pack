@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 use anyhow::{anyhow, Result};
 use futures::{
@@ -7,7 +11,7 @@ use futures::{
 };
 use fxhash::FxHashMap;
 use rattler::{
-    install::Installer,
+    install::{Installer, PythonInfo},
     package_cache::{CacheKey, PackageCache},
 };
 use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
@@ -21,10 +25,20 @@ use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use url::Url;
+use uv_client::RegistryClientBuilder;
+use uv_configuration::{BuildOptions, NoBinary, NoBuild};
+use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::{DistExtension, WheelFilename};
+use uv_distribution_types::{Dist, Resolution};
+use uv_installer::Preparer;
+use uv_pep508::VerbatimUrl;
+use uv_python::{Interpreter, PythonEnvironment};
+use uv_types::{HashStrategy, InFlight};
 
 use crate::{
-    PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
+    build_context::PixiPackBuildContext, PixiPackMetadata, ProgressReporter,
+    CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
+    PYPI_DIRECTORY_NAME,
 };
 
 /// Options for unpacking a pixi environment.
@@ -55,9 +69,13 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
     let cache_dir = unpack_dir.join("cache");
-    create_prefix(&channel_directory, &target_prefix, &cache_dir)
+    let packages = create_prefix(&channel_directory, &target_prefix, &cache_dir)
         .await
         .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
+
+    install_pypi_packages(unpack_dir, &target_prefix, packages)
+        .await
+        .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;
 
     tracing::info!("Generating activation script");
     create_activation_script(
@@ -174,7 +192,11 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Path) -> Result<()> {
+async fn create_prefix(
+    channel_dir: &Path,
+    target_prefix: &Path,
+    cache_dir: &Path,
+) -> Result<FxHashMap<String, PackageRecord>> {
     let packages = collect_packages(channel_dir)
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
@@ -190,7 +212,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
     tracing::info!("Creating cache with {} packages", packages.len());
     let package_cache = PackageCache::new(cache_dir);
 
-    let repodata_records: Vec<RepoDataRecord> = stream::iter(packages)
+    let repodata_records: Vec<RepoDataRecord> = stream::iter(packages.clone())
         .map(|(file_name, package_record)| {
             let cache_key = CacheKey::from(&package_record);
 
@@ -267,7 +289,7 @@ async fn create_prefix(channel_dir: &Path, target_prefix: &Path, cache_dir: &Pat
     .map_err(|e| anyhow!("Could not write history file: {}", e))
     .await?;
 
-    Ok(())
+    Ok(packages)
 }
 
 async fn create_activation_script(
@@ -291,6 +313,92 @@ async fn create_activation_script(
         .map_err(|e| anyhow!("Could not write activate script: {}", e))?;
 
     Ok(())
+}
+
+async fn install_pypi_packages(
+    unpack_dir: &Path,
+    target_prefix: &Path,
+    installed_conda_packages: FxHashMap<String, PackageRecord>,
+) -> Result<()> {
+    let pypi_directory = unpack_dir.join(PYPI_DIRECTORY_NAME);
+    if !pypi_directory.exists() {
+        return Ok(());
+    }
+    tracing::info!("Installing pypi packages");
+
+    // Find installed python in this prefix
+    let python_record = installed_conda_packages
+        .values()
+        .find(|x| x.name.as_normalized() == "python");
+    let python_record = python_record.ok_or_else(|| anyhow!("No python record found."))?;
+    let python_info = PythonInfo::from_python_record(python_record, Platform::current())?;
+    tracing::debug!("Current Python is: {:?}", python_info);
+    let pypi_cache =
+        uv_cache::Cache::temp().map_err(|e| anyhow!("Could not create cache folder: {}", e))?;
+    // Find a working python interpreter
+    let interpreter = Interpreter::query(target_prefix.join(python_info.path()), &pypi_cache)
+        .map_err(|e| anyhow!("Could not load python interpreter: {}", e))?;
+    let tags = interpreter.tags()?.clone();
+    let venv = PythonEnvironment::from_interpreter(interpreter);
+    // Collect all whl files in directory
+    let wheels = collect_pypi_packages(&pypi_directory)
+        .await
+        .map_err(|e| anyhow!("Could not find all pypi package files: {}", e))?;
+    eprintln!(
+        "⏳ Extracting and installing {} pypi packages to {}...",
+        wheels.len(),
+        venv.root().display(),
+    );
+
+    let client = RegistryClientBuilder::new(pypi_cache.clone()).build();
+    let context = PixiPackBuildContext::new(pypi_cache.clone());
+    let distribute_database = DistributionDatabase::new(&client, &context, 1usize);
+    let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
+    let preparer = Preparer::new(
+        &pypi_cache,
+        &tags,
+        &HashStrategy::None,
+        &build_options,
+        distribute_database,
+    );
+    let resolution = Resolution::default();
+    let inflight = InFlight::default();
+    // unzip all wheel packages
+    let unzipped_dists = preparer
+        .prepare(wheels.clone(), &inflight, &resolution)
+        .await
+        .map_err(|e| anyhow!("Could not unzip all pypi packages: {}", e))?;
+    // install all wheel packages
+    uv_installer::Installer::new(&venv)
+        .install(unzipped_dists)
+        .await
+        .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;
+
+    Ok(())
+}
+
+async fn collect_pypi_packages(package_dir: &Path) -> Result<Vec<Arc<Dist>>> {
+    let mut entries = fs::read_dir(package_dir)
+        .await
+        .map_err(|e| anyhow!("could not read pypi directory: {}", e))?;
+    let mut ret = Vec::new();
+    while let Some(entry) = entries.next_entry().await? {
+        tracing::trace!("Processing file: {:?}", entry.path());
+        let file_name = entry
+            .file_name()
+            .into_string()
+            .map_err(|x| anyhow!("cannot convert filename into string {:?}", x))?;
+        let wheel_file_name = WheelFilename::from_str(&file_name)?;
+        let dist = Arc::new(Dist::from_file_url(
+            wheel_file_name.name.clone(),
+            VerbatimUrl::from_absolute_path(entry.path().clone())?,
+            entry.path().as_path(),
+            DistExtension::Wheel,
+        )?);
+        ret.push(dist);
+    }
+
+    Ok(ret)
 }
 
 /* --------------------------------------------------------------------------------------------- */

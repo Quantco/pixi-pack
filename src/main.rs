@@ -42,7 +42,7 @@ enum Commands {
         platform: Platform,
 
         /// Authentication file for fetching packages
-        #[arg(long)] // TODO: Read from environment variable?
+        #[arg(long)]
         auth_file: Option<PathBuf>,
 
         /// The path to `pixi.toml`, `pyproject.toml`, or the project directory
@@ -61,10 +61,10 @@ enum Commands {
         #[arg(short, long, num_args(0..))]
         inject: Vec<PathBuf>,
 
-        /// PyPI dependencies are not supported.
-        /// This flag allows packing even if PyPI dependencies are present.
+        /// PyPI source distributions are not supported.
+        /// This flag allows packing even if PyPI source distributions are present.
         #[arg(long, default_value = "false")]
-        ignore_pypi_errors: bool,
+        ignore_pypi_non_wheel: bool,
 
         /// Create self-extracting executable
         #[arg(long, default_value = "false")]
@@ -126,7 +126,7 @@ async fn main() -> Result<()> {
             manifest_path,
             output_file,
             inject,
-            ignore_pypi_errors,
+            ignore_pypi_non_wheel,
             create_executable,
             use_cache,
         } => {
@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
                     platform,
                 },
                 injected_packages: inject,
-                ignore_pypi_errors,
+                ignore_pypi_non_wheel,
                 create_executable,
                 cache_dir: use_cache,
             };

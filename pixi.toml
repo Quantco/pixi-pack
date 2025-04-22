@@ -6,9 +6,10 @@ platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64", "win-64"]
 [tasks]
 build = "cargo build --release"
 test = "cargo test"
+update-snapshots = "INSTA_UPDATE=always cargo test -p pixi-pack -- test_reproducible_shasum"
 
 [dependencies]
-rust = "==1.84.0"
+rust = "==1.86.0"
 openssl = "3.*"
 pkg-config = "*"
 
