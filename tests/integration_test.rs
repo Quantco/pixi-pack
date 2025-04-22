@@ -337,7 +337,11 @@ async fn test_pypi_non_wheel_ignore(
     // Error: package pysdl2 is not a wheel file, we require all dependencies to be wheels.
     if should_fail {
         let error_message = pack_result.err().unwrap().to_string();
-        assert!(error_message.contains("pysdl2"), "{error_message}");
+        assert!(
+            error_message.contains("pysdl2 is not a wheel file")
+                || error_message.contains("pyboy is not a wheel file"),
+            "{error_message}"
+        );
     }
 }
 
