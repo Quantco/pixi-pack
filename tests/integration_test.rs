@@ -336,7 +336,8 @@ async fn test_pypi_non_wheel_ignore(
     assert_eq!(pack_result.is_err(), should_fail);
     // Error: package pysdl2 is not a wheel file, we require all dependencies to be wheels.
     if should_fail {
-        assert!(pack_result.err().unwrap().to_string().contains("pysdl2"));
+        let error_message = pack_result.err().unwrap().to_string();
+        assert!(error_message.contains("pysdl2"), "{error_message}");
     }
 }
 
