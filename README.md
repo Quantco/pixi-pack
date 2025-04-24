@@ -180,7 +180,7 @@ You can use mirror middleware by creating a configuration file as described in t
 
 ```toml
 [mirrors]
-"https://conda.anaconda.org/conda-forge" = ["https://my.artifcatory/conda-forge"]
+"https://conda.anaconda.org/conda-forge" = ["https://my.artifactory/conda-forge"]
 ```
 
 If you are using [S3 in pixi](https://pixi.sh/latest/deployment/s3/), you can also add the appropriate S3 config in your config file and reference it.
