@@ -633,7 +633,7 @@ async fn create_repodata_files(
 
         let repodata = RepoData {
             info: Some(ChannelInfo {
-                subdir: subdir.clone(),
+                subdir: Some(subdir.clone()),
                 base_url: None,
             }),
             packages: HashMap::default(),
