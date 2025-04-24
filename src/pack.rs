@@ -22,7 +22,10 @@ use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, packag
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
 };
-use rattler_networking::{authentication_storage, mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware};
+use rattler_networking::{
+    AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware,
+    authentication_storage, mirror_middleware::Mirror,
+};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::{Builder, HeaderMode};
 use uv_distribution_types::RemoteSource;

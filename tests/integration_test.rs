@@ -705,7 +705,8 @@ async fn test_mirror_middleware(
     #[with(PathBuf::from("examples/mirror-middleware/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.config = Some(Config::from_path(&PathBuf::from("examples/mirror-middleware/config.toml")).unwrap());
+    pack_options.config =
+        Some(Config::from_path(&PathBuf::from("examples/mirror-middleware/config.toml")).unwrap());
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 }
