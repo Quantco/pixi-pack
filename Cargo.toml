@@ -2,7 +2,7 @@
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
 version = "0.5.0"
-edition = "2021"
+edition = "2024"
 
 [features]
 default = ["native-tls"]

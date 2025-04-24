@@ -3,11 +3,11 @@ mod pack;
 mod unpack;
 mod util;
 
-pub use pack::{pack, PackOptions};
+pub use pack::{PackOptions, pack};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
-pub use unpack::{unarchive, unpack, UnpackOptions};
-pub use util::{get_size, ProgressReporter};
+pub use unpack::{UnpackOptions, unarchive, unpack};
+pub use util::{ProgressReporter, get_size};
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const PYPI_DIRECTORY_NAME: &str = "pypi";
@@ -45,7 +45,7 @@ impl Default for PixiPackMetadata {
 mod tests {
     use super::*;
     use rstest::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     #[rstest]
     fn test_metadata_serialization() {

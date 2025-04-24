@@ -7,15 +7,15 @@ use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
 
 use pixi_pack::{
-    unarchive, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_VERSION,
+    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata, UnpackOptions,
+    unarchive,
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
 use serial_test::serial;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 
@@ -204,7 +204,8 @@ async fn test_inject_failure(options: Options) {
 
     assert!(pack_result.is_err());
     assert!(
-        pack_result.err().unwrap().to_string() == "package 'my-webserver-broken=0.1.0=pyh4616a5c_0' has dependency 'fastapi >=0.112', which is not in the environment"
+        pack_result.err().unwrap().to_string()
+            == "package 'my-webserver-broken=0.1.0=pyh4616a5c_0' has dependency 'fastapi >=0.112', which is not in the environment"
     );
 }
 
@@ -444,11 +445,13 @@ async fn test_non_authenticated(
     let pack_options = options.pack_options;
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_err());
-    assert!(pack_result
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("could not download package"));
+    assert!(
+        pack_result
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("could not download package")
+    );
 }
 
 #[rstest]

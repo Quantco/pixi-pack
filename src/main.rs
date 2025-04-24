@@ -6,8 +6,8 @@ use rattler_conda_types::Platform;
 
 use anyhow::Result;
 use pixi_pack::{
-    pack, unpack, PackOptions, PixiPackMetadata, UnpackOptions, DEFAULT_PIXI_PACK_VERSION,
-    PIXI_PACK_VERSION,
+    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata, UnpackOptions,
+    pack, unpack,
 };
 use rattler_shell::shell::ShellEnum;
 
