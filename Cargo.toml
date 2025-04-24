@@ -56,22 +56,22 @@ fxhash = "0.2.1"
 tempfile = "3.19.1"
 walkdir = "2.5.0"
 base64 = "0.22.1"
-uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-distribution-types = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-git = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
-uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.6.14" }
+uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-distribution-types = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-git = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
+uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.6.16" }
 
 [dev-dependencies]
 async-std = "1.13.1"
