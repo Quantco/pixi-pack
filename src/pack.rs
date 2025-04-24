@@ -11,26 +11,26 @@ use fxhash::FxHashMap;
 use indicatif::HumanBytes;
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
 use tokio::{
-    fs::{self, create_dir_all, File},
+    fs::{self, File, create_dir_all},
     io::AsyncWriteExt,
 };
 
 use anyhow::Result;
-use base64::engine::{general_purpose::STANDARD, Engine};
-use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
-use rattler_conda_types::{package::ArchiveType, ChannelInfo, PackageRecord, Platform, RepoData};
+use base64::engine::{Engine, general_purpose::STANDARD};
+use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
+use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
 };
-use rattler_networking::{authentication_storage, AuthenticationMiddleware, AuthenticationStorage};
+use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage, authentication_storage};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_tar::{Builder, HeaderMode};
 use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
 
 use crate::{
-    get_size, PixiPackMetadata, ProgressReporter, CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH,
-    PYPI_DIRECTORY_NAME,
+    CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
+    ProgressReporter, get_size,
 };
 use anyhow::anyhow;
 

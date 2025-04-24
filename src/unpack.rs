@@ -4,10 +4,10 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use futures::{
-    stream::{self, StreamExt},
     TryFutureExt, TryStreamExt,
+    stream::{self, StreamExt},
 };
 use fxhash::FxHashMap;
 use rattler::{
@@ -36,9 +36,8 @@ use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight};
 
 use crate::{
-    build_context::PixiPackBuildContext, PixiPackMetadata, ProgressReporter,
     CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
-    PYPI_DIRECTORY_NAME,
+    PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, build_context::PixiPackBuildContext,
 };
 
 /// Options for unpacking a pixi environment.
@@ -443,9 +442,11 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_metadata_file_valid(metadata_file: NamedTempFile) {
-        assert!(validate_metadata_file(metadata_file.path().to_path_buf())
-            .await
-            .is_ok())
+        assert!(
+            validate_metadata_file(metadata_file.path().to_path_buf())
+                .await
+                .is_ok()
+        )
     }
 
     #[rstest]
