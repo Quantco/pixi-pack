@@ -309,6 +309,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
 
     let s3_middleware = if let Some(config) = &options.config {
         let s3_config = config.compute_s3_config();
+        tracing::info!("Using S3 config: {:?}", s3_config);
         S3Middleware::new(s3_config, auth_storage.clone())
     } else {
         S3Middleware::new(HashMap::new(), auth_storage.clone())
