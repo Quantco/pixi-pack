@@ -1,7 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
 use anyhow::{Result, anyhow};
@@ -26,7 +26,7 @@ use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use url::Url;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{BuildOptions, NoBinary, NoBuild};
+use uv_configuration::{BuildOptions, NoBinary, NoBuild, RAYON_INITIALIZE};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_distribution_types::{Dist, Resolution};
@@ -63,8 +63,21 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
-    let target_prefix = options.output_directory.join(options.env_name);
+    // HACK: The `Installer` created below, as well as some code in building
+    // packages from source will utilize rayon for parallelism. By using rayon
+    // it will implicitly initialize a global thread pool. However, uv
+    // has a mechanism to initialize rayon itself, which will crash if the global
+    // thread pool was already initialized. To prevent this, we force uv the
+    // initialize the rayon global thread pool, this ensures that any rayon code
+    // that is run will use the same thread pool.
+    //
+    // One downside of this approach is that perhaps it turns out that we won't need
+    // the thread pool at all (because no changes needed to happen for instance).
+    // There is a little bit of overhead when that happens, but I don't see another
+    // way around that.
+    LazyLock::force(&RAYON_INITIALIZE);
 
+    let target_prefix = options.output_directory.join(options.env_name);
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
     let cache_dir = unpack_dir.join("cache");
