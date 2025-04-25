@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release: ${{ github.event_name == 'push' && github.repository == 'Quantco/pixi-pack' && steps.version-metadata.outputs.changed == 'true' }}
+      optimize-build: ${{ github.event_name == 'push' }}
       version: ${{ steps.version-metadata.outputs.newVersion }}
     steps:
       - name: Checkout source code
@@ -76,9 +77,40 @@ jobs:
           path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
+  hashes:
+    name: Compute hashes
+    needs: [metadata, build]
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: pixi-pack-*
+          merge-multiple: true
+      - name: Compute hashes
+        id: hash
+        run: |
+          set -exuo pipefail
+          files=$(ls pixi-pack*)
+          echo "hashes=$(sha256sum $files | base64 -w0)" >> "${GITHUB_OUTPUT}"
+
+  provenance:
+    needs: [metadata, hashes]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.hashes.outputs.hashes }}"
+      upload-assets: false
+
   release:
     name: Create Release
-    needs: [metadata, build]
+    needs: [metadata, build, provenance]
     if: needs.metadata.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -87,6 +119,11 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: pixi-pack-*
+          merge-multiple: true
+      - name: Download provenance
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
           merge-multiple: true
       - name: Push v${{ needs.metadata.outputs.version }} tag
         run: |
@@ -98,4 +135,6 @@ jobs:
           generate_release_notes: true
           tag_name: v${{ needs.metadata.outputs.version }}
           draft: true
-          files: pixi-pack-*
+          files: |
+            ${{ needs.provenance.outputs.provenance-name }}
+            pixi-pack-*
