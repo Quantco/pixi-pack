@@ -63,7 +63,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
-    // HACK: The `Installer` created below (in `install_pypi_packages`),
+    // HACK: The `Installer` and `Preparer` created below (in `install_pypi_packages`),
     // will utilize rayon for parallelism. By using rayon
     // it will implicitly initialize a global thread pool.
     // However, uv has a mechanism to initialize
