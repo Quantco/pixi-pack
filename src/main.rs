@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
+use pixi_config::Config;
 use rattler_conda_types::Platform;
 
 use anyhow::Result;
@@ -10,6 +11,7 @@ use pixi_pack::{
     pack, unpack,
 };
 use rattler_shell::shell::ShellEnum;
+use tokio::fs::read_to_string;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
@@ -69,6 +71,10 @@ enum Commands {
         /// Create self-extracting executable
         #[arg(long, default_value = "false")]
         create_executable: bool,
+
+        /// Rattler config for mirror or S3 configuration.
+        #[arg(long, short)]
+        config: Option<PathBuf>,
     },
     /// Unpack a pixi environment
     Unpack {
@@ -128,10 +134,21 @@ async fn main() -> Result<()> {
             inject,
             ignore_pypi_non_wheel,
             create_executable,
+            config,
             use_cache,
         } => {
             let output_file =
                 output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
+
+            let config = if let Some(config_path) = config {
+                let config_str = read_to_string(&config_path).await?;
+                let (config, _unused_keys) =
+                    Config::from_toml(config_str.as_str(), Some(&config_path.clone()))
+                        .map_err(|e| anyhow::anyhow!("Failed to parse config file: {}", e))?;
+                Some(config)
+            } else {
+                None
+            };
 
             let options = PackOptions {
                 environment,
@@ -148,6 +165,7 @@ async fn main() -> Result<()> {
                 ignore_pypi_non_wheel,
                 create_executable,
                 cache_dir: use_cache,
+                config,
             };
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?

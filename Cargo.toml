@@ -1,7 +1,7 @@
 [package]
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 
 [features]
@@ -27,6 +27,8 @@ clap = { version = "4.5.37", features = ["derive", "string"] }
 clap-verbosity-flag = { version = "3.0.2", features = ["tracing"] }
 futures = "0.3.31"
 indicatif = "0.17.11"
+# TODO: use pixi_config crate
+pixi_config = { git = "https://github.com/prefix-dev/pixi", branch = "main" }
 rattler = { version = "0.33.5", default-features = false }
 rattler_digest = "1.1.1"
 rattler_conda_types = "0.32.0"

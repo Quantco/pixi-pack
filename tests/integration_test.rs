@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
+use pixi_config::Config;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::{fs, io};
@@ -65,6 +66,7 @@ fn options(
             ignore_pypi_non_wheel,
             create_executable,
             cache_dir: None,
+            config: None,
         },
         unpack_options: UnpackOptions {
             pack_file,
@@ -624,6 +626,7 @@ async fn test_manifest_path_dir(#[with(PathBuf::from("examples/simple-python"))]
     assert!(pack_result.is_ok(), "{:?}", pack_result);
     assert!(pack_file.is_file());
 }
+
 #[rstest]
 #[tokio::test]
 async fn test_package_caching(
@@ -694,4 +697,16 @@ async fn test_package_caching(
     // Both output files should exist and be valid
     assert!(options.pack_options.output_file.exists());
     assert!(output_file2.exists());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_mirror_middleware(
+    #[with(PathBuf::from("examples/mirror-middleware/pixi.toml"))] options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.config =
+        Some(Config::from_path(&PathBuf::from("examples/mirror-middleware/config.toml")).unwrap());
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
 }

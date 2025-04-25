@@ -1,0 +1,97 @@
+version: 6
+environments:
+  default:
+    channels:
+    - url: https://my-custom-url/conda-forge/
+    packages:
+      linux-64:
+      - conda: https://my-custom-url/conda-forge/linux-64/k9s-0.40.5-he91c749_1.conda
+      linux-aarch64:
+      - conda: https://my-custom-url/conda-forge/linux-aarch64/k9s-0.40.5-hd24410f_1.conda
+      osx-64:
+      - conda: https://my-custom-url/conda-forge/osx-64/k9s-0.40.5-hc7f0b10_1.conda
+      osx-arm64:
+      - conda: https://my-custom-url/conda-forge/osx-arm64/k9s-0.40.5-h87715bd_1.conda
+      win-64:
+      - conda: https://my-custom-url/conda-forge/win-64/k9s-0.40.5-h36c15f3_1.conda
+      - conda: https://my-custom-url/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda
+      - conda: https://my-custom-url/conda-forge/win-64/vc-14.3-h2b53caa_26.conda
+      - conda: https://my-custom-url/conda-forge/win-64/vc14_runtime-14.42.34438-hfd919c2_26.conda
+packages:
+- conda: https://my-custom-url/conda-forge/linux-64/k9s-0.40.5-he91c749_1.conda
+  sha256: 24187f2d1a4d5922c9dddf17b6a0ff3746387a9aa540a18f5f5e0c9a9ee7ef13
+  md5: 900661eac2fb25bce3e1d618ca34cb96
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  license: Apache-2.0
+  license_family: APACHE
+  size: 64636320
+  timestamp: 1740174046433
+- conda: https://my-custom-url/conda-forge/linux-aarch64/k9s-0.40.5-hd24410f_1.conda
+  sha256: 565a366996c879d612080bde463a2cfc8fe7ca2ffe80f39043628a88a7e84044
+  md5: 8491f96f95cbc224e1b58c3fd9b18a12
+  license: Apache-2.0
+  license_family: APACHE
+  size: 60869261
+  timestamp: 1740174079408
+- conda: https://my-custom-url/conda-forge/osx-64/k9s-0.40.5-hc7f0b10_1.conda
+  sha256: 88b9174cdeac0aa865afcbe6bdcbec3c8b2d0880a32b8c3dfffb3e8bfb711fc9
+  md5: c439a27343e424a690172b9913645d3c
+  depends:
+  - __osx >=10.13
+  constrains:
+  - __osx >=10.12
+  license: Apache-2.0
+  license_family: APACHE
+  size: 66064559
+  timestamp: 1740174033467
+- conda: https://my-custom-url/conda-forge/osx-arm64/k9s-0.40.5-h87715bd_1.conda
+  sha256: 7799a04e53d78bafb0daeae2a88e632907eb40d612f973daa44a94dd72fa8bf8
+  md5: 0af2ac6170a8d701addb03f948ed756c
+  depends:
+  - __osx >=11.0
+  license: Apache-2.0
+  license_family: APACHE
+  size: 62454430
+  timestamp: 1740174036650
+- conda: https://my-custom-url/conda-forge/win-64/k9s-0.40.5-h36c15f3_1.conda
+  sha256: 6a0e4329e12379f14c1c0f7008306c424a054390a29966459b80dc4a80c8e729
+  md5: bdf2f361058dd5b238b3468b0f824f30
+  depends:
+  - vc >=14.3,<15
+  - vc14_runtime >=14.42.34433
+  - ucrt >=10.0.20348.0
+  license: Apache-2.0
+  license_family: APACHE
+  size: 65739714
+  timestamp: 1740174133760
+- conda: https://my-custom-url/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda
+  sha256: db8dead3dd30fb1a032737554ce91e2819b43496a0db09927edf01c32b577450
+  md5: 6797b005cd0f439c4c5c9ac565783700
+  constrains:
+  - vs2015_runtime >=14.29.30037
+  license: LicenseRef-MicrosoftWindowsSDK10
+  size: 559710
+  timestamp: 1728377334097
+- conda: https://my-custom-url/conda-forge/win-64/vc-14.3-h2b53caa_26.conda
+  sha256: 7a685b5c37e9713fa314a0d26b8b1d7a2e6de5ab758698199b5d5b6dba2e3ce1
+  md5: d3f0381e38093bde620a8d85f266ae55
+  depends:
+  - vc14_runtime >=14.42.34433
+  track_features:
+  - vc14
+  license: BSD-3-Clause
+  license_family: BSD
+  size: 17893
+  timestamp: 1743195261486
+- conda: https://my-custom-url/conda-forge/win-64/vc14_runtime-14.42.34438-hfd919c2_26.conda
+  sha256: 30dcb71bb166e351aadbdc18f1718757c32cdaa0e1e5d9368469ee44f6bf4709
+  md5: 91651a36d31aa20c7ba36299fb7068f4
+  depends:
+  - ucrt >=10.0.20348.0
+  constrains:
+  - vs2015_runtime 14.42.34438.* *_26
+  license: LicenseRef-MicrosoftVisualCpp2015-2022Runtime
+  license_family: Proprietary
+  size: 750733
+  timestamp: 1743195092905

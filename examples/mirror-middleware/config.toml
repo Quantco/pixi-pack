@@ -1,0 +1,2 @@
+[mirrors]
+"https://my-custom-url/conda-forge" = ["https://prefix.dev/conda-forge"]
