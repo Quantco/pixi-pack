@@ -75,6 +75,8 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     // the thread pool at all (because no changes needed to happen for instance).
     // There is a little bit of overhead when that happens, but I don't see another
     // way around that.
+    // xref https://github.com/rayon-rs/rayon/issues/93
+    // xref https://github.com/prefix-dev/pixi/blob/4dc02c840d63e75f16a2da6a8fc74a7f67218cb3/src/environment/conda_prefix.rs#L294
     LazyLock::force(&RAYON_INITIALIZE);
 
     let target_prefix = options.output_directory.join(options.env_name);
