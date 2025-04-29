@@ -356,11 +356,11 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
             .build()
             .map_err(|e| anyhow!("could not create download client: {}", e))?,
     )
+    .with(mirror_middleware)
+    .with(s3_middleware)
     .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
         auth_storage,
     )))
-    .with(mirror_middleware)
-    .with(s3_middleware)
     .build();
     Ok(client)
 }
