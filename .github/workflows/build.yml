@@ -69,7 +69,7 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --profile ${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release'}} --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
+          cargo build --profile ${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release'}} --color always${{ (endsWith(matrix.target, 'musl') || startsWith(matrix.target, 'powerpc')) && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
           mv target/${{ matrix.target }}/${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release' }}/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
