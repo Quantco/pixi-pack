@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release: ${{ github.event_name == 'push' && github.repository == 'Quantco/pixi-pack' && steps.version-metadata.outputs.changed == 'true' }}
-      optimize-build: ${{ github.event_name == 'push' }}
       version: ${{ steps.version-metadata.outputs.newVersion }}
     steps:
       - name: Checkout source code
