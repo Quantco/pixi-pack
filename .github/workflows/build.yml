@@ -102,6 +102,7 @@ jobs:
       actions: read
       id-token: write
       contents: write
+    # This cannot be pinned: https://github.com/slsa-framework/slsa-github-generator?tab=readme-ov-file#referencing-slsa-builders-and-generators
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.hashes.outputs.hashes }}"
