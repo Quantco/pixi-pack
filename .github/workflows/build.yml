@@ -9,7 +9,6 @@ jobs:
     name: Check if version changed
     runs-on: ubuntu-latest
     outputs:
-      optimize-build: ${{ github.event_name == 'push' }}
       release: ${{ github.event_name == 'push' && github.repository == 'Quantco/pixi-pack' && steps.version-metadata.outputs.changed == 'true' }}
       version: ${{ steps.version-metadata.outputs.newVersion }}
     steps:
@@ -63,12 +62,12 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          key: build-${{ matrix.target }}-${{ needs.metadata.outputs.optimize-build }}-${{ matrix.os }}
+          key: build-${{ matrix.target }}-${{ matrix.os }}
 
       - name: Build
         run: |
-          cargo build --profile ${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release'}} --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
-          mv target/${{ matrix.target }}/${{ needs.metadata.outputs.optimize-build && 'release-min-size' || 'release' }}/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          cargo build --profile release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

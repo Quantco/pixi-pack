@@ -1,8 +1,15 @@
 [package]
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
+
+# See https://doc.rust-lang.org/cargo/reference/profiles.html
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+opt-level = "z"
 
 [features]
 default = ["native-tls"]
