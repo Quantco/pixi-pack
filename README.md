@@ -240,7 +240,7 @@ The builds that are uploaded to releases on GitHub have build provenance using [
 You can verify their provenance using:
 
 ```
-slsa-verifier verify-artifact pixi-pack-<architecture> \
+pixi exec slsa-verifier verify-artifact pixi-pack-<architecture> \
     --provenance-path multiple.intoto.jsonl \
     --source-uri github.com/quantco/pixi-pack \
     --source-branch main
