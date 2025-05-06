@@ -105,6 +105,7 @@ jobs:
       contents: write
     if: needs.metadata.outputs.release == 'true'
     # This cannot be pinned: https://github.com/slsa-framework/slsa-github-generator?tab=readme-ov-file#referencing-slsa-builders-and-generators
+    # https://github.com/slsa-framework/slsa-verifier/issues/12
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.hashes.outputs.hashes }}"
