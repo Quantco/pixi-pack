@@ -72,6 +72,15 @@ enum Commands {
         #[arg(long, default_value = "false")]
         create_executable: bool,
 
+        /// Optional path or URL to a pixi-pack mirror.
+        /// Can point to a release-like directory or a full executable path.
+        // Ex. /path/to/pixi-pack
+        // Ex. /path/to/pixi-pack/pixi-pack.exe
+        // Ex. https://example.com/pixi-pack
+        // Ex. https://example.com/pixi-pack.exe
+        #[arg(long, short)]
+        pixi_pack_path: Option<PathBuf>,
+
         /// Rattler config for mirror or S3 configuration.
         #[arg(long, short)]
         config: Option<PathBuf>,
@@ -134,6 +143,7 @@ async fn main() -> Result<()> {
             inject,
             ignore_pypi_non_wheel,
             create_executable,
+            pixi_pack_path,
             config,
             use_cache,
         } => {
@@ -164,6 +174,7 @@ async fn main() -> Result<()> {
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
                 create_executable,
+                pixi_pack_path,
                 cache_dir: use_cache,
                 config,
             };
