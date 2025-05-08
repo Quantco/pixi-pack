@@ -100,7 +100,7 @@ enum Commands {
         shell: Option<ShellEnum>,
     },
     /// Generate shell completion script
-    Completions {
+    Completion {
         /// The shell to generate the completion script for
         #[arg(value_enum)]
         shell: Shell,
