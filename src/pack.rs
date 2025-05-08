@@ -535,7 +535,7 @@ async fn create_self_extracting_executable(
     let url = match pixi_pack_path {
         Some(path) => {
             let path_str = path.to_string_lossy();
-    
+
             // Check if the path is an HTTP(s) URL
             if path_str.starts_with("http://") || path_str.starts_with("https://") {
                 // Try to format the URL with the version and executable name
@@ -543,7 +543,7 @@ async fn create_self_extracting_executable(
                     "{}/v{}/{}{}",
                     path_str, version, executable_name, extension
                 );
-    
+
                 // Create the client and check if the formatted URL exists
                 let client = reqwest::Client::new();
                 let response = client.get(&formatted_url).send().await?;
