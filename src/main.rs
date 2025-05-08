@@ -193,7 +193,7 @@ async fn main() -> Result<()> {
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await?
         }
-        Commands::Completions { shell } => {
+        Commands::Completion { shell } => {
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "pixi-pack", &mut io::stdout());
             return Ok(());
