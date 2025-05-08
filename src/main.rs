@@ -73,7 +73,7 @@ enum Commands {
         #[arg(long, default_value = "false")]
         create_executable: bool,
 
-        /// Optional path or URL to a pixi-pack exectuable.
+        /// Optional path or URL to a pixi-pack executable.
         // Ex. /path/to/pixi-pack/pixi-pack.exe
         // Ex. https://example.com/pixi-pack.exe
         #[arg(long, short)]

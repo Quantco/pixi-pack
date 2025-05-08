@@ -571,7 +571,7 @@ async fn create_self_extracting_executable(
     // or read it from a local file if the URL is a file path
     if let UrlOrPath::Url(_) = &url {
         let client = reqwest::Client::new();
-        let response = client.get(&url.to_string()).send().await?;
+        let response = client.get(url.to_string()).send().await?;
         if !response.status().is_success() {
             return Err(anyhow!(
                 "Failed to download pixi-pack executable from {}. Status: {}",
