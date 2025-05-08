@@ -10,6 +10,7 @@ use pixi_pack::{
     DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata, UnpackOptions,
     pack, unpack,
 };
+use rattler_lock::UrlOrPath;
 use rattler_shell::shell::ShellEnum;
 use tokio::fs::read_to_string;
 
@@ -72,14 +73,11 @@ enum Commands {
         #[arg(long, default_value = "false")]
         create_executable: bool,
 
-        /// Optional path or URL to a pixi-pack mirror.
-        /// Can point to a release-like directory or a full executable path.
-        // Ex. /path/to/pixi-pack
+        /// Optional path or URL to a pixi-pack exectuable.
         // Ex. /path/to/pixi-pack/pixi-pack.exe
-        // Ex. https://example.com/pixi-pack
         // Ex. https://example.com/pixi-pack.exe
         #[arg(long, short)]
-        pixi_pack_path: Option<PathBuf>,
+        pixi_pack_source: Option<UrlOrPath>,
 
         /// Rattler config for mirror or S3 configuration.
         #[arg(long, short)]
@@ -143,7 +141,7 @@ async fn main() -> Result<()> {
             inject,
             ignore_pypi_non_wheel,
             create_executable,
-            pixi_pack_path,
+            pixi_pack_source,
             config,
             use_cache,
         } => {
@@ -174,7 +172,7 @@ async fn main() -> Result<()> {
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
                 create_executable,
-                pixi_pack_path,
+                pixi_pack_source,
                 cache_dir: use_cache,
                 config,
             };

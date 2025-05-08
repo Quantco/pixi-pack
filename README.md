@@ -155,27 +155,26 @@ environment.ps1
 
 #### Custom pixi-pack executable path
 
-When creating a self-extracting binary, you can specify a custom path or URL to a `pixi-pack` executable to avoid downloading it from the default location:
-https://github.com/Quantco/pixi-pack/releases/download/.
+When creating a self-extracting binary, you can specify a custom path or URL to a `pixi-pack` executable to avoid downloading it from the [default location](https://github.com/Quantco/pixi-pack/releases/download).
 
-You can provide one of the following as the `--pixi-pack-path`:
+You can provide one of the following as the `--pixi-pack-source`:
 
-- A direct path or URL to a `pixi-pack` executable, or
+- a URL to a `pixi-pack` executable like `https://my.mirror/pixi-pack/pixi-pack-x86_64-unknown-linux-musl`
 
-- A path or URL to a directory structured like a release (e.g., `path/to/pixi-pack/vX.X.X/pixi-pack-X-X`).
+- a path to a `pixi-pack` binary like `./pixi-pack-x86_64-unknown-linux-musl`
 
 ##### Example Usage
 
-Using a direct executable path:
+Using a URL:
 
 ```bash
-pixi-pack pack --create-executable --pixi-pack-path /path/to/pixi-pack/executable
+pixi-pack pack --create-executable --pixi-pack-source https://my.mirror/pixi-pack/pixi-pack-x86_64-unknown-linux-musl
 ```
 
-Using a release-style mirror:
+Using a path:
 
 ```bash
-pixi-pack pack --create-executable --pixi-pack-path https://url/to/pixi-pack/releases/download/mirror/
+pixi-pack pack --create-executable --pixi-pack-source ./pixi-pack-x86_64-unknown-linux-musl
 ```
 
 > [!TIP]
