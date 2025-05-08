@@ -27,10 +27,10 @@ use rattler_networking::{
     authentication_storage, mirror_middleware::Mirror,
 };
 use reqwest_middleware::ClientWithMiddleware;
+use tokio::io::AsyncReadExt;
 use tokio_tar::{Builder, HeaderMode};
 use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
-use tokio::io::AsyncReadExt;
 
 use crate::{
     CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
@@ -539,10 +539,8 @@ async fn create_self_extracting_executable(
             // Check if the path is an HTTP(s) URL
             if path_str.starts_with("http://") || path_str.starts_with("https://") {
                 // Try to format the URL with the version and executable name
-                let formatted_url = format!(
-                    "{}/v{}/{}{}",
-                    path_str, version, executable_name, extension
-                );
+                let formatted_url =
+                    format!("{}/v{}/{}{}", path_str, version, executable_name, extension);
 
                 // Create the client and check if the formatted URL exists
                 let client = reqwest::Client::new();
@@ -561,7 +559,10 @@ async fn create_self_extracting_executable(
                 // the structure of a release
                 let formatted_path = format!(
                     "{}/v{}/{}{}",
-                    path_str.to_string().strip_prefix("file://").unwrap_or(&path_str),
+                    path_str
+                        .to_string()
+                        .strip_prefix("file://")
+                        .unwrap_or(&path_str),
                     version,
                     executable_name,
                     extension
