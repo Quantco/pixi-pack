@@ -547,7 +547,7 @@ async fn create_self_extracting_executable(
         }
         Some(UrlOrPath::Path(path)) => {
             // Validate the local path
-            if path.exists() {
+            if Path::new(&path.to_string()).exists() {
                 UrlOrPath::Path(path)
             } else {
                 return Err(anyhow!("Pixi-pack executable not found at {}", path));
