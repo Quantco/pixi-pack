@@ -153,6 +153,31 @@ activate.sh
 environment.ps1
 ```
 
+#### Custom pixi-pack executable path
+
+When creating a self-extracting binary, you can specify a custom path or URL to a `pixi-pack` executable to avoid downloading it from the default location:
+https://github.com/Quantco/pixi-pack/releases/download/.
+
+You can provide one of the following as the `--pixi-pack-path`:
+
+- A direct path or URL to a `pixi-pack` executable, or
+
+- A path or URL to a directory structured like a release (e.g., `path/to/pixi-pack/vX.X.X/pixi-pack-X-X`).
+
+##### Example Usage
+
+Using a direct executable path:
+
+```bash
+pixi-pack pack --create-executable --pixi-pack-path /path/to/pixi-pack/executable
+```
+
+Using a release-style mirror:
+
+```bash
+pixi-pack pack --create-executable --pixi-pack-path https://url/to/pixi-pack/releases/download/mirror/
+```
+
 > [!TIP]
 > The produced executable is a simple shell script that contains both the `pixi-pack` binary as well as the packed environment.
 
