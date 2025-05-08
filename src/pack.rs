@@ -532,8 +532,8 @@ async fn create_self_extracting_executable(
     let extension = if platform.is_windows() { ".exe" } else { "" };
 
     let version = env!("CARGO_PKG_VERSION");
-    // Build pixi-pack executable url
 
+    // Build pixi-pack executable url
     let url = match pixi_pack_source {
         Some(UrlOrPath::Url(url)) => {
             // Validate the URL by sending a HEAD request
@@ -559,7 +559,7 @@ async fn create_self_extracting_executable(
                 "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
                 version, executable_name, extension
             );
-            UrlOrPath::Url(default_url.parse()?)
+            UrlOrPath::Url(default_url.parse().expect("could not parse url"))
         }
     };
 

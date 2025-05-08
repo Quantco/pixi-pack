@@ -160,7 +160,6 @@ When creating a self-extracting binary, you can specify a custom path or URL to 
 You can provide one of the following as the `--pixi-pack-source`:
 
 - a URL to a `pixi-pack` executable like `https://my.mirror/pixi-pack/pixi-pack-x86_64-unknown-linux-musl`
-
 - a path to a `pixi-pack` binary like `./pixi-pack-x86_64-unknown-linux-musl`
 
 ##### Example Usage

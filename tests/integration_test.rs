@@ -748,12 +748,12 @@ async fn test_pixi_pack_source(
         .await
         .expect("Failed to download pixi-pack binary");
     let mut file =
-        fs::File::create(&pixi_pack_path).expect("Failed to create pixi-pack binary file");
+        fs::File::create(&pixi_pack_path).unwrap();
     let content = response
         .bytes()
         .await
-        .expect("Failed to read pixi-pack binary content");
-    io::copy(&mut content.as_ref(), &mut file).expect("Failed to write pixi-pack binary to file");
+        .unwrap();
+    io::copy(&mut content.as_ref(), &mut file).unwrap();
 
     // Reference the local path
     pack_options.pixi_pack_source = Some(UrlOrPath::Path(
@@ -778,7 +778,7 @@ async fn test_pixi_pack_source(
 
     // Now test with URL
     pack_options.pixi_pack_source = Some(UrlOrPath::Url(
-        Url::parse(&pixi_pack_url).expect("Invalid URL"),
+        Url::parse(&pixi_pack_url).unwrap(),
     ));
 
     let pack_result = pixi_pack::pack(pack_options.clone()).await;
