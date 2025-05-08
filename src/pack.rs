@@ -533,7 +533,7 @@ async fn create_self_extracting_executable(
     let version = env!("CARGO_PKG_VERSION");
     // Build pixi-pack executable url
     let url = match pixi_pack_path {
-        Some(ref path) => {
+        Some(path) => {
             let path_str = path.to_string_lossy();
     
             // Check if the path is an HTTP(s) URL
