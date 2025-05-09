@@ -233,3 +233,17 @@ conda env create -p ./env --file environment.yml
 >
 > - Add `pip` to your `pixi.lock` file using `pixi add pip`.
 > - Configuring `conda` (or `mamba`) to not install `pip` by default by running `conda config --set add_pip_as_python_dependency false` (or by adding `add_pip_as_python_dependency: False` to your `~/.condarc`)
+
+## Build provenance
+
+The builds that are uploaded to releases on GitHub have build provenance using [slsa.dev](https://slsa.dev/).
+You can verify their provenance using:
+
+```
+pixi exec slsa-verifier verify-artifact pixi-pack-<architecture> \
+    --provenance-path multiple.intoto.jsonl \
+    --source-uri github.com/quantco/pixi-pack \
+    --source-branch main
+```
+
+Due to the setup of the release pipeline, the git tag is not part of the provenance but you can instead verify the commit id.
