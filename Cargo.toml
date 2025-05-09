@@ -31,6 +31,7 @@ rustls-tls = [
 [dependencies]
 anyhow = "1.0.98"
 clap = { version = "4.5.37", features = ["derive", "string"] }
+clap_complete = "4.5.50"
 clap-verbosity-flag = { version = "3.0.2", features = ["tracing"] }
 futures = "0.3.31"
 indicatif = "0.17.11"

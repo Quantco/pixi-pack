@@ -1,6 +1,8 @@
+use std::io;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
 use clap_verbosity_flag::Verbosity;
 use pixi_config::Config;
 use rattler_conda_types::Platform;
@@ -104,6 +106,12 @@ enum Commands {
         #[arg(short, long)]
         shell: Option<ShellEnum>,
     },
+    /// Generate shell completion script
+    Completion {
+        /// The shell to generate the completion script for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn default_output_file(platform: Platform, create_executable: bool) -> PathBuf {
@@ -193,6 +201,11 @@ async fn main() -> Result<()> {
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await?
+        }
+        Commands::Completion { shell } => {
+            let mut cmd = Cli::command();
+            generate(shell, &mut cmd, "pixi-pack", &mut io::stdout());
+            return Ok(());
         }
     };
     tracing::debug!("Finished running pixi-pack");
