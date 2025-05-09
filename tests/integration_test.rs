@@ -755,10 +755,7 @@ async fn test_pixi_pack_source(options: Options) {
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
     let sha256_digest = sha256_digest_bytes(&output_file);
-    insta::assert_snapshot!(
-        format!("sha256-{}-executable", platform),
-        &sha256_digest
-    );
+    insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
 
     // Keep the temporary directory alive until the end of the first test
     drop(temp_dir);
@@ -770,8 +767,5 @@ async fn test_pixi_pack_source(options: Options) {
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
     let sha256_digest = sha256_digest_bytes(&output_file);
-    insta::assert_snapshot!(
-        format!("sha256-{}-executable", platform),
-        &sha256_digest
-    );
+    insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
 }
