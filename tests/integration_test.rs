@@ -724,6 +724,7 @@ async fn test_pixi_pack_source(options: Options) {
     let pypi_suffix = "";
     let output_file = options.output_dir.path().join("environment.sh");
 
+    pack_options.platform = platform;
     pack_options.create_executable = true;
     pack_options.output_file = output_file.clone();
 
