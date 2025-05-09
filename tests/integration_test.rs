@@ -721,14 +721,12 @@ async fn test_pixi_pack_source(options: Options) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options.clone();
 
-    let pypi_suffix = "";
     let output_file = options.output_dir.path().join("environment.sh");
 
     pack_options.platform = platform;
     pack_options.create_executable = true;
     pack_options.output_file = output_file.clone();
 
-    // Now, lets sub in the local path of the pixi-pack exec
     // Build the path
     let version = env!("CARGO_PKG_VERSION");
     let pixi_pack_url = format!(
@@ -758,7 +756,7 @@ async fn test_pixi_pack_source(options: Options) {
 
     let sha256_digest = sha256_digest_bytes(&output_file);
     insta::assert_snapshot!(
-        format!("sha256-{}{}-executable", platform, pypi_suffix),
+        format!("sha256-{}-executable", platform),
         &sha256_digest
     );
 
@@ -773,7 +771,7 @@ async fn test_pixi_pack_source(options: Options) {
 
     let sha256_digest = sha256_digest_bytes(&output_file);
     insta::assert_snapshot!(
-        format!("sha256-{}{}-executable", platform, pypi_suffix),
+        format!("sha256-{}-executable", platform),
         &sha256_digest
     );
 }
