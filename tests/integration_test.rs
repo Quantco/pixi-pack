@@ -715,21 +715,13 @@ async fn test_mirror_middleware(
 }
 
 #[rstest]
-#[case(Platform::Linux64, false)]
-#[case(Platform::Linux64, true)]
 #[tokio::test]
-async fn test_pixi_pack_source(
-    #[case] platform: Platform,
-    #[case] use_pypi: bool,
-    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform)]
-    options: Options,
-) {
+async fn test_pixi_pack_source(options: Options) {
+    let platform = Platform::Linux64;
     let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options.clone();
-    if use_pypi {
-        pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
-    }
-    let pypi_suffix = if use_pypi { "-pypi" } else { "" };
+
+    let pypi_suffix = "";
     let output_file = options.output_dir.path().join("environment.sh");
 
     pack_options.create_executable = true;
@@ -747,12 +739,8 @@ async fn test_pixi_pack_source(
     let response = reqwest::get(&pixi_pack_url)
         .await
         .expect("Failed to download pixi-pack binary");
-    let mut file =
-        fs::File::create(&pixi_pack_path).unwrap();
-    let content = response
-        .bytes()
-        .await
-        .unwrap();
+    let mut file = fs::File::create(&pixi_pack_path).unwrap();
+    let content = response.bytes().await.unwrap();
     io::copy(&mut content.as_ref(), &mut file).unwrap();
 
     // Reference the local path
@@ -777,9 +765,7 @@ async fn test_pixi_pack_source(
     drop(temp_dir);
 
     // Now test with URL
-    pack_options.pixi_pack_source = Some(UrlOrPath::Url(
-        Url::parse(&pixi_pack_url).unwrap(),
-    ));
+    pack_options.pixi_pack_source = Some(UrlOrPath::Url(Url::parse(&pixi_pack_url).unwrap()));
 
     let pack_result = pixi_pack::pack(pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);

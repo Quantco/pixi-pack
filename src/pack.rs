@@ -534,34 +534,13 @@ async fn create_self_extracting_executable(
     let version = env!("CARGO_PKG_VERSION");
 
     // Build pixi-pack executable url
-    let url = match pixi_pack_source {
-        Some(UrlOrPath::Url(url)) => {
-            // Validate the URL by sending a HEAD request
-            let client = reqwest::Client::new();
-            let response = client.head(url.clone()).send().await?;
-            if response.status().is_success() {
-                UrlOrPath::Url(url)
-            } else {
-                return Err(anyhow!("Pixi-pack executable not found at {}", url));
-            }
-        }
-        Some(UrlOrPath::Path(path)) => {
-            // Validate the local path
-            if Path::new(&path.to_string()).exists() {
-                UrlOrPath::Path(path)
-            } else {
-                return Err(anyhow!("Pixi-pack executable not found at {}", path));
-            }
-        }
-        None => {
-            // Construct the default URL
-            let default_url = format!(
-                "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
-                version, executable_name, extension
-            );
-            UrlOrPath::Url(default_url.parse().expect("could not parse url"))
-        }
-    };
+    let url = pixi_pack_source.unwrap_or_else(|| {
+        let default_url = format!(
+            "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
+            version, executable_name, extension
+        );
+        UrlOrPath::Url(default_url.parse().expect("could not parse url"))
+    });
 
     eprintln!("📥 Fetching pixi-pack executable...");
 
