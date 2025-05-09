@@ -716,14 +716,15 @@ async fn test_mirror_middleware(
 
 #[rstest]
 #[tokio::test]
-async fn test_pixi_pack_source(options: Options) {
+async fn test_pixi_pack_source(
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), Platform::Linux64)]
+    options: Options,
+) {
     let platform = Platform::Linux64;
     let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options.clone();
-
     let output_file = options.output_dir.path().join("environment.sh");
 
-    pack_options.platform = platform;
     pack_options.create_executable = true;
     pack_options.output_file = output_file.clone();
 
