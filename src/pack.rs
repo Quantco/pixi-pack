@@ -27,6 +27,7 @@ use rattler_networking::{
     authentication_storage, mirror_middleware::Mirror,
 };
 use reqwest_middleware::ClientWithMiddleware;
+use tokio::io::AsyncReadExt;
 use tokio_tar::{Builder, HeaderMode};
 use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
@@ -50,6 +51,7 @@ pub struct PackOptions {
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
     pub create_executable: bool,
+    pub pixi_pack_source: Option<UrlOrPath>,
     pub config: Option<pixi_config::Config>,
 }
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
@@ -258,6 +260,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         output_folder.path(),
         &options.output_file,
         options.create_executable,
+        options.pixi_pack_source,
         options.platform,
     )
     .await
@@ -419,11 +422,13 @@ async fn archive_directory(
     input_dir: &Path,
     archive_target: &Path,
     create_executable: bool,
+    pixi_pack_source: Option<UrlOrPath>,
     platform: Platform,
 ) -> Result<()> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
-        create_self_extracting_executable(input_dir, archive_target, platform).await
+        create_self_extracting_executable(input_dir, archive_target, pixi_pack_source, platform)
+            .await
     } else {
         create_tarball(input_dir, archive_target).await
     }
@@ -488,6 +493,7 @@ async fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
 async fn create_self_extracting_executable(
     input_dir: &Path,
     target: &Path,
+    pixi_pack_source: Option<UrlOrPath>,
     platform: Platform,
 ) -> Result<()> {
     let line_ending = if platform.is_windows() {
@@ -526,38 +532,57 @@ async fn create_self_extracting_executable(
     let extension = if platform.is_windows() { ".exe" } else { "" };
 
     let version = env!("CARGO_PKG_VERSION");
-    let url = format!(
-        "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
-        version, executable_name, extension
-    );
 
-    eprintln!("📥 Downloading pixi-pack executable...");
-    let client = reqwest::Client::new();
-    let response = client.get(&url).send().await?;
-    if !response.status().is_success() {
-        return Err(anyhow!(
-            "Failed to download pixi-pack executable. Status: {}",
-            response.status()
-        ));
-    }
+    // Build pixi-pack executable url
+    let url = pixi_pack_source.unwrap_or_else(|| {
+        let default_url = format!(
+            "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
+            version, executable_name, extension
+        );
+        UrlOrPath::Url(default_url.parse().expect("could not parse url"))
+    });
 
-    let total_size = response
-        .content_length()
-        .ok_or_else(|| anyhow!("Failed to get content length"))?;
-
-    let bar = ProgressReporter::new(total_size);
-    bar.pb.set_message("Downloading");
+    eprintln!("📥 Fetching pixi-pack executable...");
 
     let mut executable_bytes = Vec::new();
-    let mut stream = response.bytes_stream();
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        executable_bytes.extend_from_slice(&chunk);
-        bar.pb.inc(chunk.len() as u64);
+    // Use reqwest to download the pixi-pack executable from the URL
+    // or read it from a local file if the URL is a file path
+    if let UrlOrPath::Url(_) = &url {
+        let client = reqwest::Client::new();
+        let response = client.get(url.to_string()).send().await?;
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Failed to download pixi-pack executable from {}. Status: {}",
+                url,
+                response.status()
+            ));
+        }
+
+        let total_size = response
+            .content_length()
+            .ok_or_else(|| anyhow!("Failed to get content length"))?;
+
+        let bar = ProgressReporter::new(total_size);
+        bar.pb.set_message("Downloading");
+
+        let mut stream = response.bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            executable_bytes.extend_from_slice(&chunk);
+            bar.pb.inc(chunk.len() as u64);
+        }
+
+        bar.pb.finish_with_message("Download complete");
+    } else {
+        let mut file = File::open(url.to_string())
+            .await
+            .map_err(|e| anyhow!("Failed to open local file {}: {}", url, e))?;
+        file.read_to_end(&mut executable_bytes)
+            .await
+            .map_err(|e| anyhow!("Failed to read local file {}: {}", url, e))?;
     }
-
-    bar.pb.finish_with_message("Download complete");
 
     eprintln!("✅ Pixi-pack executable downloaded successfully");
 
