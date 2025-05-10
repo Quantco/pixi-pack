@@ -78,7 +78,7 @@ enum Commands {
         /// Optional path or URL to a pixi-pack executable.
         // Ex. /path/to/pixi-pack/pixi-pack.exe
         // Ex. https://example.com/pixi-pack.exe
-        #[arg(long, short, requires = "create_executable")]
+        #[arg(long, requires = "create_executable")]
         pixi_pack_source: Option<UrlOrPath>,
 
         /// Rattler config for mirror or S3 configuration.
@@ -109,7 +109,7 @@ enum Commands {
     /// Generate shell completion script
     Completion {
         /// The shell to generate the completion script for
-        #[arg(value_enum)]
+        #[arg(short, long, value_enum)]
         shell: Shell,
     },
 }
