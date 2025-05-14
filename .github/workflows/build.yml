@@ -25,6 +25,11 @@ jobs:
     name: Build Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: [metadata]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -68,6 +73,12 @@ jobs:
         run: |
           cargo build --profile release --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }}
           mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+        if: needs.metadata.outputs.release == 'true'
+        with:
+          subject-path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
