@@ -270,3 +270,10 @@ pixi exec slsa-verifier verify-artifact pixi-pack-<architecture> \
 ```
 
 Due to the setup of the release pipeline, the git tag is not part of the provenance but you can instead verify the commit id.
+
+In addition to the `intoto` files, we also upload build attestations to GitHub.
+You can verify a binary using the `gh` CLI:
+
+```
+gh attestation verify --repo Quantco/pixi-pack pixi-pack-<architecture>
+```
