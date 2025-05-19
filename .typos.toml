@@ -1,2 +1,5 @@
 [default.extend-words]
 intoto = "intoto"
+
+[files]
+extend-exclude = ["pixi.lock.template"]
