@@ -15,6 +15,7 @@ uvicorn = "*"
 pytest = "*"
 ruff = "*"
 mypy = "*"
+python-build = "*"
 
 [environments]
 default = { features = ["dev"], solve-group = "prod" }

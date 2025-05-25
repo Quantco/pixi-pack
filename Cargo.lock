@@ -3852,6 +3852,7 @@ dependencies = [
  "fxhash",
  "indicatif",
  "insta",
+ "pep508_rs",
  "pixi_config",
  "rattler",
  "rattler_conda_types",

@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -29,6 +30,7 @@ use rattler_networking::{
 use reqwest_middleware::ClientWithMiddleware;
 use tokio::io::AsyncReadExt;
 use tokio_tar::{Builder, HeaderMode};
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
 
@@ -233,6 +235,57 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .await
             .map_err(|e: anyhow::Error| anyhow!("could not download pypi package: {}", e))?;
         bar.pb.finish_and_clear();
+    }
+
+    let injected_pypi_packages: Vec<PathBuf> = options
+        .injected_packages
+        .iter()
+        .filter(|e| {
+            e.extension()
+                .filter(|e| e.to_str() == Some("whl"))
+                .is_some()
+        })
+        .cloned()
+        .collect();
+
+    tracing::info!("Injecting {} pypi packages", injected_pypi_packages.len());
+    for path in injected_pypi_packages {
+        let filename = path
+            .file_name()
+            .ok_or(anyhow!("cannot get filename"))?
+            .to_str()
+            .ok_or(anyhow!("could not convert filename to string"))?
+            .to_string();
+        let path_str = path
+            .to_str()
+            .ok_or(anyhow!("could not convert filename to string"))?
+            .to_string();
+        let wheel_file_name = WheelFilename::from_str(&filename)?;
+        let pypi_data = PypiPackageData {
+            name: wheel_file_name
+                .name
+                .as_str()
+                .parse()
+                .map_err(|e| anyhow!("cannot parse package name: {}", e))?,
+            version: wheel_file_name
+                .version
+                .to_string()
+                .parse()
+                .map_err(|e| anyhow!("cannot parse package version: {}", e))?,
+            location: path_str
+                .parse()
+                .map_err(|e| anyhow!("Cannot convert path type: {}", e))?,
+            hash: None,
+            requires_dist: vec![],
+            requires_python: None,
+            editable: false,
+        };
+        create_dir_all(&pypi_directory)
+            .await
+            .map_err(|e| anyhow!("could not create pypi directory: {}", e))?;
+        fs::copy(&path, pypi_directory.join(filename)).await?;
+
+        pypi_packages_from_lockfile.push(pypi_data.clone());
     }
 
     // Create `repodata.json` files.
