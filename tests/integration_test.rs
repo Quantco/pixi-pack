@@ -191,7 +191,12 @@ async fn test_inject(
     if is_conda {
         required_fs_objects.push("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
     } else {
-        required_fs_objects.push("lib/python3.12/site-packages/my_webserver-0.1.0.dist-info");
+        let platform = Platform::current();
+        if platform.is_windows() {
+            required_fs_objects.push("lib/site-packages/my_webserver-0.1.0.dist-info");
+        } else {
+            required_fs_objects.push("lib/python3.12/site-packages/my_webserver-0.1.0.dist-info");
+        }
     }
 
     required_fs_objects
