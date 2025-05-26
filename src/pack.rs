@@ -237,7 +237,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         bar.pb.finish_and_clear();
     }
 
-    let injected_pypi_packages: Vec<PathBuf> = options
+    let injected_pypi_packages: Vec<_> = options
         .injected_packages
         .iter()
         .filter(|e| {
@@ -283,6 +283,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         create_dir_all(&pypi_directory)
             .await
             .map_err(|e| anyhow!("could not create pypi directory: {}", e))?;
+        eprintln!(
+            "⚠️ Currently we cannot verify that injected pypi packages are compatible with the environment."
+        );
         fs::copy(&path, pypi_directory.join(filename)).await?;
 
         pypi_packages_from_lockfile.push(pypi_data.clone());
