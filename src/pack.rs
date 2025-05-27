@@ -283,7 +283,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         create_dir_all(&pypi_directory)
             .await
             .map_err(|e| anyhow!("could not create pypi directory: {}", e))?;
-        eprintln!(
+        tracing::warn!(
             "Currently we cannot verify that injected wheels are compatible with the environment."
         );
         fs::copy(&path, pypi_directory.join(filename)).await?;
