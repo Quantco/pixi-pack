@@ -252,7 +252,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     for path in injected_pypi_packages {
         let filename = path
             .file_name()
-            .ok_or(anyhow!("cannot get filename"))?
+            .ok_or(anyhow!("could not get filename"))?
             .to_str()
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
@@ -266,15 +266,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 .name
                 .as_str()
                 .parse()
-                .map_err(|e| anyhow!("cannot parse package name: {}", e))?,
+                .map_err(|e| anyhow!("could not parse package name: {}", e))?,
             version: wheel_file_name
                 .version
                 .to_string()
                 .parse()
-                .map_err(|e| anyhow!("cannot parse package version: {}", e))?,
+                .map_err(|e| anyhow!("could not parse package version: {}", e))?,
             location: path_str
                 .parse()
-                .map_err(|e| anyhow!("Cannot convert path type: {}", e))?,
+                .map_err(|e| anyhow!("could not convert path type: {}", e))?,
             hash: None,
             requires_dist: vec![],
             requires_python: None,
@@ -284,7 +284,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .await
             .map_err(|e| anyhow!("could not create pypi directory: {}", e))?;
         eprintln!(
-            "⚠️ Currently we cannot verify that injected pypi packages are compatible with the environment."
+            "Currently we cannot verify that injected wheels are compatible with the environment."
         );
         fs::copy(&path, pypi_directory.join(filename)).await?;
 
