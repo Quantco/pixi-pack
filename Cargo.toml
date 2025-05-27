@@ -1,7 +1,7 @@
 [package]
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
-version = "0.6.5"
+version = "0.6.6"
 edition = "2024"
 
 # See https://doc.rust-lang.org/cargo/reference/profiles.html
