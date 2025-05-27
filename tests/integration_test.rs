@@ -157,11 +157,13 @@ async fn test_simple_python(
 }
 
 #[rstest]
-#[case("conda")]
-#[case("tar.bz2")]
+#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true)]
+#[case("my-webserver-0.1.0-pyh4616a5c_0.tar.bz2", true)]
+#[case("my_webserver-0.1.0-py3-none-any.whl", false)]
 #[tokio::test]
 async fn test_inject(
-    #[case] package_format: &str,
+    #[case] package_file: &str,
+    #[case] is_conda: bool,
     options: Options,
     mut required_fs_objects: Vec<&'static str>,
 ) {
@@ -169,9 +171,9 @@ async fn test_inject(
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
-    pack_options.injected_packages.push(PathBuf::from(format!(
-        "examples/webserver/my-webserver-0.1.0-pyh4616a5c_0.{package_format}"
-    )));
+    pack_options
+        .injected_packages
+        .push(PathBuf::from(format!("examples/webserver/{package_file}")));
 
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
 
@@ -186,7 +188,16 @@ async fn test_inject(
     assert!(activate_file.is_file());
 
     // output env should contain files from the injected package
-    required_fs_objects.push("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
+    if is_conda {
+        required_fs_objects.push("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
+    } else {
+        let platform = Platform::current();
+        if platform.is_windows() {
+            required_fs_objects.push("lib/site-packages/my_webserver-0.1.0.dist-info");
+        } else {
+            required_fs_objects.push("lib/python3.12/site-packages/my_webserver-0.1.0.dist-info");
+        }
+    }
 
     required_fs_objects
         .iter()
