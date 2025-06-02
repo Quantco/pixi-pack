@@ -30,22 +30,22 @@ rustls-tls = [
 
 [dependencies]
 anyhow = "1.0.98"
-clap = { version = "4.5.37", features = ["derive", "string"] }
-clap_complete = "4.5.50"
-clap-verbosity-flag = { version = "3.0.2", features = ["tracing"] }
+clap = { version = "4.5.39", features = ["derive", "string"] }
+clap_complete = "4.5.52"
+clap-verbosity-flag = { version = "3.0.3", features = ["tracing"] }
 futures = "0.3.31"
 indicatif = "0.17.11"
 # TODO: use pixi_config crate
 pixi_config = { git = "https://github.com/prefix-dev/pixi", branch = "main" }
-rattler = { version = "0.33.5", default-features = false }
+rattler = { version = "0.33.6", default-features = false }
 rattler_digest = "1.1.1"
-rattler_conda_types = "0.32.0"
-rattler_index = "0.22.5"
-rattler_lock = "0.23.2"
-rattler_networking = { version = "0.22.12", default-features = false }
+rattler_conda_types = "0.33.0"
+rattler_index = "0.22.6"
+rattler_lock = "0.23.3"
+rattler_networking = { version = "0.23.0", default-features = false }
 rattler_package_streaming = { version = "0.22.36", default-features = false }
-rattler_shell = "0.22.26"
-reqwest = { version = "0.12.15", default-features = false, features = [
+rattler_shell = "0.23.0"
+reqwest = { version = "0.12.18", default-features = false, features = [
   "http2",
   "macos-system-configuration",
 ] }
@@ -53,7 +53,7 @@ reqwest-middleware = "0.4.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 serde_yaml = "0.9.34"
-tokio = { version = "1.44.2", features = ["rt-multi-thread"] }
+tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 tokio-tar = "0.3.1"
 tokio-stream = { version = "0.1.17", features = ["fs"] }
 tracing = "0.1.41"
@@ -63,25 +63,25 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 url = "2.5.4"
 fxhash = "0.2.1"
-tempfile = "3.19.1"
+tempfile = "3.20.0"
 walkdir = "2.5.0"
 base64 = "0.22.1"
-uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-distribution-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-git = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
-uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.7.2" }
+uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-distribution-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-git = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
+uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.7.9" }
 
 [dev-dependencies]
 async-std = "1.13.1"
