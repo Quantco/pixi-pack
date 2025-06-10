@@ -410,7 +410,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
         reqwest::Client::builder()
             .no_gzip()
             .pool_max_idle_per_host(20)
-            .user_agent("pixi-pack")
+            .user_agent(format!("pixi-pack/{}", env!("CARGO_PKG_VERSION")))
             .timeout(std::time::Duration::from_secs(timeout))
             .build()
             .map_err(|e| anyhow!("could not create download client: {}", e))?,
