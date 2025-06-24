@@ -37,6 +37,9 @@ impl Default for PixiPackMetadata {
     }
 }
 
+/// The configuration type for pixi-config - just extends pixi config and can load the same TOML files.
+pub type Config = rattler_config::config::ConfigBase<()>;
+
 /* --------------------------------------------------------------------------------------------- */
 /*                                             TESTS                                             */
 /* --------------------------------------------------------------------------------------------- */

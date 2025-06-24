@@ -35,7 +35,7 @@ use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
 
 use crate::{
-    CHANNEL_DIRECTORY_NAME, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
+    CHANNEL_DIRECTORY_NAME, Config, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
     ProgressReporter, get_size,
 };
 use anyhow::anyhow;
@@ -54,7 +54,7 @@ pub struct PackOptions {
     pub ignore_pypi_non_wheel: bool,
     pub create_executable: bool,
     pub pixi_pack_source: Option<UrlOrPath>,
-    pub config: Option<pixi_config::Config>,
+    pub config: Option<Config>,
 }
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     if !manifest_path.exists() {
@@ -367,7 +367,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     let auth_storage = get_auth_store(options.auth_file.clone())?;
 
     let s3_middleware = if let Some(config) = &options.config {
-        let s3_config = config.compute_s3_config();
+        let s3_config = rattler_networking::s3_middleware::compute_s3_config(&config.s3_options.0);
         tracing::info!("Using S3 config: {:?}", s3_config);
         S3Middleware::new(s3_config, auth_storage.clone())
     } else {
@@ -375,7 +375,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     };
     let mirror_middleware = if let Some(config) = &options.config {
         let mut internal_map = HashMap::new();
-        tracing::info!("Using mirrors: {:?}", config.mirror_map());
+        tracing::info!("Using mirrors: {:?}", config.mirrors);
 
         fn ensure_trailing_slash(url: &url::Url) -> url::Url {
             if url.path().ends_with('/') {
@@ -387,7 +387,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
                     .expect("Failed to add trailing slash to URL")
             }
         }
-        for (key, value) in config.mirror_map() {
+        for (key, value) in &config.mirrors {
             let mut mirrors = Vec::new();
             for v in value {
                 mirrors.push(Mirror {

@@ -4,17 +4,15 @@ use std::path::PathBuf;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use clap_verbosity_flag::Verbosity;
-use pixi_config::Config;
 use rattler_conda_types::Platform;
 
 use anyhow::Result;
 use pixi_pack::{
-    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata, UnpackOptions,
-    pack, unpack,
+    Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata,
+    UnpackOptions, pack, unpack,
 };
 use rattler_lock::UrlOrPath;
 use rattler_shell::shell::ShellEnum;
-use tokio::fs::read_to_string;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
 
@@ -157,10 +155,8 @@ async fn main() -> Result<()> {
                 output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
 
             let config = if let Some(config_path) = config {
-                let config_str = read_to_string(&config_path).await?;
-                let (config, _unused_keys) =
-                    Config::from_toml(config_str.as_str(), Some(&config_path.clone()))
-                        .map_err(|e| anyhow::anyhow!("Failed to parse config file: {}", e))?;
+                let config = Config::load_from_files(&config_path.clone())
+                    .map_err(|e| anyhow::anyhow!("Failed to parse config file: {}", e))?;
                 Some(config)
             } else {
                 None
