@@ -92,6 +92,3 @@ sha2 = "0.10.9"
 insta = "1.43.1"
 serial_test = "3.2.0"
 
-[patch.crates-io]
-# This is a temporary patch to get `cargo vendor` to work with the `uv` and pep508_rs` crates.
-version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "a3b4db3abb1829ce889fb89fa6d157fef529ef7e" }
