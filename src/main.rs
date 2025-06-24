@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
                 output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
 
             let config = if let Some(config_path) = config {
-                let config = Config::load_from_files(&config_path.clone())
+                let config = Config::load_from_files(vec![&config_path.clone()])
                     .map_err(|e| anyhow::anyhow!("Failed to parse config file: {}", e))?;
                 Some(config)
             } else {

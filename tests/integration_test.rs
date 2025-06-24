@@ -719,7 +719,10 @@ async fn test_mirror_middleware(
 ) {
     let mut pack_options = options.pack_options;
     pack_options.config = Some(
-        Config::load_from_files(&PathBuf::from("examples/mirror-middleware/config.toml")).unwrap(),
+        Config::load_from_files(vec![&PathBuf::from(
+            "examples/mirror-middleware/config.toml",
+        )])
+        .unwrap(),
     );
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
