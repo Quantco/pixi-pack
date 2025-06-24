@@ -1,6 +1,5 @@
 #![allow(clippy::too_many_arguments)]
 
-use pixi_config::Config;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::{fs, io};
@@ -8,8 +7,8 @@ use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
 
 use pixi_pack::{
-    DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata, UnpackOptions,
-    unarchive,
+    Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata,
+    UnpackOptions, unarchive,
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
@@ -719,8 +718,9 @@ async fn test_mirror_middleware(
     #[with(PathBuf::from("examples/mirror-middleware/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.config =
-        Some(Config::from_path(&PathBuf::from("examples/mirror-middleware/config.toml")).unwrap());
+    pack_options.config = Some(
+        Config::load_from_files(&PathBuf::from("examples/mirror-middleware/config.toml")).unwrap(),
+    );
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 }
