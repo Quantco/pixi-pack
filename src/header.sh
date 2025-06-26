@@ -38,11 +38,11 @@ archive_end=$((archive_end - 1))
 pixi_pack_start=$((archive_end + 2))
 
 sed -n "$archive_begin,${archive_end}p" "$0" | base64 -d > "$TEMPDIR/archive.tar"
-sed -n "$pixi_pack_start,\$p" "$0" | base64 -d > "$TEMPDIR/pixi-pack"
+sed -n "$pixi_pack_start,\$p" "$0" | base64 -d > "$TEMPDIR/pixi-unpack"
 
-chmod +x "$TEMPDIR/pixi-pack"
+chmod +x "$TEMPDIR/pixi-unpack"
 
-"$TEMPDIR/pixi-pack" unpack "$@" "$TEMPDIR/archive.tar"
+"$TEMPDIR/pixi-unpack" "$@" "$TEMPDIR/archive.tar"
 
 rm -rf "$TEMPDIR"
 

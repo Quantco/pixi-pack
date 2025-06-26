@@ -30,7 +30,7 @@ foreach ($arg in $args) {
     }
 }
 
-# Extract the archive and pixi-pack executable, and decode them
+# Extract the archive and pixi-unpack executable, and decode them
 $scriptContent = Get-Content -Raw -Path $MyInvocation.MyCommand.Path
 $lines = $scriptContent -split "`r?`n"
 
@@ -66,17 +66,17 @@ try {
     exit 1
 }
 
-# Extract Base64 content for pixi-pack executable
+# Extract Base64 content for pixi-unpack executable
 $pixiPackContent = $lines[($archiveLine)..($lines.Count - 1)] -join ""
 $pixiPackContent = $pixiPackContent.Trim()
 
-# Decode Base64 content into the pixi-pack executable file
+# Decode Base64 content into the pixi-unpack executable file
 try {
     $decodedPixiPack = [System.Convert]::FromBase64String($pixiPackContent)
-    $pixiPackPath = "$TEMPDIR\pixi-pack.exe"
+    $pixiPackPath = "$TEMPDIR\pixi-unpack.exe"
     [System.IO.File]::WriteAllBytes($pixiPackPath, $decodedPixiPack)
 } catch {
-    Write-Error "Failed to decode Base64 pixi-pack content: $_"
+    Write-Error "Failed to decode Base64 pixi-unpack content: $_"
     exit 1
 }
 
