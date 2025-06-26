@@ -30,6 +30,7 @@ use rattler_networking::{
 use reqwest_middleware::ClientWithMiddleware;
 use tokio::io::AsyncReadExt;
 use tokio_tar::{Builder, HeaderMode};
+use url::Url;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
@@ -804,7 +805,11 @@ async fn download_pypi_package(
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
     let url = match &package.location {
-        UrlOrPath::Url(url) => url,
+        UrlOrPath::Url(url) => url
+            .as_ref()
+            .strip_prefix("direct+")
+            .and_then(|str| Url::parse(str).ok())
+            .unwrap_or(url.clone()),
         UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
     };
 
