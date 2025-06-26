@@ -66,7 +66,7 @@ fn options(
             injected_packages: vec![],
             ignore_pypi_non_wheel,
             create_executable,
-            pixi_pack_source: None,
+            pixi_unpack_source: None,
             cache_dir: None,
             config: None,
         },
@@ -745,21 +745,23 @@ async fn test_pixi_pack_source(
     // Build the path
     let version = env!("CARGO_PKG_VERSION");
     let pixi_pack_url = format!(
-        "https://github.com/Quantco/pixi-pack/releases/download/v{}/pixi-pack-x86_64-unknown-linux-musl",
+        "https://github.com/Quantco/pixi-pack/releases/download/v{}/pixi-unpack-x86_64-unknown-linux-musl",
         version
     );
     // Download the pixi-pack binary from the specified URL
-    let pixi_pack_path = temp_dir.path().join("pixi-pack-x86_64-unknown-linux-musl");
+    let pixi_unpack_path = temp_dir
+        .path()
+        .join("pixi-unpack-x86_64-unknown-linux-musl");
     let response = reqwest::get(&pixi_pack_url)
         .await
         .expect("Failed to download pixi-pack binary");
-    let mut file = fs::File::create(&pixi_pack_path).unwrap();
+    let mut file = fs::File::create(&pixi_unpack_path).unwrap();
     let content = response.bytes().await.unwrap();
     io::copy(&mut content.as_ref(), &mut file).unwrap();
 
     // Reference the local path
-    pack_options.pixi_pack_source = Some(UrlOrPath::Path(
-        pixi_pack_path
+    pack_options.pixi_unpack_source = Some(UrlOrPath::Path(
+        pixi_unpack_path
             .into_os_string()
             .into_string()
             .unwrap()
@@ -776,7 +778,7 @@ async fn test_pixi_pack_source(
     drop(temp_dir);
 
     // Now test with URL
-    pack_options.pixi_pack_source = Some(UrlOrPath::Url(Url::parse(&pixi_pack_url).unwrap()));
+    pack_options.pixi_unpack_source = Some(UrlOrPath::Url(Url::parse(&pixi_pack_url).unwrap()));
 
     let pack_result = pixi_pack::pack(pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);

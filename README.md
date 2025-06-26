@@ -35,21 +35,22 @@
 ## 📖 Introduction
 
 Starting with a [pixi](https://pixi.sh) lockfile `pixi.lock`, you can create a packed environment that can be shared with others.
-This environment can be unpacked on any system using `pixi-pack` to recreate the original environment.
+This environment can be unpacked on any system using `pixi-unpack` to recreate the original environment.
 
 In contrast to [`conda-pack`](https://conda.github.io/conda-pack/), `pixi-pack` does not require the original conda environment to be present on the system for packing.
 Instead, it uses the lockfile to download the required packages and puts them into a `.tar` archive.
-This archive can then be shared with others and installed using `pixi-pack unpack` to recreate the original environment.
+This archive can then be shared with others and installed using `pixi-unpack` to recreate the original environment.
 
 The original motivation behind `pixi-pack` was to create a `conda-pack` alternative that does not have the same reproducibility issues as `conda-pack`.
 It also aims to allow cross-platform building packs, so you can create a pack for `win-64` on a `linux-64` system.
 
 ## 💿 Installation
 
-You can install `pixi-pack` using `pixi`:
+You can install `pixi-pack` and `pixi-unpack` using `pixi`:
 
 ```bash
 pixi global install pixi-pack
+pixi global install pixi-unpack
 ```
 
 Or using `cargo`:
@@ -60,24 +61,27 @@ cargo install --locked --git https://github.com/quantco/pixi-pack.git
 
 Or by downloading our pre-built binaries from the [releases page](https://github.com/quantco/pixi-pack/releases).
 
-Instead of installing `pixi-pack` globally, you can also use `pixi exec` to run `pixi-pack` in a temporary environment:
+Instead of installing `pixi-pack` and `pixi-unpack` globally, you can also use `pixi exec` to run `pixi-pack` in a temporary environment:
 
 ```bash
-pixi exec pixi-pack pack
-pixi exec pixi-pack unpack environment.tar
+pixi exec pixi-pack
+pixi exec pixi-unpack environment.tar
 ```
+
+> [!NOTE]
+> You can also write `pixi pack` (and `pixi unpack`) if you have `pixi-pack` and `pixi-unpack` installed globally.
 
 ## 🎯 Usage
 
-### `pixi-pack pack`: Packing an environment
+### `pixi-pack`: Packing an environment
 
-With `pixi-pack pack`, you can pack a conda environment into a `environment.tar` file:
+With `pixi-pack`, you can pack a conda environment into a `environment.tar` file:
 
 ```bash
-pixi-pack pack --manifest-file pixi.toml --environment prod --platform linux-64
+pixi-pack --environment prod --platform linux-64 pixi.toml
 ```
 
-This will create a `environment.tar` file that contains all conda packages required to create the environment.
+This will create an `environment.tar` file that contains all conda packages required to create the environment.
 
 ```
 # environment.tar
@@ -94,15 +98,15 @@ This will create a `environment.tar` file that contains all conda packages requi
 |         └── repodata.json
 ```
 
-### `pixi-pack unpack`: Unpacking an environment
+### `pixi-unpack`: Unpacking an environment
 
-With `pixi-pack unpack environment.tar`, you can unpack the environment on your target system.
+With `pixi-unpack environment.tar`, you can unpack the environment on your target system.
 This will create a new conda environment in `./env` that contains all packages specified in your `pixi.toml`.
 It also creates an `activate.sh` (or `activate.bat` on Windows) file that lets you activate the environment
 without needing to have `conda` or `micromamba` installed.
 
 ```bash
-$ pixi-pack unpack environment.tar
+$ pixi-unpack environment.tar
 $ ls
 env/
 activate.sh
@@ -118,20 +122,20 @@ export CONDA_PREFIX="/home/user/project/env"
 Since `pixi-pack` just downloads the `.conda` and `.tar.bz2` files from the conda repositories, you can trivially create packs for different platforms.
 
 ```bash
-pixi-pack pack --platform win-64
+pixi-pack --platform win-64
 ```
 
 > [!NOTE]
-> You can only `unpack` a pack on a system that has the same platform as the pack was created for.
+> You can only `pixi-unpack` a pack on a system that has the same platform as the pack was created for.
 
 ### Self-extracting binaries
 
 You can create a self-extracting binary that contains the packed environment and a script that unpacks the environment.
-This can be useful if you want to distribute the environment to users that don't have `pixi-pack` installed.
+This can be useful if you want to distribute the environment to users that don't have `pixi-unpack` installed.
 
 ```bash
 # unix
-$ pixi-pack pack --create-executable
+$ pixi-pack --create-executable
 $ ls
 environment.sh
 $ ./environment.sh
@@ -143,7 +147,7 @@ environment.sh
 
 ```powershell
 # windows
-PS > pixi-pack pack --create-executable
+PS > pixi-pack --create-executable
 PS > ls
 environment.ps1
 PS > .\environment.ps1
@@ -153,38 +157,38 @@ activate.sh
 environment.ps1
 ```
 
-#### Custom pixi-pack executable path
+#### Custom pixi-unpack executable path
 
-When creating a self-extracting binary, you can specify a custom path or URL to a `pixi-pack` executable to avoid downloading it from the [default location](https://github.com/Quantco/pixi-pack/releases/download).
+When creating a self-extracting binary, you can specify a custom path or URL to a `pixi-unpack` executable to avoid downloading it from the [default location](https://github.com/Quantco/pixi-pack/releases/download).
 
-You can provide one of the following as the `--pixi-pack-source`:
+You can provide one of the following as the `--pixi-unpack-source`:
 
-- a URL to a `pixi-pack` executable like `https://my.mirror/pixi-pack/pixi-pack-x86_64-unknown-linux-musl`
-- a path to a `pixi-pack` binary like `./pixi-pack-x86_64-unknown-linux-musl`
+- a URL to a `pixi-unpack` executable like `https://my.mirror/pixi-pack/pixi-unpack-x86_64-unknown-linux-musl`
+- a path to a `pixi-unpack` binary like `./pixi-unpack-x86_64-unknown-linux-musl`
 
 ##### Example Usage
 
 Using a URL:
 
 ```bash
-pixi-pack pack --create-executable --pixi-pack-source https://my.mirror/pixi-pack/pixi-pack-x86_64-unknown-linux-musl
+pixi-pack --create-executable --pixi-unpack-source https://my.mirror/pixi-pack/pixi-unpack-x86_64-unknown-linux-musl
 ```
 
 Using a path:
 
 ```bash
-pixi-pack pack --create-executable --pixi-pack-source ./pixi-pack-x86_64-unknown-linux-musl
+pixi-pack --create-executable --pixi-unpack-source ./pixi-unpack-x86_64-unknown-linux-musl
 ```
 
 > [!TIP]
-> The produced executable is a simple shell script that contains both the `pixi-pack` binary as well as the packed environment.
+> The produced executable is a simple shell script that contains both the `pixi-unpack` binary as well as the packed environment.
 
 ### Inject additional packages
 
 You can inject additional packages into the environment that are not specified in `pixi.lock` by using the `--inject` flag:
 
 ```bash
-pixi-pack pack --inject local-package-1.0.0-hbefa133_0.conda --manifest-pack pixi.toml
+pixi-pack --inject local-package-1.0.0-hbefa133_0.conda pixi.toml
 ```
 
 This can be particularly useful if you build the project itself and want to include the built package in the environment but still want to use `pixi.lock` from the project.
@@ -200,7 +204,7 @@ This will skip the bundling of all PyPi source distributions.
 The `--inject` option also supports wheels.
 
 ```bash
-pixi-pack pack --ignore-pypi-non-wheel --inject my_webserver-0.1.0-py3-none-any.whl
+pixi-pack --ignore-pypi-non-wheel --inject my_webserver-0.1.0-py3-none-any.whl
 ```
 
 > [!WARNING]
@@ -240,7 +244,7 @@ See [pixi docs](https://pixi.sh/latest/reference/pixi_configuration/#concurrency
 You can cache downloaded packages to speed up subsequent pack operations by using the `--use-cache` flag:
 
 ```bash
-pixi-pack pack --use-cache ~/.pixi-pack/cache
+pixi-pack --use-cache ~/.pixi-pack/cache
 ```
 
 This will store all downloaded packages in the specified directory and reuse them in future pack operations. The cache follows the same structure as conda channels, organizing packages by platform subdirectories (e.g., linux-64, win-64, etc.).
@@ -252,10 +256,10 @@ Using a cache is particularly useful when:
 - Operating in environments with limited bandwidth
 - Running CI/CD pipelines where package caching can significantly improve build times
 
-### Unpacking without `pixi-pack`
+### Unpacking without `pixi-unpack`
 
-If you don't have `pixi-pack` available on your target system, you can still install the environment if you have `conda` or `micromamba` available.
-Just unarchive the `environment.tar`, then you have a local channel named `pixi-pack` on your system where all necessary packages are available.
+If you don't have `pixi-unpack` available on your target system, you can still install the environment if you have `conda` or `micromamba` available.
+Just unarchive the `environment.tar`, then you have a local channel named `pixi-unpack` on your system where all necessary packages are available.
 Next to this local channel, you will find an `environment.yml` file that contains the environment specification.
 You can then install the environment using `conda` or `micromamba`:
 
@@ -267,11 +271,11 @@ conda env create -p ./env --file environment.yml
 ```
 
 > [!NOTE]
-> The `environment.yml` and `repodata.json` files are only for this use case, `pixi-pack unpack` does not use them.
+> The `environment.yml` and `repodata.json` files are only for this use case, `pixi-unpack` does not use them.
 
 > [!NOTE]
 > Both `conda` and `mamba` are always installing pip as a side effect when they install python, see [`conda`'s documentation](https://docs.conda.io/projects/conda/en/25.1.x/user-guide/configuration/settings.html#add-pip-as-python-dependency-add-pip-as-python-dependency).
-> This is different from how `pixi` works and can lead to solver errors when using `pixi-pack`'s compatibility mode since `pixi-pack` doesn't include `pip` by default.
+> This is different from how `pixi` works and can lead to solver errors when using `pixi-pack`'s compatibility mode since `pixi` doesn't include `pip` by default.
 > You can fix this issue in two ways:
 >
 > - Add `pip` to your `pixi.lock` file using `pixi add pip`.
