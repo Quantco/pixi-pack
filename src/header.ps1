@@ -81,7 +81,7 @@ try {
 }
 
 # Build the command with flags
-$arguments = @("unpack")
+$arguments = @()
 $arguments += $args
 
 # Add the path to the archive
