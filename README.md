@@ -225,6 +225,16 @@ region = "eu-central-1"
 force-path-style = false
 ```
 
+### Setting maximum number of parallel downloads
+
+```toml
+[concurrency]
+downloads = 5
+```
+
+Use `pixi-pack --config config.toml` to use the custom configuration file.
+See [pixi docs](https://pixi.sh/latest/reference/pixi_configuration/#concurrency) for more information.
+
 ### Cache downloaded packages
 
 You can cache downloaded packages to speed up subsequent pack operations by using the `--use-cache` flag:
