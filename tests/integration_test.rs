@@ -66,7 +66,7 @@ fn options(
             injected_packages: vec![],
             ignore_pypi_non_wheel,
             create_executable,
-            pixi_pack_source: None,
+            pixi_unpack_source: None,
             cache_dir: None,
             config: None,
         },
@@ -758,7 +758,7 @@ async fn test_pixi_pack_source(
     io::copy(&mut content.as_ref(), &mut file).unwrap();
 
     // Reference the local path
-    pack_options.pixi_pack_source = Some(UrlOrPath::Path(
+    pack_options.pixi_unpack_source = Some(UrlOrPath::Path(
         pixi_pack_path
             .into_os_string()
             .into_string()
@@ -776,7 +776,7 @@ async fn test_pixi_pack_source(
     drop(temp_dir);
 
     // Now test with URL
-    pack_options.pixi_pack_source = Some(UrlOrPath::Url(Url::parse(&pixi_pack_url).unwrap()));
+    pack_options.pixi_unpack_source = Some(UrlOrPath::Url(Url::parse(&pixi_pack_url).unwrap()));
 
     let pack_result = pixi_pack::pack(pack_options.clone()).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
