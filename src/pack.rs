@@ -599,12 +599,12 @@ async fn create_self_extracting_executable(
         _ => return Err(anyhow!("Unsupported platform: {}", platform)),
     };
 
-    let executable_name = format!("pixi-pack-{}-{}", arch, os);
+    let executable_name = format!("pixi-unpack-{}-{}", arch, os);
     let extension = if platform.is_windows() { ".exe" } else { "" };
 
     let version = env!("CARGO_PKG_VERSION");
 
-    // Build pixi-pack executable url
+    // Build pixi-unpack executable url
     let url = pixi_pack_source.unwrap_or_else(|| {
         let default_url = format!(
             "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
@@ -613,18 +613,18 @@ async fn create_self_extracting_executable(
         UrlOrPath::Url(default_url.parse().expect("could not parse url"))
     });
 
-    eprintln!("📥 Fetching pixi-pack executable...");
+    eprintln!("📥 Fetching pixi-unpack executable...");
 
     let mut executable_bytes = Vec::new();
 
-    // Use reqwest to download the pixi-pack executable from the URL
+    // Use reqwest to download the pixi-unpack executable from the URL
     // or read it from a local file if the URL is a file path
     if let UrlOrPath::Url(_) = &url {
         let client = reqwest::Client::new();
         let response = client.get(url.to_string()).send().await?;
         if !response.status().is_success() {
             return Err(anyhow!(
-                "Failed to download pixi-pack executable from {}. Status: {}",
+                "Failed to download pixi-unpack executable from {}. Status: {}",
                 url,
                 response.status()
             ));
@@ -655,7 +655,7 @@ async fn create_self_extracting_executable(
             .map_err(|e| anyhow!("Failed to read local file {}: {}", url, e))?;
     }
 
-    eprintln!("✅ Pixi-pack executable downloaded successfully");
+    eprintln!("✅ pixi-unpack executable downloaded successfully");
 
     let mut final_executable = File::create(&executable_path)
         .await
