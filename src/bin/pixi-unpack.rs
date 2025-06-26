@@ -31,7 +31,7 @@ struct Cli {
     env_name: String,
 
     /// Path to the pack file
-    #[arg()]
+    #[arg(default_value = cwd().join("environment.tar").into_os_string())]
     pack_file: PathBuf,
 
     /// Sets the shell, options: [`bash`, `zsh`, `xonsh`, `cmd`, `powershell`, `fish`, `nushell`]
