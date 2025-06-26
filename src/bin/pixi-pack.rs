@@ -59,11 +59,11 @@ struct Cli {
     #[arg(long, default_value = "false")]
     create_executable: bool,
 
-    /// Optional path or URL to a pixi-pack executable.
-    // Ex. /path/to/pixi-pack/pixi-pack.exe
-    // Ex. https://example.com/pixi-pack.exe
+    /// Optional path or URL to a pixi-unpack executable.
+    // Ex. /path/to/pixi-unpack/pixi-unpack.exe
+    // Ex. https://example.com/pixi-unpack.exe
     #[arg(long, requires = "create_executable")]
-    pixi_pack_source: Option<UrlOrPath>,
+    pixi_unpack_source: Option<UrlOrPath>,
 
     /// Rattler config for mirror or S3 configuration.
     #[arg(long, short)]
@@ -120,7 +120,7 @@ async fn main() -> Result<()> {
         inject,
         ignore_pypi_non_wheel,
         create_executable,
-        pixi_pack_source,
+        pixi_unpack_source,
         config,
         use_cache,
         command,
@@ -158,7 +158,7 @@ async fn main() -> Result<()> {
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
                 create_executable,
-                pixi_pack_source,
+                pixi_unpack_source,
                 cache_dir: use_cache,
                 config,
             };

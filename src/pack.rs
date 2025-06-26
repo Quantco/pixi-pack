@@ -54,7 +54,7 @@ pub struct PackOptions {
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
     pub create_executable: bool,
-    pub pixi_pack_source: Option<UrlOrPath>,
+    pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
 }
 
@@ -323,7 +323,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         output_folder.path(),
         &options.output_file,
         options.create_executable,
-        options.pixi_pack_source,
+        options.pixi_unpack_source,
         options.platform,
     )
     .await
@@ -493,12 +493,12 @@ async fn archive_directory(
     input_dir: &Path,
     archive_target: &Path,
     create_executable: bool,
-    pixi_pack_source: Option<UrlOrPath>,
+    pixi_unpack_source: Option<UrlOrPath>,
     platform: Platform,
 ) -> Result<()> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
-        create_self_extracting_executable(input_dir, archive_target, pixi_pack_source, platform)
+        create_self_extracting_executable(input_dir, archive_target, pixi_unpack_source, platform)
             .await
     } else {
         create_tarball(input_dir, archive_target).await

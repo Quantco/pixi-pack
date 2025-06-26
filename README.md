@@ -81,7 +81,7 @@ With `pixi-pack`, you can pack a conda environment into a `environment.tar` file
 pixi-pack --environment prod --platform linux-64 pixi.toml
 ```
 
-This will create a `environment.tar` file that contains all conda packages required to create the environment.
+This will create an `environment.tar` file that contains all conda packages required to create the environment.
 
 ```
 # environment.tar
