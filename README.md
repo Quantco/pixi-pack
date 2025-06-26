@@ -78,7 +78,7 @@ pixi exec pixi-unpack environment.tar
 With `pixi-pack`, you can pack a conda environment into a `environment.tar` file:
 
 ```bash
-pixi-pack --manifest-file pixi.toml --environment prod --platform linux-64
+pixi-pack --environment prod --platform linux-64 pixi.toml
 ```
 
 This will create a `environment.tar` file that contains all conda packages required to create the environment.
@@ -188,7 +188,7 @@ pixi-pack --create-executable --pixi-unpack-source ./pixi-unpack-x86_64-unknown-
 You can inject additional packages into the environment that are not specified in `pixi.lock` by using the `--inject` flag:
 
 ```bash
-pixi-pack --inject local-package-1.0.0-hbefa133_0.conda --manifest-pack pixi.toml
+pixi-pack --inject local-package-1.0.0-hbefa133_0.conda pixi.toml
 ```
 
 This can be particularly useful if you build the project itself and want to include the built package in the environment but still want to use `pixi.lock` from the project.
