@@ -17,7 +17,7 @@ fn cwd() -> PathBuf {
 
 /// The pixi-unpack CLI.
 #[derive(Parser)]
-#[command(version, about = "A command line tool to unpack environments created by pixi-pack", long_about = None)]
+#[command(name = "pixi-unpack", version, about = "A command line tool to unpack environments created by pixi-pack", long_about = None)]
 struct Cli {
     /// Where to unpack the environment.
     /// The environment will be unpacked into a subdirectory of this path
