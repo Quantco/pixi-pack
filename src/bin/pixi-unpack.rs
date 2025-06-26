@@ -17,7 +17,7 @@ fn cwd() -> PathBuf {
 
 /// The pixi-unpack CLI.
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about = "A command line tool to unpack environments created by pixi-pack", long_about = None)]
 struct Cli {
     /// Where to unpack the environment.
     /// The environment will be unpacked into a subdirectory of this path
@@ -58,7 +58,7 @@ enum Commands {
 
 /* -------------------------------------------- MAIN ------------------------------------------- */
 
-/// The main entrypoint for the pixi-pack CLI.
+/// The main entrypoint for the pixi-unpack CLI.
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
         .with_max_level(cli.verbose)
         .init();
 
-    tracing::debug!("Starting pixi-pack CLI");
+    tracing::debug!("Starting pixi-unpack CLI");
 
     let Cli {
         output_directory,
@@ -81,7 +81,7 @@ async fn main() -> Result<()> {
     match command {
         Some(Commands::Completion { shell }) => {
             let mut cmd = Cli::command();
-            generate(shell, &mut cmd, "pixi-pack", &mut io::stdout());
+            generate(shell, &mut cmd, "pixi-unpack", &mut io::stdout());
         }
         None => {
             let options = UnpackOptions {
@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
             unpack(options).await?;
         }
     };
-    tracing::debug!("Finished running pixi-pack");
+    tracing::debug!("Finished running pixi-unpack");
 
     Ok(())
 }

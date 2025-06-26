@@ -20,7 +20,7 @@ fn cwd() -> PathBuf {
 
 /// The pixi-pack CLI.
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about = "A command line tool to pack conda environments for easy sharing", long_about = None)]
 struct Cli {
     /// Environment to pack
     #[arg(short, long, default_value = "default")]
