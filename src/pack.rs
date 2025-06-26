@@ -56,6 +56,7 @@ pub struct PackOptions {
     pub pixi_pack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
 }
+
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     if !manifest_path.exists() {
         anyhow::bail!(
@@ -86,6 +87,11 @@ fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<()> {
     let lockfile = load_lockfile(&options.manifest_path)?;
+
+    let max_parallel_downloads = options.config.as_ref().map_or_else(
+        rattler_config::config::concurreny::default_max_concurrent_downloads,
+        |c| c.concurrency.downloads,
+    );
 
     let client = reqwest_client_from_options(&options)
         .map_err(|e| anyhow!("could not create reqwest client from auth storage: {e}"))?;
@@ -153,7 +159,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     let bar = ProgressReporter::new(conda_packages_from_lockfile.len() as u64);
     stream::iter(conda_packages_from_lockfile.iter())
         .map(Ok)
-        .try_for_each_concurrent(50, |package| async {
+        .try_for_each_concurrent(max_parallel_downloads, |package| async {
             download_package(&client, package, &channel_dir, options.cache_dir.as_deref()).await?;
             bar.pb.inc(1);
             Ok(())
@@ -221,7 +227,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         let bar = ProgressReporter::new(pypi_packages_from_lockfile.len() as u64);
         stream::iter(pypi_packages_from_lockfile.iter())
             .map(Ok)
-            .try_for_each_concurrent(50, |package: &PypiPackageData| async {
+            .try_for_each_concurrent(max_parallel_downloads, |package: &PypiPackageData| async {
                 download_pypi_package(
                     &client,
                     package,

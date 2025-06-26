@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, LazyLock},
@@ -282,7 +283,7 @@ async fn create_prefix(
                 Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
             }
         })
-        .buffer_unordered(50)
+        .buffer_unordered(rattler_config::config::concurreny::default_max_concurrent_downloads())
         .try_collect()
         .await?;
 
@@ -320,6 +321,7 @@ async fn create_activation_script(
         conda_prefix: None,
         path: None,
         path_modification_behavior: PathModificationBehavior::Prepend,
+        current_env: HashMap::new(),
     })?;
 
     let contents = result.script.contents()?;
