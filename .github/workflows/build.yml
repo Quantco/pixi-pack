@@ -65,7 +65,7 @@ jobs:
           sudo apt-get install -y musl-tools
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           key: build-${{ matrix.target }}-${{ matrix.os }}
 
@@ -76,7 +76,7 @@ jobs:
           mv target/${{ matrix.target }}/release/pixi-unpack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         if: needs.metadata.outputs.release == 'true'
         with:
           subject-path: |
@@ -154,7 +154,7 @@ jobs:
           git tag v${{ needs.metadata.outputs.version }}
           git push origin v${{ needs.metadata.outputs.version }}
       - name: Create Release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           generate_release_notes: true
           tag_name: v${{ needs.metadata.outputs.version }}
