@@ -34,19 +34,19 @@ clap = { version = "4.5.40", features = ["derive", "string"] }
 clap_complete = "4.5.54"
 clap-verbosity-flag = { version = "3.0.3", features = ["tracing"] }
 futures = "0.3.31"
-indicatif = "0.17.11"
-rattler = { version = "0.34.3", default-features = false }
-rattler_config = "0.1.1"
-rattler_digest = "1.1.3"
-rattler_conda_types = "0.35.2"
-rattler_index = "0.24.0"
-rattler_lock = "0.23.7"
-rattler_networking = { version = "0.25.2", default-features = false, features = [
+indicatif = "0.18.0"
+rattler = { version = "0.34.5", default-features = false }
+rattler_config = "0.2.1"
+rattler_digest = "1.1.4"
+rattler_conda_types = "0.35.4"
+rattler_index = "0.24.2"
+rattler_lock = "0.23.9"
+rattler_networking = { version = "0.25.4", default-features = false, features = [
   "s3",
   "rattler_config",
 ] }
-rattler_package_streaming = { version = "0.22.41", default-features = false }
-rattler_shell = "0.24.0"
+rattler_package_streaming = { version = "0.22.43", default-features = false }
+rattler_shell = "0.24.2"
 reqwest = { version = "0.12.15", default-features = false, features = [
   "http2",
   "macos-system-configuration",
@@ -55,7 +55,7 @@ reqwest-middleware = "0.4.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
-tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
+tokio = { version = "1.46.0", features = ["rt-multi-thread"] }
 tokio-tar = "0.3.1"
 tokio-stream = { version = "0.1.17", features = ["fs"] }
 tracing = "0.1.41"

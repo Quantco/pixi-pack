@@ -90,7 +90,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     let lockfile = load_lockfile(&options.manifest_path)?;
 
     let max_parallel_downloads = options.config.as_ref().map_or_else(
-        rattler_config::config::concurreny::default_max_concurrent_downloads,
+        rattler_config::config::concurrency::default_max_concurrent_downloads,
         |c| c.concurrency.downloads,
     );
 
