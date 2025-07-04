@@ -283,7 +283,7 @@ async fn create_prefix(
                 Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
             }
         })
-        .buffer_unordered(rattler_config::config::concurreny::default_max_concurrent_downloads())
+        .buffer_unordered(rattler_config::config::concurrency::default_max_concurrent_downloads())
         .try_collect()
         .await?;
 
