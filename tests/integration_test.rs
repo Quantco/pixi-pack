@@ -54,6 +54,7 @@ fn options(
         pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
         platform,
     };
+    let allow_incompatible_target = false;
 
     Options {
         pack_options: PackOptions {
@@ -75,6 +76,7 @@ fn options(
             output_directory: output_dir.path().to_path_buf(),
             env_name,
             shell,
+            allow_incompatible_target,
         },
         output_dir,
     }

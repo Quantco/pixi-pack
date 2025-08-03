@@ -38,6 +38,10 @@ struct Cli {
     #[arg(short, long)]
     shell: Option<ShellEnum>,
 
+    /// Flag to allow skipping the target platform check
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    allow_incompatible_target: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 
@@ -74,6 +78,7 @@ async fn main() -> Result<()> {
         env_name,
         pack_file,
         shell,
+        allow_incompatible_target,
         command,
         ..
     } = cli;
@@ -89,6 +94,7 @@ async fn main() -> Result<()> {
                 output_directory,
                 env_name,
                 shell,
+                allow_incompatible_target,
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await?;
