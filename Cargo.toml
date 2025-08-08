@@ -30,8 +30,8 @@ rustls-tls = [
 
 [dependencies]
 anyhow = "1.0.98"
-clap = { version = "4.5.40", features = ["derive", "string"] }
-clap_complete = "4.5.54"
+clap = { version = "4.5.42", features = ["derive", "string"] }
+clap_complete = "4.5.55"
 clap-verbosity-flag = { version = "3.0.3", features = ["tracing"] }
 futures = "0.3.31"
 indicatif = "0.18.0"
@@ -53,9 +53,9 @@ reqwest = { version = "0.12.15", default-features = false, features = [
 ] }
 reqwest-middleware = "0.4.2"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = "1.0.142"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
-tokio = { version = "1.46.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
 tokio-tar = "0.3.1"
 tokio-stream = { version = "0.1.17", features = ["fs"] }
 tracing = "0.1.41"
@@ -68,6 +68,7 @@ fxhash = "0.2.1"
 tempfile = "3.20.0"
 walkdir = "2.5.0"
 base64 = "0.22.1"
+# TODO: use https://crates.io/crates/uv once available
 uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
@@ -87,7 +88,7 @@ uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 
 [dev-dependencies]
 async-std = "1.13.1"
-rstest = "0.25.0"
+rstest = "0.26.1"
 sha2 = "0.10.9"
 insta = "1.43.1"
 serial_test = "3.2.0"
