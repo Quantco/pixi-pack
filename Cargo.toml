@@ -68,19 +68,20 @@ fxhash = "0.2.1"
 tempfile = "3.20.0"
 walkdir = "2.5.0"
 base64 = "0.22.1"
+# TODO: use https://crates.io/crates/uv once available
 uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-cache = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
-uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.8.4" }
+uv-cache-info = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-client = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-configuration = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-dispatch = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-distribution = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
-uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.8.4" }
+uv-distribution-filename = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-distribution-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-git = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
-uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.8.4" }
+uv-install-wheel = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-installer = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
-uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.8.4" }
+uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
