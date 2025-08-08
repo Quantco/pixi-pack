@@ -1,0 +1,30 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: pixi-pack
+message: >-
+  If pixi-pack contributes to a project that leads to a
+  scientific publication, please acknowledge this fact by
+  citing according to this file.
+type: software
+authors:
+  - given-names: Pavel
+    family-names: Zwerschke
+    email: pavel.zwerschke@quantco.com
+  - given-names: Daniel
+    family-names: Elsner
+    email: daniel.elsner@quantco.com
+repository-code: 'https://github.com/Quantco/pixi-pack'
+abstract: >-
+  A tool for packing and unpacking conda environments
+  created with pixi.
+keywords:
+  - package-management
+  - project-management
+  - virtual-environments
+  - conda
+  - pypi
+  - development-tools
+  - pixi
+license: BSD-3-Clause
