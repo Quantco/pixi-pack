@@ -48,6 +48,7 @@ pub struct UnpackOptions {
     pub output_directory: PathBuf,
     pub env_name: String,
     pub shell: Option<ShellEnum>,
+    pub allow_incompatible_target: bool,
 }
 
 /// Unpack a pixi environment.
@@ -62,7 +63,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
         .await
         .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
 
-    validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
+    validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH), options.allow_incompatible_target).await?;
 
     // HACK: The `Installer` and `Preparer` created below (in `install_pypi_packages`),
     // will utilize rayon for parallelism. By using rayon
@@ -139,7 +140,7 @@ async fn collect_packages_in_subdir(subdir: PathBuf) -> Result<FxHashMap<String,
     Ok(conda_packages)
 }
 
-async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
+async fn validate_metadata_file(metadata_file: PathBuf, allow_incompatible_target: bool) -> Result<()> {
     let metadata_contents = fs::read_to_string(&metadata_file)
         .await
         .map_err(|e| anyhow!("Could not read metadata file: {}", e))?;
@@ -150,7 +151,12 @@ async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
         anyhow::bail!("Unsupported pixi-pack version: {}", metadata.version);
     }
     if metadata.platform != Platform::current() {
-        anyhow::bail!("The pack was created for a different platform");
+        if allow_incompatible_target {
+            tracing::warn!("The pack was created for a different platform, continuing because of flag --allow-incompatible-target")
+        }
+        else {
+            anyhow::bail!("The pack was created for a different platform, if you still wish to continue, use --allow-incompatible-target");
+        }
     }
 
     tracing::debug!("pack metadata: {:?}", metadata);
@@ -461,7 +467,7 @@ mod tests {
     #[tokio::test]
     async fn test_metadata_file_valid(metadata_file: NamedTempFile) {
         assert!(
-            validate_metadata_file(metadata_file.path().to_path_buf())
+            validate_metadata_file(metadata_file.path().to_path_buf(), false)
                 .await
                 .is_ok()
         )
@@ -471,7 +477,7 @@ mod tests {
     #[tokio::test]
     async fn test_metadata_file_empty() {
         assert!(
-            validate_metadata_file(NamedTempFile::new().unwrap().path().to_path_buf())
+            validate_metadata_file(NamedTempFile::new().unwrap().path().to_path_buf(), false)
                 .await
                 .is_err()
         )
@@ -480,7 +486,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_metadata_file_non_existent() {
-        assert!(validate_metadata_file(PathBuf::new()).await.is_err())
+        assert!(validate_metadata_file(PathBuf::new(), false).await.is_err())
     }
 
     #[rstest]
@@ -488,7 +494,7 @@ mod tests {
     async fn test_metadata_file_invalid_version(
         #[with("v0".to_string())] metadata_file: NamedTempFile,
     ) {
-        let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
+        let result = validate_metadata_file(metadata_file.path().to_path_buf(), false).await;
         let error = result.unwrap_err();
         assert_eq!(error.to_string(), "Unsupported pixi-pack version: v0");
     }
@@ -499,11 +505,21 @@ mod tests {
         #[with(DEFAULT_PIXI_PACK_VERSION.to_string(), other_platform())]
         metadata_file: NamedTempFile,
     ) {
-        let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
+        let result = validate_metadata_file(metadata_file.path().to_path_buf(), false).await;
         let error = result.unwrap_err();
         assert_eq!(
             error.to_string(),
-            "The pack was created for a different platform"
+            "The pack was created for a different platform, if you still wish to continue, use --allow-incompatible-target"
+        );
+    }
+    #[rstest]
+    #[tokio::test]
+    async fn test_metadata_file_wrong_platform_with_flag(
+        #[with(DEFAULT_PIXI_PACK_VERSION.to_string(), other_platform())]
+        metadata_file: NamedTempFile,
+    ) {
+        assert!(validate_metadata_file(metadata_file.path().to_path_buf(), true).await
+            .is_ok()
         );
     }
 }
