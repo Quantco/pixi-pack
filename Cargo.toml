@@ -85,6 +85,7 @@ uv-pep508 = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-python = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-types = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
 uv-workspace = { git = "https://github.com/astral-sh/uv", tag = "0.7.13" }
+tar = "0.4.44"
 
 [dev-dependencies]
 async-std = "1.13.1"
