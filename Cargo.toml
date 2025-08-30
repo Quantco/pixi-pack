@@ -59,7 +59,7 @@ tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
 tokio-tar = "0.3.1"
 tokio-stream = { version = "0.1.17", features = ["fs"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = [
+tracing-subscriber = { version = "0.3.20", features = [
   "default",
   "env-filter",
 ] }
