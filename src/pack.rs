@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 #[cfg(not(target_os = "windows"))]
@@ -40,6 +41,8 @@ use crate::{
     ProgressReporter, get_size,
 };
 use anyhow::anyhow;
+
+static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
 
 /// Options for packing a pixi environment.
 #[derive(Debug, Clone)]
@@ -412,13 +415,12 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
         MirrorMiddleware::from_map(HashMap::new())
     };
 
-    let timeout = 5 * 60;
     let client = reqwest_middleware::ClientBuilder::new(
         reqwest::Client::builder()
             .no_gzip()
             .pool_max_idle_per_host(20)
             .user_agent(format!("pixi-pack/{}", env!("CARGO_PKG_VERSION")))
-            .timeout(std::time::Duration::from_secs(timeout))
+            .read_timeout(DEFAULT_REQWEST_TIMEOUT_SEC)
             .build()
             .map_err(|e| anyhow!("could not create download client: {}", e))?,
     )
