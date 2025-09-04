@@ -22,9 +22,9 @@ use rattler_shell::{
     shell::{Shell, ShellEnum},
 };
 
+use tar::Archive;
 use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
-use tokio_tar::Archive;
 use url::Url;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{BuildOptions, NoBinary, NoBuild, RAYON_INITIALIZE};
@@ -193,16 +193,14 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
 
 /// Unarchive a tarball.
 pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
-    let file = fs::File::open(archive_path)
-        .await
+    let file = std::fs::File::open(archive_path)
         .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
 
-    let reader = tokio::io::BufReader::new(file);
+    let reader = std::io::BufReader::new(file);
     let mut archive = Archive::new(reader);
 
     archive
         .unpack(target_dir)
-        .await
         .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
 
     Ok(())
