@@ -369,7 +369,7 @@ dependencies = [
  "itertools 0.13.0",
  "memmap2",
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
@@ -3650,7 +3650,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_shell",
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "rstest",
  "serde",
  "serde_json",
@@ -4096,7 +4096,7 @@ dependencies = [
  "reflink-copy",
  "regex",
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "serde_json",
  "simple_spawn_blocking",
  "smallvec",
@@ -4131,7 +4131,7 @@ dependencies = [
  "rattler_redaction",
  "rayon",
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
@@ -4340,7 +4340,7 @@ dependencies = [
  "netrc-rs",
  "rattler_config",
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "retry-policies",
  "serde",
  "serde_json",
@@ -4366,7 +4366,7 @@ dependencies = [
  "rattler_networking",
  "rattler_redaction",
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "serde_json",
  "simple_spawn_blocking",
  "tar",
@@ -4398,7 +4398,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3aa5057629aeb20861919e9ae56875985d58028f3c6f433a20b5ded086e1cec5"
 dependencies = [
  "reqwest",
- "reqwest-middleware 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest-middleware",
  "url",
 ]
 
@@ -4757,21 +4757,6 @@ dependencies = [
 [[package]]
 name = "reqwest-middleware"
 version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57f17d28a6e6acfe1733fe24bcd30774d13bffa4b8a22535b4c8c98423088d4e"
-dependencies = [
- "anyhow",
- "async-trait",
- "http 1.3.1",
- "reqwest",
- "serde",
- "thiserror 1.0.69",
- "tower-service",
-]
-
-[[package]]
-name = "reqwest-middleware"
-version = "0.4.2"
 source = "git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2#7650ed76215a962a96d94a79be71c27bffde7ab2"
 dependencies = [
  "anyhow",
@@ -4795,7 +4780,7 @@ dependencies = [
  "http 1.3.1",
  "hyper 1.7.0",
  "reqwest",
- "reqwest-middleware 0.4.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2)",
+ "reqwest-middleware",
  "retry-policies",
  "thiserror 2.0.16",
  "tokio",
@@ -6362,7 +6347,7 @@ dependencies = [
  "percent-encoding",
  "reqsign 0.17.0",
  "reqwest",
- "reqwest-middleware 0.4.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2)",
+ "reqwest-middleware",
  "rust-netrc",
  "rustc-hash",
  "schemars 1.0.4",
@@ -6530,7 +6515,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "reqwest",
- "reqwest-middleware 0.4.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2)",
+ "reqwest-middleware",
  "reqwest-retry",
  "rkyv",
  "rmp-serde",
@@ -6657,7 +6642,7 @@ dependencies = [
  "nanoid",
  "owo-colors",
  "reqwest",
- "reqwest-middleware 0.4.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2)",
+ "reqwest-middleware",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -6812,7 +6797,7 @@ dependencies = [
  "dashmap",
  "fs-err",
  "reqwest",
- "reqwest-middleware 0.4.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2)",
+ "reqwest-middleware",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -7130,7 +7115,7 @@ dependencies = [
  "ref-cast",
  "regex",
  "reqwest",
- "reqwest-middleware 0.4.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=7650ed76215a962a96d94a79be71c27bffde7ab2)",
+ "reqwest-middleware",
  "reqwest-retry",
  "rmp-serde",
  "rustc-hash",

@@ -94,6 +94,6 @@ insta = "1.43.2"
 serial_test = "3.2.0"
 
 [patch.crates-io]
-# This is a temporary patch to get `cargo vendor` to work with the `uv` and pep508_rs` crates.
-# version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
+# This is a temporary patch to get `cargo vendor` to work with the `uv` and `pep508_rs` crates.
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "d8efd77673c9a90792da9da31b6c0da7ea8a324b" }
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "7650ed76215a962a96d94a79be71c27bffde7ab2" }
