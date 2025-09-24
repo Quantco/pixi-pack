@@ -3677,6 +3677,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-installer",
  "uv-pep508",
+ "uv-preview",
  "uv-python",
  "uv-types",
  "uv-workspace",
