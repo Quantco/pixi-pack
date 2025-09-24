@@ -144,8 +144,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     );
                 } else {
                     anyhow::bail!(
-                        "package {} is not a wheel file, we currently require all dependencies to be wheels.",
-                        package_name.to_string()
+                        "package {package_name} is not a wheel file, we currently require all dependencies to be wheels.",
                     );
                 }
             }

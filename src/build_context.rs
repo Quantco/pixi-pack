@@ -18,8 +18,8 @@ impl PixiPackBuildContext {
 impl BuildContext for PixiPackBuildContext {
     type SourceDistBuilder = uv_build_frontend::SourceBuild;
 
-    fn interpreter(&self) -> impl Future<Output = &uv_python::Interpreter> + '_ {
-        async { unimplemented!() }
+    async fn interpreter(&self) -> &uv_python::Interpreter {
+        unimplemented!()
     }
 
     fn cache(&self) -> &uv_cache::Cache {
