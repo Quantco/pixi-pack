@@ -18,7 +18,7 @@ test = "cargo test"
 update-snapshots = "INSTA_UPDATE=always cargo test -p pixi-pack -- test_reproducible_shasum"
 
 [dependencies]
-rust = "==1.86.0"
+rust = "==1.90.0"
 openssl = "3.*"
 pkg-config = "*"
 

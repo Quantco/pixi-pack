@@ -26,13 +26,14 @@ use tar::Archive;
 use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use url::Url;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{BuildOptions, NoBinary, NoBuild, RAYON_INITIALIZE};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_distribution_types::{Dist, Resolution};
 use uv_installer::Preparer;
 use uv_pep508::VerbatimUrl;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight};
 
@@ -365,7 +366,8 @@ async fn install_pypi_packages(
         venv.root().display(),
     );
 
-    let client = RegistryClientBuilder::new(pypi_cache.clone()).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default(), pypi_cache.clone()).build();
     let context = PixiPackBuildContext::new(pypi_cache.clone());
     let distribute_database = DistributionDatabase::new(&client, &context, 1usize);
     let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
@@ -384,7 +386,7 @@ async fn install_pypi_packages(
         .await
         .map_err(|e| anyhow!("Could not unzip all pypi packages: {}", e))?;
     // install all wheel packages
-    uv_installer::Installer::new(&venv)
+    uv_installer::Installer::new(&venv, Preview::new(PreviewFeatures::default()))
         .install(unzipped_dists)
         .await
         .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;

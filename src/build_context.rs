@@ -1,6 +1,6 @@
 use uv_dispatch::BuildDispatchError;
 use uv_git::GitResolver;
-use uv_types::BuildContext;
+use uv_types::{BuildArena, BuildContext, BuildIsolation};
 use uv_workspace::WorkspaceCache;
 
 /// Create a dummy build context, because we don't need to build any package.
@@ -18,7 +18,7 @@ impl PixiPackBuildContext {
 impl BuildContext for PixiPackBuildContext {
     type SourceDistBuilder = uv_build_frontend::SourceBuild;
 
-    fn interpreter(&self) -> &uv_python::Interpreter {
+    async fn interpreter(&self) -> &uv_python::Interpreter {
         unimplemented!()
     }
 
@@ -27,6 +27,10 @@ impl BuildContext for PixiPackBuildContext {
     }
 
     fn git(&self) -> &GitResolver {
+        unimplemented!()
+    }
+
+    fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder> {
         unimplemented!()
     }
 
@@ -42,7 +46,15 @@ impl BuildContext for PixiPackBuildContext {
         unimplemented!()
     }
 
-    fn config_settings(&self) -> &uv_configuration::ConfigSettings {
+    fn build_isolation(&self) -> BuildIsolation<'_> {
+        unimplemented!()
+    }
+
+    fn config_settings(&self) -> &uv_distribution_types::ConfigSettings {
+        unimplemented!()
+    }
+
+    fn config_settings_package(&self) -> &uv_distribution_types::PackageConfigSettings {
         unimplemented!()
     }
 
@@ -98,6 +110,14 @@ impl BuildContext for PixiPackBuildContext {
     }
 
     fn workspace_cache(&self) -> &WorkspaceCache {
+        unimplemented!()
+    }
+
+    fn extra_build_requires(&self) -> &uv_distribution_types::ExtraBuildRequires {
+        unimplemented!()
+    }
+
+    fn extra_build_variables(&self) -> &uv_distribution_types::ExtraBuildVariables {
         unimplemented!()
     }
 }
