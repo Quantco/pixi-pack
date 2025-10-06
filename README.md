@@ -126,7 +126,8 @@ pixi-pack --platform win-64
 ```
 
 > [!NOTE]
-> You can only `pixi-unpack` a pack on a system that has the same platform as the pack was created for.
+> You can only `pixi-unpack` a pack on a system that has the same platform as the pack was created for. However, this check can be
+skipped by using `--allow-incompatible-target`. This can be useful when using `pixi-unpack` to explore a different platform environment, or re-package it with other tools.
 
 ### Self-extracting binaries
 
