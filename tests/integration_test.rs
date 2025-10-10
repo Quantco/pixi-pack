@@ -787,6 +787,7 @@ async fn test_pixi_pack_source(
     insta::assert_snapshot!(format!("sha256-{}-executable", platform), &sha256_digest);
 }
 
+// TODO: Add test for local-package as well
 #[fixture]
 fn templated_pixi_toml() -> (PathBuf, TempDir) {
     use url::Url;
