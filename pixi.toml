@@ -3,7 +3,6 @@ name = "pixi-pack"
 channels = ["conda-forge"]
 platforms = [
   "osx-arm64",
-  "osx-64",
   "linux-64",
   "linux-aarch64",
   "win-64",
