@@ -3628,7 +3628,7 @@ dependencies = [
 
 [[package]]
 name = "pixi-pack"
-version = "0.7.3"
+version = "0.7.4"
 dependencies = [
  "anyhow",
  "async-std",
