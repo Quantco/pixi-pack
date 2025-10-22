@@ -58,7 +58,6 @@ jobs:
           # https://github.com/conda-forge/conda-forge.github.io/issues/1940
           # - windows-11-arm
           - macos-latest
-          - macos-13
     steps:
       - name: Checkout branch
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
