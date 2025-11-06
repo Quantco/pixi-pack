@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "pixi-pack"
 channels = ["conda-forge"]
 platforms = [
