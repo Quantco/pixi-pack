@@ -82,7 +82,8 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     // xref https://github.com/prefix-dev/pixi/blob/4dc02c840d63e75f16a2da6a8fc74a7f67218cb3/src/environment/conda_prefix.rs#L294
     LazyLock::force(&RAYON_INITIALIZE);
 
-    let target_prefix = options.output_directory.join(options.env_name);
+    let target_prefix = std::path::absolute(options.output_directory.join(options.env_name))
+        .map_err(|e| anyhow!("Could not make path absolute: {e}"))?;
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
     let cache_dir = unpack_dir.join("cache");
