@@ -57,6 +57,7 @@ serde_json = "1.0.145"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
 tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
 tokio-stream = { version = "0.1.17", features = ["fs"] }
+toml = "0.9.8"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = [
   "default",

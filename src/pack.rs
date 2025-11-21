@@ -5,6 +5,7 @@ use std::{
     str::FromStr,
     sync::Arc,
     time::Duration,
+    process::Command,
 };
 
 #[cfg(not(target_os = "windows"))]
@@ -89,6 +90,92 @@ fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     })
 }
 
+fn find_all_local_dependencies(value: &toml::Value, manifest_dir: &Path, manifest_path: &Path) -> Vec<PathBuf> {
+    let mut deps = Vec::new();
+
+    match value {
+        toml::Value::Table(table) => {
+            if let Some(toml::Value::String(path)) = table.get("path") {
+                let dep_path = manifest_dir.join(path);
+                let manifest_dir_canon = manifest_dir.canonicalize().ok();
+                let dep_dir_canon = dep_path.canonicalize().ok();
+                if dep_dir_canon != manifest_dir_canon {
+                    deps.push(dep_path);
+                }
+            }
+            for (_k, v) in table {
+                deps.extend(find_all_local_dependencies(v, manifest_dir, manifest_path));
+            }
+        }
+        toml::Value::Array(arr) => {
+            for v in arr {
+                deps.extend(find_all_local_dependencies(v, manifest_dir, manifest_path));
+            }
+        }
+        _ => {}
+    }
+    deps
+}
+
+fn local_dependencies_from_manifest(manifest_path: &Path) -> Result<Vec<PathBuf>> {
+    let content = std::fs::read_to_string(manifest_path)?;
+    let toml: toml::Value = toml::from_str(&content)?;
+    let manifest_dir = manifest_path.parent().unwrap();
+    Ok(find_all_local_dependencies(&toml, manifest_dir, manifest_path))
+}
+
+fn build_local_package(
+    manifest_path: &Path,
+    output_dir: &Path,
+    platform: &str,
+) -> Result<()> {
+    let manifest_dir = manifest_path.parent().ok_or_else(|| anyhow!("could not get parent directory of manifest_path"))?;
+    let status = Command::new("pixi")
+        .arg("build")
+        .arg("--output-dir")
+        .arg(output_dir)
+        .arg("--build-platform")
+        .arg(platform)
+        .current_dir(manifest_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "Failed to build package in {}",
+            manifest_dir.display()
+        );
+    }
+    Ok(())
+}
+
+fn build_with_deps(
+    manifest_path: &Path,
+    output_dir: &Path,
+    platform: &str,
+    already_built: &mut HashSet<PathBuf>,
+) -> Result<()> {
+    if already_built.contains(manifest_path) {
+        return Ok(());
+    }
+    let deps = local_dependencies_from_manifest(manifest_path)?;
+    for dep_manifest_dir in deps {
+        let dep_manifest = dep_manifest_dir.join("pixi.toml");
+        build_with_deps(&dep_manifest, output_dir, platform, already_built)?;
+    }
+    let pkg_name = manifest_path.parent().unwrap().file_name().unwrap().to_string_lossy();
+    println!("🔨 Building package from the source: {}", pkg_name);
+    tracing::info!("Building package from the source: {}", pkg_name);
+
+    let bar = ProgressReporter::new(1);
+    build_local_package(manifest_path, output_dir, platform)?;
+    bar.pb.finish_and_clear();
+
+    already_built.insert(manifest_path.to_path_buf());
+    Ok(())
+}
+
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<()> {
     let lockfile = load_lockfile(&options.manifest_path)?;
@@ -106,10 +193,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.environment
     ))?;
 
-    let packages = env.packages(options.platform).ok_or(anyhow!(
+    let packages: Vec<_> = env.packages(options.platform)
+    .ok_or(anyhow!(
         "platform not found in lockfile: {}",
         options.platform.as_str()
-    ))?;
+    ))?
+    .collect();
 
     let output_folder =
         tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
@@ -119,14 +208,40 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
     let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
+    let mut loaded_injected_packages: Vec<PathBuf> = Vec::new();
+    let mut already_built = HashSet::new();
 
     for package in packages {
         match package {
             LockedPackageRef::Conda(CondaPackageData::Binary(binary_data)) => {
                 conda_packages_from_lockfile.push(binary_data.clone())
             }
-            LockedPackageRef::Conda(CondaPackageData::Source(_)) => {
-                anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
+            LockedPackageRef::Conda(CondaPackageData::Source(source_data)) => {
+                build_with_deps(
+                    &options.manifest_path,
+                    output_folder.path(),
+                    options.platform.as_str(),
+                    &mut already_built
+                )?;
+
+                let expected_filename = format!(
+                    "{}-{}-{}.conda",
+                    source_data.package_record.name.as_normalized(),
+                    source_data.package_record.version,
+                    source_data.package_record.build
+                );
+
+                let built_package = output_folder.path().join(&expected_filename);
+
+                if !built_package.exists() {
+                    anyhow::bail!(
+                        "Expected built package {} not found in {:?}",
+                        expected_filename,
+                        output_folder.path()
+                    );
+                }
+
+                loaded_injected_packages.push(built_package);
             }
             LockedPackageRef::Pypi(pypi_data, _) => {
                 let package_name = pypi_data.name.clone();
@@ -179,8 +294,10 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         conda_packages.push((filename, package.package_record));
     }
 
-    let injected_packages: Vec<(PathBuf, ArchiveType)> = options
-        .injected_packages
+    let mut all_injected_packages = loaded_injected_packages;
+    all_injected_packages.extend(options.injected_packages.iter().cloned());
+
+    let injected_packages: Vec<(PathBuf, ArchiveType)> = all_injected_packages
         .iter()
         .filter_map(|e| {
             ArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
@@ -209,6 +326,11 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .await
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
 
+        if let Some(parent) = path.parent() {
+            if parent == output_folder.path() {
+                fs::remove_file(&path).await.ok();
+            }
+        }
         conda_packages.push((filename, package_record));
     }
 

@@ -841,3 +841,28 @@ async fn test_local_channel(
             .exists()
     );
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_local_build_package(options: Options) {
+    let mut pack_options = options.pack_options;
+    pack_options.manifest_path = PathBuf::from("examples/local-build/main-pkg/pixi.toml");
+
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    assert!(pack_file.is_file());
+
+    let env_dir = unpack_options.output_directory.join("env");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+
+    let main_pkg_json = env_dir.join("conda-meta/local-build-main-pkg-0.1.0-0.json");
+    let local_dep_json = env_dir.join("conda-meta/local-build-local-pkg-0.1.0-0.json");
+    let web_server_pkg_json = env_dir.join("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
+    assert!(main_pkg_json.exists(), "main-pkg not found in conda-meta");
+    assert!(local_dep_json.exists(), "local-pkg not found in conda-meta");
+    assert!(web_server_pkg_json.exists(), "my-webserver not found in conda-meta");
+}

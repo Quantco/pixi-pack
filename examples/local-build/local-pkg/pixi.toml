@@ -1,0 +1,7 @@
+[project]
+channels = ["<local-channel-url>", "conda-forge"]
+name = "local-build-local-pkg"
+platforms = ["linux-64"]
+
+[dependencies]
+my-webserver = "*"

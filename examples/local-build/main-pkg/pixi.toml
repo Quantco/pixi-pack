@@ -1,0 +1,8 @@
+[project]
+channels = ["conda-forge"]
+name = "local-build-main-pkg"
+platforms = ["linux-64"]
+
+[dependencies]
+no-timestamp = { path = "../local-pkg" }
+
