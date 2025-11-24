@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::Write,
     path::{Path, PathBuf},
     str::FromStr,
@@ -10,7 +10,6 @@ use std::{
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::PermissionsExt as _;
 
-use fxhash::FxHashMap;
 use indicatif::HumanBytes;
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
 use tokio::{
@@ -766,7 +765,7 @@ async fn create_repodata_files(
     for (subdir, packages) in packages_per_subdir {
         let repodata_path = channel_dir.join(subdir).join("repodata.json");
 
-        let conda_packages: FxHashMap<_, _> = packages
+        let conda_packages = packages
             .into_iter()
             .map(|(filename, p)| (filename.to_string(), p.clone()))
             .collect();
@@ -776,9 +775,9 @@ async fn create_repodata_files(
                 subdir: Some(subdir.clone()),
                 base_url: None,
             }),
-            packages: HashMap::default(),
+            packages: Default::default(),
             conda_packages,
-            removed: HashSet::default(),
+            removed: Default::default(),
             version: Some(2),
         };
 

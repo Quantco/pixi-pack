@@ -10,7 +10,7 @@ use futures::{
     TryFutureExt, TryStreamExt,
     stream::{self, StreamExt},
 };
-use fxhash::FxHashMap;
+use indexmap::IndexMap;
 use rattler::{
     install::{Installer, PythonInfo},
     package_cache::{CacheKey, PackageCache},
@@ -120,7 +120,9 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     Ok(())
 }
 
-async fn collect_packages_in_subdir(subdir: PathBuf) -> Result<FxHashMap<String, PackageRecord>> {
+async fn collect_packages_in_subdir(
+    subdir: PathBuf,
+) -> Result<IndexMap<String, PackageRecord, ahash::RandomState>> {
     let repodata = subdir.join("repodata.json");
 
     let raw_repodata_json = fs::read_to_string(repodata)
@@ -167,7 +169,9 @@ async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
 }
 
 /// Collect all packages in a directory.
-async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, PackageRecord>> {
+async fn collect_packages(
+    channel_dir: &Path,
+) -> Result<IndexMap<String, PackageRecord, ahash::RandomState>> {
     let subdirs = fs::read_dir(channel_dir)
         .await
         .map_err(|e| anyhow!("could not read channel directory: {}", e))?;
@@ -212,7 +216,7 @@ async fn create_prefix(
     channel_dir: &Path,
     target_prefix: &Path,
     cache_dir: &Path,
-) -> Result<FxHashMap<String, PackageRecord>> {
+) -> Result<IndexMap<String, PackageRecord, ahash::RandomState>> {
     let packages = collect_packages(channel_dir)
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
@@ -335,7 +339,7 @@ async fn create_activation_script(
 async fn install_pypi_packages(
     unpack_dir: &Path,
     target_prefix: &Path,
-    installed_conda_packages: FxHashMap<String, PackageRecord>,
+    installed_conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 ) -> Result<()> {
     let pypi_directory = unpack_dir.join(PYPI_DIRECTORY_NAME);
     if !pypi_directory.exists() {
