@@ -1,8 +1,17 @@
-[project]
+[workspace]
+preview = ["pixi-build"]
 channels = ["conda-forge"]
-name = "local-build-main-pkg"
-platforms = ["linux-64"]
+platforms = ["linux-64", "linux-aarch64", "win-64", "osx-64", "osx-arm64"]
 
 [dependencies]
-no-timestamp = { path = "../local-pkg" }
+local-build-main-pkg = { path = "." }
 
+[package]
+name = "local-build-main-pkg"
+version = "0.1.0"
+
+[package.build]
+backend = { name = "pixi-build-cmake", version = "*" }
+
+[package.run-dependencies]
+local-build-local-pkg = { path = "../local-pkg" }

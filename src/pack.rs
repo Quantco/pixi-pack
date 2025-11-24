@@ -2,10 +2,10 @@ use std::{
     collections::{HashMap, HashSet},
     io::Write,
     path::{Path, PathBuf},
+    process::Command,
     str::FromStr,
     sync::Arc,
     time::Duration,
-    process::Command,
 };
 
 #[cfg(not(target_os = "windows"))]
@@ -90,7 +90,11 @@ fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     })
 }
 
-fn find_all_local_dependencies(value: &toml::Value, manifest_dir: &Path, manifest_path: &Path) -> Vec<PathBuf> {
+fn find_all_local_dependencies(
+    value: &toml::Value,
+    manifest_dir: &Path,
+    _manifest_path: &Path,
+) -> Vec<PathBuf> {
     let mut deps = Vec::new();
 
     match value {
@@ -104,12 +108,12 @@ fn find_all_local_dependencies(value: &toml::Value, manifest_dir: &Path, manifes
                 }
             }
             for (_k, v) in table {
-                deps.extend(find_all_local_dependencies(v, manifest_dir, manifest_path));
+                deps.extend(find_all_local_dependencies(v, manifest_dir, _manifest_path));
             }
         }
         toml::Value::Array(arr) => {
             for v in arr {
-                deps.extend(find_all_local_dependencies(v, manifest_dir, manifest_path));
+                deps.extend(find_all_local_dependencies(v, manifest_dir, _manifest_path));
             }
         }
         _ => {}
@@ -121,15 +125,17 @@ fn local_dependencies_from_manifest(manifest_path: &Path) -> Result<Vec<PathBuf>
     let content = std::fs::read_to_string(manifest_path)?;
     let toml: toml::Value = toml::from_str(&content)?;
     let manifest_dir = manifest_path.parent().unwrap();
-    Ok(find_all_local_dependencies(&toml, manifest_dir, manifest_path))
+    Ok(find_all_local_dependencies(
+        &toml,
+        manifest_dir,
+        manifest_path,
+    ))
 }
 
-fn build_local_package(
-    manifest_path: &Path,
-    output_dir: &Path,
-    platform: &str,
-) -> Result<()> {
-    let manifest_dir = manifest_path.parent().ok_or_else(|| anyhow!("could not get parent directory of manifest_path"))?;
+fn build_local_package(manifest_path: &Path, output_dir: &Path, platform: &str) -> Result<()> {
+    let manifest_dir = manifest_path
+        .parent()
+        .ok_or_else(|| anyhow!("could not get parent directory of manifest_path"))?;
     let status = Command::new("pixi")
         .arg("build")
         .arg("--output-dir")
@@ -142,10 +148,7 @@ fn build_local_package(
         .status()?;
 
     if !status.success() {
-        anyhow::bail!(
-            "Failed to build package in {}",
-            manifest_dir.display()
-        );
+        anyhow::bail!("Failed to build package in {}", manifest_dir.display());
     }
     Ok(())
 }
@@ -164,7 +167,12 @@ fn build_with_deps(
         let dep_manifest = dep_manifest_dir.join("pixi.toml");
         build_with_deps(&dep_manifest, output_dir, platform, already_built)?;
     }
-    let pkg_name = manifest_path.parent().unwrap().file_name().unwrap().to_string_lossy();
+    let pkg_name = manifest_path
+        .parent()
+        .unwrap()
+        .file_name()
+        .unwrap()
+        .to_string_lossy();
     println!("🔨 Building package from the source: {}", pkg_name);
     tracing::info!("Building package from the source: {}", pkg_name);
 
@@ -193,12 +201,13 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.environment
     ))?;
 
-    let packages: Vec<_> = env.packages(options.platform)
-    .ok_or(anyhow!(
-        "platform not found in lockfile: {}",
-        options.platform.as_str()
-    ))?
-    .collect();
+    let packages: Vec<_> = env
+        .packages(options.platform)
+        .ok_or(anyhow!(
+            "platform not found in lockfile: {}",
+            options.platform.as_str()
+        ))?
+        .collect();
 
     let output_folder =
         tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
@@ -221,7 +230,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     &options.manifest_path,
                     output_folder.path(),
                     options.platform.as_str(),
-                    &mut already_built
+                    &mut already_built,
                 )?;
 
                 let expected_filename = format!(
@@ -326,10 +335,10 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .await
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
 
-        if let Some(parent) = path.parent() {
-            if parent == output_folder.path() {
-                fs::remove_file(&path).await.ok();
-            }
+        if let Some(parent) = path.parent()
+            && parent == output_folder.path()
+        {
+            fs::remove_file(&path).await.ok();
         }
         conda_packages.push((filename, package_record));
     }
