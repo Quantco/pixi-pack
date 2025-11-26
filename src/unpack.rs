@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
+use either::Either;
 use futures::{
     TryFutureExt, TryStreamExt,
     stream::{self, StreamExt},
@@ -193,9 +194,18 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
     Ok(packages)
 }
 
+fn open_input_file(target: &Path) -> Result<Either<std::io::Stdin,std::fs::File>> {
+    if target == "-" {
+        // Use stdin
+        Ok(either::Left(std::io::stdin()))
+    } else {
+        Ok(either::Right(std::fs::File::open(&target)?))
+    }
+}
+
 /// Unarchive a tarball.
 pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
-    let file = std::fs::File::open(archive_path)
+    let file = open_input_file(archive_path)
         .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
 
     let reader = std::io::BufReader::new(file);
