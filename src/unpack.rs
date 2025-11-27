@@ -54,15 +54,24 @@ pub struct UnpackOptions {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
-    let tmp_dir =
-        tempfile::tempdir().map_err(|e| anyhow!("Could not create temporary directory: {}", e))?;
-    let unpack_dir = tmp_dir.path();
+    let tmp_dir = if !options.pack_file.is_dir() {
+        Ok(tempfile::tempdir()
+            .map_err(|e| anyhow!("could not create temporary directory: {}", e))?)
+    } else {
+        Err(())
+    };
+    let unpack_dir = if let Ok(tmp_dir_ref) = tmp_dir.as_ref() {
+        tmp_dir_ref.path()
+    } else {
+        &options.pack_file
+    };
 
-    tracing::info!("Unarchiving pack to {}", unpack_dir.display());
-
-    unarchive(&options.pack_file, unpack_dir)
-        .await
-        .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
+    if tmp_dir.is_ok() {
+        tracing::info!("Unarchiving pack to {}", unpack_dir.display());
+        unarchive(&options.pack_file, unpack_dir)
+            .await
+            .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
+    };
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
@@ -105,9 +114,12 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     .await
     .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
 
-    tmp_dir
-        .close()
-        .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
+    if tmp_dir.is_ok() {
+        tmp_dir
+            .unwrap()
+            .close()
+            .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
+    }
 
     tracing::info!(
         "Finished unpacking to {}.",
@@ -194,12 +206,12 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
     Ok(packages)
 }
 
-fn open_input_file(target: &Path) -> Result<Either<std::io::Stdin,std::fs::File>> {
+fn open_input_file(target: &Path) -> Result<Either<std::io::Stdin, std::fs::File>> {
     if target == "-" {
         // Use stdin
         Ok(either::Left(std::io::stdin()))
     } else {
-        Ok(either::Right(std::fs::File::open(&target)?))
+        Ok(either::Right(std::fs::File::open(target)?))
     }
 }
 
