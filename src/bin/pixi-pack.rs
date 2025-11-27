@@ -38,7 +38,7 @@ struct Cli {
     #[arg(default_value = cwd().into_os_string())]
     manifest_path: PathBuf,
 
-    /// Output file to write the pack to (will be an archive)
+    /// Output file to write the pack to
     #[arg(short, long)]
     output_file: Option<PathBuf>,
 
@@ -58,6 +58,10 @@ struct Cli {
     /// Create self-extracting executable
     #[arg(long, default_value = "false")]
     create_executable: bool,
+
+    /// Create pack as a folder instead of a tar
+    #[arg(long, default_value = "false")]
+    no_tar: bool,
 
     /// Optional path or URL to a pixi-unpack executable.
     // Ex. /path/to/pixi-unpack/pixi-unpack.exe
@@ -86,13 +90,15 @@ enum Commands {
     },
 }
 
-fn default_output_file(platform: Platform, create_executable: bool) -> PathBuf {
+fn default_output_file(platform: Platform, create_executable: bool, no_tar: bool) -> PathBuf {
     if create_executable {
         if platform.is_windows() {
             cwd().join("environment.ps1")
         } else {
             cwd().join("environment.sh")
         }
+    } else if no_tar {
+        cwd().join("environment")
     } else {
         cwd().join("environment.tar")
     }
@@ -120,6 +126,7 @@ async fn main() -> Result<()> {
         inject,
         ignore_pypi_non_wheel,
         create_executable,
+        no_tar,
         pixi_unpack_source,
         config,
         use_cache,
@@ -133,8 +140,8 @@ async fn main() -> Result<()> {
             generate(shell, &mut cmd, "pixi-pack", &mut io::stdout());
         }
         None => {
-            let output_file =
-                output_file.unwrap_or_else(|| default_output_file(platform, create_executable));
+            let output_file = output_file
+                .unwrap_or_else(|| default_output_file(platform, create_executable, no_tar));
 
             let config = if let Some(config_path) = config {
                 let config = Config::load_from_files(vec![&config_path.clone()])
@@ -158,6 +165,7 @@ async fn main() -> Result<()> {
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
                 create_executable,
+                no_tar,
                 pixi_unpack_source,
                 cache_dir: use_cache,
                 config,

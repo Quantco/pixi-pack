@@ -66,6 +66,7 @@ fn options(
             injected_packages: vec![],
             ignore_pypi_non_wheel,
             create_executable,
+            no_tar: false,
             pixi_unpack_source: None,
             cache_dir: None,
             config: None,

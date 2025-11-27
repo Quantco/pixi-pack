@@ -60,6 +60,7 @@ pub struct PackOptions {
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
     pub create_executable: bool,
+    pub no_tar: bool,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
 }
@@ -113,11 +114,20 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.platform.as_str()
     ))?;
 
-    let output_folder =
-        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
+    let temp_dir = if !options.no_tar {
+        Ok(tempfile::tempdir()
+            .map_err(|e| anyhow!("could not create temporary directory: {}", e))?)
+    } else {
+        Err(())
+    };
+    let output_folder = if let Ok(temp_dir_ref) = temp_dir.as_ref() {
+        temp_dir_ref.path()
+    } else {
+        &options.output_file
+    };
 
-    let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
-    let pypi_directory = output_folder.path().join(PYPI_DIRECTORY_NAME);
+    let channel_dir = output_folder.join(CHANNEL_DIRECTORY_NAME);
+    let pypi_directory = output_folder.join(PYPI_DIRECTORY_NAME);
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
     let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
@@ -309,42 +319,44 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
-    let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
+    let metadata_path = output_folder.join(PIXI_PACK_METADATA_PATH);
     let metadata = serde_json::to_string_pretty(&options.metadata)?;
     fs::write(metadata_path, metadata.as_bytes()).await?;
 
     // Create environment file.
     tracing::info!("Creating environment.yml file");
     create_environment_file(
-        output_folder.path(),
+        output_folder,
         conda_packages.iter().map(|(_, p)| p),
         &pypi_packages_from_lockfile,
     )
     .await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating pack at {}", options.output_file.display());
-    let bytes_written = archive_directory(
-        output_folder.path(),
-        &options.output_file,
-        options.create_executable,
-        options.pixi_unpack_source,
-        options.platform,
-    )
-    .await
-    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    if !options.no_tar {
+        tracing::info!("Creating pack at {}", options.output_file.display());
+        let bytes_written = archive_directory(
+            output_folder,
+            &options.output_file,
+            options.create_executable,
+            options.pixi_unpack_source,
+            options.platform,
+        )
+        .await
+        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
-    let output_size = HumanBytes(bytes_written as u64).to_string();
-    tracing::info!(
-        "Created pack at {} with size {}.",
-        options.output_file.display(),
-        output_size
-    );
-    eprintln!(
-        "📦 Created pack at {} with size {}.",
-        options.output_file.display(),
-        output_size
-    );
+        let output_size = HumanBytes(bytes_written as u64).to_string();
+        tracing::info!(
+            "Created pack at {} with size {}.",
+            options.output_file.display(),
+            output_size
+        );
+        eprintln!(
+            "📦 Created pack at {} with size {}.",
+            options.output_file.display(),
+            output_size
+        );
+    }
 
     Ok(())
 }
@@ -546,12 +558,19 @@ where
     Ok(())
 }
 
-fn open_output_file(target: &Path, ext: Option<&str>) -> Result<Either<Counter<std::io::Stdout>,Counter<std::fs::File>>> {
+fn open_output_file(
+    target: &Path,
+    ext: Option<&str>,
+) -> Result<Either<Counter<std::io::Stdout>, Counter<std::fs::File>>> {
     if target == "-" {
         // Use stdout
         Ok(either::Left(Counter::new(std::io::stdout())))
     } else {
-        let path = if ext.is_some() { target.with_extension(ext.unwrap()) } else { target.to_path_buf() };
+        let path = if let Some(extension) = ext {
+            target.with_extension(extension)
+        } else {
+            target.to_path_buf()
+        };
         Ok(either::Right(Counter::new(std::fs::File::create(&path)?)))
     }
 }
@@ -570,7 +589,7 @@ fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
 
     write_archive(archive, input_dir)?;
 
-    Ok(outfile.either(|x| x.writer_bytes(), |x|x.writer_bytes()))
+    Ok(outfile.either(|x| x.writer_bytes(), |x| x.writer_bytes()))
 }
 
 async fn download_pixi_unpack_executable(
@@ -659,8 +678,11 @@ async fn create_self_extracting_executable(
     };
 
     // Set target executable path
-    let mut final_executable = open_output_file(target, Some(if platform.is_windows() { "ps1" } else { "sh" }))
-        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+    let mut final_executable = open_output_file(
+        target,
+        Some(if platform.is_windows() { "ps1" } else { "sh" }),
+    )
+    .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
 
     // Write header
     let windows_header = include_str!("header.ps1");
@@ -674,8 +696,10 @@ async fn create_self_extracting_executable(
     final_executable.write_all(&line_ending)?; // Add a newline after the header
 
     // Write archive containing environment
-    let writer =
-        base64::write::EncoderWriter::new(std::io::BufWriter::new(&mut final_executable), &STANDARD);
+    let writer = base64::write::EncoderWriter::new(
+        std::io::BufWriter::new(&mut final_executable),
+        &STANDARD,
+    );
     let archive = Builder::new(writer);
     write_archive(archive, input_dir)?;
     final_executable.write_all(&line_ending)?;
@@ -699,12 +723,12 @@ async fn create_self_extracting_executable(
     #[cfg(not(target_os = "windows"))]
     if !platform.is_windows() && final_executable.is_right() {
         let file_handle = final_executable.as_ref().unwrap_right().get_ref();
-        let mut perms = file_handle.metadata()?.permissions();        
+        let mut perms = file_handle.metadata()?.permissions();
         perms.set_mode(0o755);
         file_handle.set_permissions(perms)?;
     }
 
-    Ok(final_executable.either(|x| x.writer_bytes(), |x|x.writer_bytes()))
+    Ok(final_executable.either(|x| x.writer_bytes(), |x| x.writer_bytes()))
 }
 
 /// Create an `environment.yml` file from the given packages.
