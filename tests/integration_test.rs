@@ -122,11 +122,13 @@ fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
 }
 
 #[rstest]
-#[case(false)]
-#[case(true)]
+#[case(false, false)]
+#[case(true, false)]
+#[case(false, true)]
 #[tokio::test]
 async fn test_simple_python(
     #[case] use_pypi: bool,
+    #[case] no_tar: bool,
     options: Options,
     #[with(use_pypi)] required_fs_objects: Vec<&'static str>,
 ) {
@@ -134,13 +136,18 @@ async fn test_simple_python(
     if use_pypi {
         pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
     }
+    pack_options.no_tar = no_tar;
 
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
-    assert!(pack_file.is_file());
+    if no_tar {
+        assert!(pack_file.is_dir())
+    } else {
+        assert!(pack_file.is_file())
+    };
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
