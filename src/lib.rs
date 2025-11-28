@@ -3,7 +3,7 @@ mod pack;
 mod unpack;
 mod util;
 
-pub use pack::{PackOptions, pack};
+pub use pack::{OutputMode, PackOptions, pack};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
 pub use unpack::{UnpackOptions, unarchive, unpack};
