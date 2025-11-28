@@ -68,7 +68,6 @@ tempfile = "3.23.0"
 walkdir = "2.5.0"
 tar = "0.4.44"
 base64 = "0.22.1"
-either = "1.15.0"
 countio = "0.2.19"
 # TODO: use https://crates.io/crates/uv once available
 uv-build-frontend = { git = "https://github.com/astral-sh/uv", tag = "0.8.22" }

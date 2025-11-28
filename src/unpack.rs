@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use either::Either;
 use futures::{
     TryFutureExt, TryStreamExt,
     stream::{self, StreamExt},
@@ -206,21 +205,9 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
     Ok(packages)
 }
 
-fn open_input_file(target: &Path) -> Result<Either<std::io::Stdin, std::fs::File>> {
-    if target == "-" {
-        // Use stdin
-        Ok(either::Left(std::io::stdin()))
-    } else {
-        Ok(either::Right(std::fs::File::open(target)?))
-    }
-}
-
 /// Unarchive a tarball.
-pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
-    let file = open_input_file(archive_path)
-        .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
-
-    let reader = std::io::BufReader::new(file);
+async fn unarchive_generic<T: std::io::Read>(source: T, target_dir: &Path) -> Result<()> {
+    let reader = std::io::BufReader::new(source);
     let mut archive = Archive::new(reader);
 
     archive
@@ -228,6 +215,16 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
         .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
 
     Ok(())
+}
+
+pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+    if archive_path == "-" {
+        unarchive_generic(std::io::stdin(), target_dir).await
+    } else {
+        let file = std::fs::File::open(archive_path)
+            .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
+        unarchive_generic(file, target_dir).await
+    }
 }
 
 async fn create_prefix(

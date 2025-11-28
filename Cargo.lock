@@ -3643,7 +3643,6 @@ dependencies = [
  "clap-verbosity-flag",
  "clap_complete",
  "countio",
- "either",
  "futures",
  "fxhash",
  "indicatif",

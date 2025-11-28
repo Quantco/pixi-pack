@@ -11,7 +11,6 @@ use std::{
 use std::os::unix::fs::PermissionsExt as _;
 
 use countio::Counter;
-use either::Either;
 use fxhash::FxHashMap;
 use indicatif::HumanBytes;
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
@@ -564,20 +563,53 @@ where
     Ok(())
 }
 
-fn open_output_file(
-    target: &Path,
-    ext: Option<&str>,
-) -> Result<Counter<Either<std::io::Stdout, std::fs::File>>> {
+enum Output {
+    Stdout(std::io::Stdout),
+    File(std::fs::File),
+}
+
+macro_rules! for_output {
+    ($value:expr, $pattern:pat => $result:expr) => {
+        match $value {
+            Output::Stdout($pattern) => $result,
+            Output::File($pattern) => $result,
+        }
+    };
+}
+
+impl std::io::Write for Output {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        for_output!(self, inner => inner.write(buf))
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        for_output!(self, inner => inner.write_all(buf))
+    }
+
+    fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        for_output!(self, inner => inner.write_fmt(fmt))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        for_output!(self, inner => inner.flush())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> Result<usize, std::io::Error> {
+        for_output!(self, inner => inner.write_vectored(bufs))
+    }
+}
+
+fn open_output_file(target: &Path, ext: Option<&str>) -> Result<Counter<Output>> {
     if target == "-" {
         // Use stdout
-        Ok(Counter::new(either::Left(std::io::stdout())))
+        Ok(Counter::new(Output::Stdout(std::io::stdout())))
     } else {
         let path = if let Some(extension) = ext {
             target.with_extension(extension)
         } else {
             target.to_path_buf()
         };
-        Ok(Counter::new(either::Right(std::fs::File::create(&path)?)))
+        Ok(Counter::new(Output::File(std::fs::File::create(&path)?)))
     }
 }
 
@@ -728,7 +760,7 @@ async fn create_self_extracting_executable(
     // This won't be executed when cross-packing due to Windows FS not supporting Unix permissions
     #[cfg(not(target_os = "windows"))]
     if !platform.is_windows()
-        && let either::Right(file_handle) = final_executable.get_ref()
+        && let Output::File(file_handle) = final_executable.get_ref()
     {
         let mut perms = file_handle.metadata()?.permissions();
         perms.set_mode(0o755);
