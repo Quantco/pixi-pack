@@ -14,4 +14,4 @@ version = "0.1.0"
 backend = { name = "pixi-build-cmake", version = "*" }
 
 [package.run-dependencies]
-local-build-local-pkg = { path = "../local-pkg" }
+local-build-local-pkg = { path = "./local-pkg" }
