@@ -8,7 +8,8 @@ use rattler_conda_types::Platform;
 
 use anyhow::Result;
 use pixi_pack::{
-    Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata, pack,
+    Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
+    PixiPackMetadata, pack,
 };
 use rattler_lock::UrlOrPath;
 
@@ -61,7 +62,7 @@ struct Cli {
 
     /// Create pack as a folder instead of a tar
     #[arg(long, default_value = "false")]
-    no_tar: bool,
+    directory_only: bool,
 
     /// Optional path or URL to a pixi-unpack executable.
     // Ex. /path/to/pixi-unpack/pixi-unpack.exe
@@ -90,17 +91,27 @@ enum Commands {
     },
 }
 
-fn default_output_file(platform: Platform, create_executable: bool, no_tar: bool) -> PathBuf {
-    if create_executable {
-        if platform.is_windows() {
-            cwd().join("environment.ps1")
-        } else {
-            cwd().join("environment.sh")
-        }
-    } else if no_tar {
-        cwd().join("environment")
+fn define_output_mode(create_executable: bool, directory_only: bool) -> OutputMode {
+    if directory_only {
+        OutputMode::DirectoryOnly
+    } else if create_executable {
+        OutputMode::CreateExecutable
     } else {
-        cwd().join("environment.tar")
+        OutputMode::Default
+    }
+}
+
+fn default_output_file(platform: Platform, mode: OutputMode) -> PathBuf {
+    match mode {
+        OutputMode::Default => cwd().join("environment.tar"),
+        OutputMode::CreateExecutable => {
+            if platform.is_windows() {
+                cwd().join("environment.ps1")
+            } else {
+                cwd().join("environment.sh")
+            }
+        }
+        OutputMode::DirectoryOnly => cwd().join("environment"),
     }
 }
 
@@ -126,7 +137,7 @@ async fn main() -> Result<()> {
         inject,
         ignore_pypi_non_wheel,
         create_executable,
-        no_tar,
+        directory_only,
         pixi_unpack_source,
         config,
         use_cache,
@@ -140,8 +151,9 @@ async fn main() -> Result<()> {
             generate(shell, &mut cmd, "pixi-pack", &mut io::stdout());
         }
         None => {
-            let output_file = output_file
-                .unwrap_or_else(|| default_output_file(platform, create_executable, no_tar));
+            let output_mode = define_output_mode(create_executable, directory_only);
+            let output_file =
+                output_file.unwrap_or_else(|| default_output_file(platform, output_mode));
 
             let config = if let Some(config_path) = config {
                 let config = Config::load_from_files(vec![&config_path.clone()])
@@ -164,8 +176,7 @@ async fn main() -> Result<()> {
                 },
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
-                create_executable,
-                no_tar,
+                output_mode,
                 pixi_unpack_source,
                 cache_dir: use_cache,
                 config,

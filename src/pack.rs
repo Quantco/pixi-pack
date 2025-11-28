@@ -47,6 +47,13 @@ use anyhow::anyhow;
 
 static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
 
+#[derive(Debug, Clone, Copy)]
+pub enum OutputMode {
+    Default,
+    CreateExecutable,
+    DirectoryOnly,
+}
+
 /// Options for packing a pixi environment.
 #[derive(Debug, Clone)]
 pub struct PackOptions {
@@ -59,8 +66,7 @@ pub struct PackOptions {
     pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
-    pub create_executable: bool,
-    pub no_tar: bool,
+    pub output_mode: OutputMode,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
 }
@@ -114,7 +120,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.platform.as_str()
     ))?;
 
-    let temp_dir = if !options.no_tar {
+    let temp_dir = if !matches!(options.output_mode, OutputMode::DirectoryOnly) {
         Ok(tempfile::tempdir()
             .map_err(|e| anyhow!("could not create temporary directory: {}", e))?)
     } else {
@@ -333,12 +339,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     .await?;
 
     // Pack = archive the contents.
-    if !options.no_tar {
+    if !matches!(options.output_mode, OutputMode::DirectoryOnly) {
         tracing::info!("Creating pack at {}", options.output_file.display());
         let bytes_written = archive_directory(
             output_folder,
             &options.output_file,
-            options.create_executable,
+            matches!(options.output_mode, OutputMode::CreateExecutable),
             options.pixi_unpack_source,
             options.platform,
         )

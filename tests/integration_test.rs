@@ -7,8 +7,8 @@ use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
 
 use pixi_pack::{
-    Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata,
-    UnpackOptions, unarchive,
+    Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
+    PixiPackMetadata, UnpackOptions, unarchive,
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
@@ -37,10 +37,10 @@ fn options(
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_non_wheel: bool,
     #[default("env")] env_name: String,
-    #[default(false)] create_executable: bool,
+    #[default(OutputMode::Default)] output_mode: OutputMode,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = if create_executable {
+    let pack_file = if matches!(output_mode, OutputMode::CreateExecutable) {
         output_dir.path().join(if platform.is_windows() {
             "environment.ps1"
         } else {
@@ -65,8 +65,7 @@ fn options(
             metadata,
             injected_packages: vec![],
             ignore_pypi_non_wheel,
-            create_executable,
-            no_tar: false,
+            output_mode,
             pixi_unpack_source: None,
             cache_dir: None,
             config: None,
@@ -122,13 +121,13 @@ fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
 }
 
 #[rstest]
-#[case(false, false)]
-#[case(true, false)]
-#[case(false, true)]
+#[case(false, OutputMode::Default)]
+#[case(true, OutputMode::Default)]
+#[case(false, OutputMode::DirectoryOnly)]
 #[tokio::test]
 async fn test_simple_python(
     #[case] use_pypi: bool,
-    #[case] no_tar: bool,
+    #[case] output_mode: OutputMode,
     options: Options,
     #[with(use_pypi)] required_fs_objects: Vec<&'static str>,
 ) {
@@ -136,14 +135,14 @@ async fn test_simple_python(
     if use_pypi {
         pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
     }
-    pack_options.no_tar = no_tar;
+    pack_options.output_mode = output_mode;
 
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
-    if no_tar {
+    if matches!(output_mode, OutputMode::DirectoryOnly) {
         assert!(pack_file.is_dir())
     } else {
         assert!(pack_file.is_file())
@@ -424,7 +423,7 @@ async fn test_reproducible_shasum(
         "environment.sh"
     });
 
-    pack_options.create_executable = true;
+    pack_options.output_mode = OutputMode::CreateExecutable;
     pack_options.output_file = output_file.clone();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
@@ -442,7 +441,7 @@ async fn test_reproducible_shasum(
 #[tokio::test]
 async fn test_line_endings(
     #[case] platform: Platform,
-    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), true)]
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), OutputMode::CreateExecutable)]
     options: Options,
 ) {
     let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
@@ -509,7 +508,7 @@ async fn test_custom_env_name(options: Options) {
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options;
-    pack_options.create_executable = true;
+    pack_options.output_mode = OutputMode::CreateExecutable;
 
     #[cfg(target_os = "windows")]
     {
@@ -747,7 +746,7 @@ async fn test_pixi_pack_source(
     let mut pack_options = options.pack_options.clone();
     let output_file = options.output_dir.path().join("environment.sh");
 
-    pack_options.create_executable = true;
+    pack_options.output_mode = OutputMode::CreateExecutable;
     pack_options.output_file = output_file.clone();
 
     // Build the path
