@@ -208,20 +208,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     }
                 });
                 let manifest_path = pkg_dir.join("pixi.toml");
-                let pkg_name = source_data.package_record.name.as_normalized();
                 let build_temp_dir = tempfile::tempdir()
                     .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
                 let bar = ProgressBar::new_spinner();
-
-                bar.set_message(format!("Building {}", pkg_name));
-                bar.enable_steady_tick(std::time::Duration::from_millis(100));
-                build_local_package(
-                    &manifest_path,
-                    build_temp_dir.path(),
-                    options.platform.as_str(),
-                )
-                .await?;
-                bar.finish_with_message(format!("✅ Built {}", pkg_name));
 
                 let expected_filename = format!(
                     "{}-{}-{}.conda",
@@ -229,6 +218,16 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     source_data.package_record.version,
                     source_data.package_record.build
                 );
+
+                bar.set_message(format!("Building {expected_filename}"));
+                bar.enable_steady_tick(std::time::Duration::from_millis(100));
+                build_local_package(
+                    &manifest_path,
+                    build_temp_dir.path(),
+                    options.platform.as_str(),
+                )
+                .await?;
+                bar.finish_with_message(format!("✅ Built {expected_filename}"));
 
                 let built_package = build_temp_dir.path().join(&expected_filename);
 
