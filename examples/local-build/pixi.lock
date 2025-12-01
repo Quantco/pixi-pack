@@ -28,6 +28,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-h3691f8a_5.conda
       - conda: .
         subdir: linux-64
+      - conda: local-pkg
+        subdir: linux-64
+      - conda: local-pkg2
+        subdir: linux-64
       linux-aarch64:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/_openmp_mutex-4.5-2_gnu.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/c-ares-1.34.5-h86ecc28_0.conda
@@ -51,6 +55,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/zstd-1.5.7-hefd9da6_5.conda
       - conda: .
         subdir: linux-aarch64
+      - conda: local-pkg
+        subdir: linux-aarch64
+      - conda: local-pkg2
+        subdir: linux-aarch64
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/c-ares-1.34.5-hf13058a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.11.12-hbd8a1cb_0.conda
@@ -67,6 +75,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/openssl-3.6.0-h230baf5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h281d3d1_5.conda
       - conda: .
+        subdir: osx-64
+      - conda: local-pkg
+        subdir: osx-64
+      - conda: local-pkg2
         subdir: osx-64
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/c-ares-1.34.5-h5505292_0.conda
@@ -85,6 +97,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hd0aec43_5.conda
       - conda: .
         subdir: osx-arm64
+      - conda: local-pkg
+        subdir: osx-arm64
+      - conda: local-pkg2
+        subdir: osx-arm64
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.11.12-h4c7d964_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/curl-8.17.0-h43ecb02_0.conda
@@ -98,6 +114,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.44.35208-h818238b_32.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.44.35208-h818238b_32.conda
       - conda: .
+        build: h9352c13_0
+      - conda: local-pkg
+        build: h9352c13_0
+      - conda: local-pkg2
         build: h9352c13_0
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -789,8 +809,87 @@ packages:
   license_family: Other
   size: 55476
   timestamp: 1727963768015
-- conda: .
+- conda: local-pkg
   name: local-build-local-pkg
+  version: 0.1.0
+  build: h9352c13_0
+  subdir: win-64
+  depends:
+  - curl ==8.17.0
+  - local-build-local-pkg-2
+  - vc >=14.2,<15
+  - vc14_runtime >=14.29.30139
+  - ucrt >=10.0.20348.0
+  input:
+    hash: 84293faf1c138d25d9ee798812c2d204e260bd5065e4d2dd69d14955c8b0dd1a
+    globs: []
+  sources:
+    local-build-local-pkg-2:
+      path: ../local-pkg2
+- conda: local-pkg
+  name: local-build-local-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: linux-64
+  depends:
+  - curl ==8.17.0
+  - local-build-local-pkg-2
+  - libstdcxx >=15
+  - libgcc >=15
+  input:
+    hash: 84293faf1c138d25d9ee798812c2d204e260bd5065e4d2dd69d14955c8b0dd1a
+    globs: []
+  sources:
+    local-build-local-pkg-2:
+      path: ../local-pkg2
+- conda: local-pkg
+  name: local-build-local-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: linux-aarch64
+  depends:
+  - curl ==8.17.0
+  - local-build-local-pkg-2
+  - libstdcxx >=15
+  - libgcc >=15
+  input:
+    hash: 84293faf1c138d25d9ee798812c2d204e260bd5065e4d2dd69d14955c8b0dd1a
+    globs: []
+  sources:
+    local-build-local-pkg-2:
+      path: ../local-pkg2
+- conda: local-pkg
+  name: local-build-local-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: osx-64
+  depends:
+  - curl ==8.17.0
+  - local-build-local-pkg-2
+  - libcxx >=21
+  input:
+    hash: 84293faf1c138d25d9ee798812c2d204e260bd5065e4d2dd69d14955c8b0dd1a
+    globs: []
+  sources:
+    local-build-local-pkg-2:
+      path: ../local-pkg2
+- conda: local-pkg
+  name: local-build-local-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: osx-arm64
+  depends:
+  - curl ==8.17.0
+  - local-build-local-pkg-2
+  - libcxx >=21
+  input:
+    hash: 84293faf1c138d25d9ee798812c2d204e260bd5065e4d2dd69d14955c8b0dd1a
+    globs: []
+  sources:
+    local-build-local-pkg-2:
+      path: ../local-pkg2
+- conda: local-pkg2
+  name: local-build-local-pkg-2
   version: 0.1.0
   build: h9352c13_0
   subdir: win-64
@@ -800,10 +899,10 @@ packages:
   - vc14_runtime >=14.29.30139
   - ucrt >=10.0.20348.0
   input:
-    hash: 105462291df66debe89a2a47973381b6d741541dc1ce5c88f4ebb94a22852320
+    hash: 14180a95eaea7bd4ad76a2fb625a5a52cc638c8026d63d5e57f440b01ea2981b
     globs: []
-- conda: .
-  name: local-build-local-pkg
+- conda: local-pkg2
+  name: local-build-local-pkg-2
   version: 0.1.0
   build: hbf21a9e_0
   subdir: linux-64
@@ -812,10 +911,10 @@ packages:
   - libstdcxx >=15
   - libgcc >=15
   input:
-    hash: 105462291df66debe89a2a47973381b6d741541dc1ce5c88f4ebb94a22852320
+    hash: 14180a95eaea7bd4ad76a2fb625a5a52cc638c8026d63d5e57f440b01ea2981b
     globs: []
-- conda: .
-  name: local-build-local-pkg
+- conda: local-pkg2
+  name: local-build-local-pkg-2
   version: 0.1.0
   build: hbf21a9e_0
   subdir: linux-aarch64
@@ -824,10 +923,10 @@ packages:
   - libstdcxx >=15
   - libgcc >=15
   input:
-    hash: 105462291df66debe89a2a47973381b6d741541dc1ce5c88f4ebb94a22852320
+    hash: 14180a95eaea7bd4ad76a2fb625a5a52cc638c8026d63d5e57f440b01ea2981b
     globs: []
-- conda: .
-  name: local-build-local-pkg
+- conda: local-pkg2
+  name: local-build-local-pkg-2
   version: 0.1.0
   build: hbf21a9e_0
   subdir: osx-64
@@ -835,10 +934,10 @@ packages:
   - curl ==8.17.0
   - libcxx >=21
   input:
-    hash: 105462291df66debe89a2a47973381b6d741541dc1ce5c88f4ebb94a22852320
+    hash: 14180a95eaea7bd4ad76a2fb625a5a52cc638c8026d63d5e57f440b01ea2981b
     globs: []
-- conda: .
-  name: local-build-local-pkg
+- conda: local-pkg2
+  name: local-build-local-pkg-2
   version: 0.1.0
   build: hbf21a9e_0
   subdir: osx-arm64
@@ -846,8 +945,82 @@ packages:
   - curl ==8.17.0
   - libcxx >=21
   input:
-    hash: 105462291df66debe89a2a47973381b6d741541dc1ce5c88f4ebb94a22852320
+    hash: 14180a95eaea7bd4ad76a2fb625a5a52cc638c8026d63d5e57f440b01ea2981b
     globs: []
+- conda: .
+  name: local-build-main-pkg
+  version: 0.1.0
+  build: h9352c13_0
+  subdir: win-64
+  depends:
+  - local-build-local-pkg
+  - vc >=14.2,<15
+  - vc14_runtime >=14.29.30139
+  - ucrt >=10.0.20348.0
+  input:
+    hash: ab9858cf09cc031a84f034102c52ebcfb53b36cdcaf3371ce12c30b647f0008e
+    globs: []
+  sources:
+    local-build-local-pkg:
+      path: ./local-pkg
+- conda: .
+  name: local-build-main-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: linux-64
+  depends:
+  - local-build-local-pkg
+  - libstdcxx >=15
+  - libgcc >=15
+  input:
+    hash: ab9858cf09cc031a84f034102c52ebcfb53b36cdcaf3371ce12c30b647f0008e
+    globs: []
+  sources:
+    local-build-local-pkg:
+      path: ./local-pkg
+- conda: .
+  name: local-build-main-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: linux-aarch64
+  depends:
+  - local-build-local-pkg
+  - libstdcxx >=15
+  - libgcc >=15
+  input:
+    hash: ab9858cf09cc031a84f034102c52ebcfb53b36cdcaf3371ce12c30b647f0008e
+    globs: []
+  sources:
+    local-build-local-pkg:
+      path: ./local-pkg
+- conda: .
+  name: local-build-main-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: osx-64
+  depends:
+  - local-build-local-pkg
+  - libcxx >=21
+  input:
+    hash: ab9858cf09cc031a84f034102c52ebcfb53b36cdcaf3371ce12c30b647f0008e
+    globs: []
+  sources:
+    local-build-local-pkg:
+      path: ./local-pkg
+- conda: .
+  name: local-build-main-pkg
+  version: 0.1.0
+  build: hbf21a9e_0
+  subdir: osx-arm64
+  depends:
+  - local-build-local-pkg
+  - libcxx >=21
+  input:
+    hash: ab9858cf09cc031a84f034102c52ebcfb53b36cdcaf3371ce12c30b647f0008e
+    globs: []
+  sources:
+    local-build-local-pkg:
+      path: ./local-pkg
 - conda: https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.5-h2d0b736_3.conda
   sha256: 3fde293232fa3fca98635e1167de6b7c7fda83caf24b9d6c91ec9eefb4f4d586
   md5: 47e340acb35de30501a76c7c799c41d7

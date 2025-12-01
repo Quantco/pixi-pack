@@ -846,7 +846,7 @@ async fn test_local_channel(
 #[tokio::test]
 async fn test_local_build_package(options: Options) {
     let mut pack_options = options.pack_options;
-    pack_options.manifest_path = PathBuf::from("examples/local-build/main-pkg/pixi.toml");
+    pack_options.manifest_path = PathBuf::from("examples/local-build/pixi.toml");
 
     let unpack_options = options.unpack_options;
     let pack_file = unpack_options.pack_file.clone();
