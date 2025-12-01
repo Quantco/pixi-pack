@@ -11,7 +11,7 @@ use std::{
 use std::os::unix::fs::PermissionsExt as _;
 
 use fxhash::FxHashMap;
-use indicatif::HumanBytes;
+use indicatif::{HumanBytes, ProgressBar};
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
 use tokio::{
     fs::{self, File, create_dir_all},
@@ -30,6 +30,7 @@ use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware,
     authentication_storage, mirror_middleware::Mirror,
 };
+
 use reqwest_middleware::ClientWithMiddleware;
 use tar::{Builder, HeaderMode};
 use tokio::io::AsyncReadExt;
@@ -97,21 +98,63 @@ async fn build_local_package(
 ) -> Result<()> {
     let manifest_dir = manifest_path
         .parent()
-        .ok_or_else(|| anyhow!("could not get parent directory of manifest_path"))?;
-    let status = TokioCommand::new("pixi")
+        .expect("manifest_path should have a parent directory");
+    let mut command = TokioCommand::new("pixi");
+    command
         .arg("build")
         .arg("--output-dir")
         .arg(output_dir)
         .arg("--build-platform")
         .arg(platform)
-        .current_dir(manifest_dir)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await?;
-    if !status.success() {
-        anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+        .current_dir(manifest_dir);
+
+    let is_verbose = tracing::enabled!(tracing::Level::WARN);
+
+    if is_verbose {
+        eprintln!(
+            "🔧 Running: pixi build --output-dir {} --build-platform {} (in {})",
+            output_dir.display(),
+            platform,
+            manifest_dir.display()
+        );
+
+        let status = command
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .await?;
+
+        if !status.success() {
+            anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+        }
+    } else {
+        let output = command.output().await?;
+
+        if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            eprintln!("❌ Build failed with exit code: {:?}", output.status.code());
+            eprintln!(
+                "Command: pixi build --output-dir {} --build-platform {} (in {})",
+                output_dir.display(),
+                platform,
+                manifest_dir.display()
+            );
+
+            if !stdout.is_empty() {
+                eprintln!("📤 stdout:");
+                eprintln!("{}", stdout);
+            }
+            if !stderr.is_empty() {
+                eprintln!("📤 stderr:");
+                eprintln!("{}", stderr);
+            }
+
+            anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+        }
     }
+
     Ok(())
 }
 
@@ -148,7 +191,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
     let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
-    let mut loaded_injected_packages: Vec<PathBuf> = Vec::new();
+    let mut built_source_packages: Vec<PathBuf> = Vec::new();
+    let mut _temp_dirs: Vec<tempfile::TempDir> = Vec::new();
 
     for package in packages {
         match package {
@@ -165,15 +209,19 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 });
                 let manifest_path = pkg_dir.join("pixi.toml");
                 let pkg_name = source_data.package_record.name.as_normalized();
-                eprintln!("🔨 Building package from the source: {}", pkg_name);
-                let bar = ProgressReporter::new(1);
+                let build_temp_dir = tempfile::tempdir()
+                    .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
+                let bar = ProgressBar::new_spinner();
+
+                bar.set_message(format!("Building {}", pkg_name));
+                bar.enable_steady_tick(std::time::Duration::from_millis(100));
                 build_local_package(
                     &manifest_path,
-                    output_folder.path(),
+                    build_temp_dir.path(),
                     options.platform.as_str(),
                 )
                 .await?;
-                bar.pb.finish_with_message(format!("✅ Built {}", pkg_name));
+                bar.finish_with_message(format!("✅ Built {}", pkg_name));
 
                 let expected_filename = format!(
                     "{}-{}-{}.conda",
@@ -182,17 +230,18 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     source_data.package_record.build
                 );
 
-                let built_package = output_folder.path().join(&expected_filename);
+                let built_package = build_temp_dir.path().join(&expected_filename);
 
                 if !built_package.exists() {
                     anyhow::bail!(
                         "Expected built package {} not found in {:?}",
                         expected_filename,
-                        output_folder.path()
+                        build_temp_dir.path()
                     );
                 }
 
-                loaded_injected_packages.push(built_package);
+                built_source_packages.push(built_package);
+                _temp_dirs.push(build_temp_dir);
             }
             LockedPackageRef::Pypi(pypi_data, _) => {
                 let package_name = pypi_data.name.clone();
@@ -245,11 +294,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         conda_packages.push((filename, package.package_record));
     }
 
-    let mut all_injected_packages = loaded_injected_packages;
-    all_injected_packages.extend(options.injected_packages.iter().cloned());
-
-    let injected_packages: Vec<(PathBuf, ArchiveType)> = all_injected_packages
+    let injected_packages: Vec<(PathBuf, ArchiveType)> = built_source_packages
         .iter()
+        .chain(options.injected_packages.iter())
         .filter_map(|e| {
             ArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
@@ -277,11 +324,6 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .await
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
 
-        if let Some(parent) = path.parent()
-            && parent == output_folder.path()
-        {
-            fs::remove_file(&path).await.ok();
-        }
         conda_packages.push((filename, package_record));
     }
 

@@ -852,12 +852,12 @@ async fn test_local_build_package(options: Options) {
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
-    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    assert!(pack_result.is_ok(), "{pack_result:?}");
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
-    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+    assert!(unpack_result.is_ok(), "{unpack_result:?}");
 
     let local_dep_json = match Platform::current() {
         Platform::Linux64 => env_dir.join("conda-meta/local-build-local-pkg-0.1.0-hbf21a9e_0.json"),
