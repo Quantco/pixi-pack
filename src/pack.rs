@@ -326,6 +326,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
         conda_packages.push((filename, package_record));
     }
+    drop(_temp_dirs);
 
     // In case we injected packages, we need to validate that these packages are solvable with the
     // environment (i.e., that each packages dependencies and run constraints are still satisfied).
