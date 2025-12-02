@@ -30,35 +30,35 @@ rustls-tls = [
 
 [dependencies]
 anyhow = "1.0.100"
-clap = { version = "4.5.48", features = ["derive", "string"] }
-clap_complete = "4.5.58"
+clap = { version = "4.5.53", features = ["derive", "string"] }
+clap_complete = "4.5.61"
 clap-verbosity-flag = { version = "3.0.4", features = ["tracing"] }
 futures = "0.3.31"
-indicatif = "0.18.0"
-rattler = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates", default-features = false }
-rattler_config = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_digest = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_conda_types = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_index = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_lock = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_networking = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates", default-features = false, features = [
+indicatif = "0.18.3"
+rattler = { version = "0.39.5", default-features = false }
+rattler_config = "0.2.21"
+rattler_digest = "1.2.0"
+rattler_conda_types = "0.42.2"
+rattler_index = "0.27.6"
+rattler_lock = "0.26.7"
+rattler_networking = { version = "0.25.27", default-features = false, features = [
   "s3",
   "rattler_config",
 ] }
-rattler_package_streaming = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates", default-features = false }
-rattler_shell = "0.25.0"
-reqwest = { version = "0.12.23", default-features = false, features = [
+rattler_package_streaming = { version = "0.23.19", default-features = false }
+rattler_shell = "0.25.13"
+reqwest = { version = "0.12.24", default-features = false, features = [
   "http2",
   "macos-system-configuration",
 ] }
 reqwest-middleware = "0.4.2"
-serde = { version = "1.0.226", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
-tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
+tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
 tokio-stream = { version = "0.1.17", features = ["fs"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = [
+tracing = "0.1.43"
+tracing-subscriber = { version = "0.3.22", features = [
   "default",
   "env-filter",
 ] }
@@ -69,38 +69,27 @@ tar = "0.4.44"
 base64 = "0.22.1"
 indexmap = "2.12.1"
 ahash = "0.8.12"
-uv-build-frontend = "0.0.1"
-uv-cache = "0.0.1"
-uv-cache-info = "0.0.1"
-uv-client = "0.0.1"
-uv-configuration = "0.0.1"
-uv-dispatch = "0.0.1"
-uv-distribution = "0.0.1"
-uv-distribution-filename = "0.0.1"
-uv-distribution-types = "0.0.1"
-uv-git = "0.0.1"
-uv-install-wheel = "0.0.1"
-uv-installer = "0.0.1"
-uv-pep508 = "0.0.1"
-uv-preview = "0.0.1"
-uv-python = "0.0.1"
-uv-types = "0.0.1"
-uv-workspace = "0.0.1"
+uv-build-frontend = "0.0.4"
+uv-cache = "0.0.4"
+uv-cache-info = "0.0.4"
+uv-client = "0.0.4"
+uv-configuration = "0.0.4"
+uv-dispatch = "0.0.4"
+uv-distribution = "0.0.4"
+uv-distribution-filename = "0.0.4"
+uv-distribution-types = "0.0.4"
+uv-git = "0.0.4"
+uv-install-wheel = "0.0.4"
+uv-installer = "0.0.4"
+uv-pep508 = "0.0.4"
+uv-preview = "0.0.4"
+uv-python = "0.0.4"
+uv-types = "0.0.4"
+uv-workspace = "0.0.4"
 
 [dev-dependencies]
 async-std = "1.13.2"
 rstest = "0.26.1"
 sha2 = "0.10.9"
-insta = "1.43.2"
+insta = "1.44.3"
 serial_test = "3.2.0"
-
-[patch.crates-io]
-rattler = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_config = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_digest = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_conda_types = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_index = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_lock = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_networking = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_package_streaming = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
-rattler_shell = { git = "https://github.com/tdejager/rattler", branch = "feat/move-to-uv-crates" }
