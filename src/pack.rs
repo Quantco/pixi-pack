@@ -106,7 +106,8 @@ async fn build_local_package(
         .arg(output_dir)
         .arg("--build-platform")
         .arg(platform)
-        .current_dir(manifest_dir);
+        .arg("--manifest-path")
+        .arg(manifest_path);
 
     let is_verbose = tracing::enabled!(tracing::Level::WARN);
 
@@ -200,14 +201,27 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 conda_packages_from_lockfile.push(binary_data.clone())
             }
             LockedPackageRef::Conda(CondaPackageData::Source(source_data)) => {
-                let base_dir = options.manifest_path.parent().unwrap_or(Path::new("."));
-                let pkg_dir = base_dir.join(match &source_data.location {
-                    UrlOrPath::Path(p) => p.to_path().to_string(),
+                let base_dir = if options.manifest_path.is_file() {
+                    options.manifest_path.parent().unwrap_or(Path::new("."))
+                } else {
+                    &options.manifest_path
+                };
+                let relative_path = match &source_data.location {
+                    UrlOrPath::Path(p) => PathBuf::from(p.to_path().as_str()),
                     UrlOrPath::Url(u) => {
                         anyhow::bail!("Unexpected URL for local package source: {}", u)
                     }
-                });
+                };
+
+                let pkg_dir = base_dir.join(&relative_path);
                 let manifest_path = pkg_dir.join("pixi.toml");
+                let canonical_manifest_path = manifest_path.canonicalize().map_err(|e| {
+                    anyhow!(
+                        "Cannot find manifest file {}: {}",
+                        manifest_path.display(),
+                        e
+                    )
+                })?;
                 let build_temp_dir = tempfile::tempdir()
                     .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
                 let bar = ProgressBar::new_spinner();
@@ -222,7 +236,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 bar.set_message(format!("Building {expected_filename}"));
                 bar.enable_steady_tick(std::time::Duration::from_millis(100));
                 build_local_package(
-                    &manifest_path,
+                    &canonical_manifest_path,
                     build_temp_dir.path(),
                     options.platform.as_str(),
                 )
