@@ -19,7 +19,7 @@ update-snapshots = "INSTA_UPDATE=always cargo test -p pixi-pack -- test_reproduc
 [dependencies]
 rust = "==1.90.0"
 openssl = "3.*"
-pixi = ">=0.39.0"
+pixi = ">=0.61.0"
 pkg-config = "*"
 
 [target.linux.dependencies]

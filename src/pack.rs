@@ -105,7 +105,7 @@ async fn build_local_package(
         .arg(output_dir)
         .arg("--build-platform")
         .arg(platform)
-        .arg("--manifest-path")
+        .arg("--path")
         .arg(manifest_path);
 
     let is_verbose = tracing::enabled!(tracing::Level::WARN);
