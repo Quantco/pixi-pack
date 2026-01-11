@@ -802,13 +802,24 @@ async fn download_pypi_package(
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
+    if let UrlOrPath::Path(path) = &package.location {
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| anyhow!("Path does not contain file name: {}", path))?
+            .to_string();
+        let output_path = output_dir.join(file_name);
+        tracing::debug!("Copy from {}", path);
+        fs::copy(Path::new(path.as_str()), &output_path).await?;
+        return Ok(());
+    }
+
     let url = match &package.location {
         UrlOrPath::Url(url) => url
             .as_ref()
             .strip_prefix("direct+")
             .and_then(|str| Url::parse(str).ok())
             .unwrap_or(url.clone()),
-        UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
+        UrlOrPath::Path(_) => unreachable!("path already copied."),
     };
 
     // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
