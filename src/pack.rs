@@ -236,6 +236,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     package,
                     &pypi_directory,
                     options.cache_dir.as_deref(),
+                    &options.manifest_path,
                 )
                 .await?;
                 bar.pb.inc(1);
@@ -797,6 +798,7 @@ async fn download_pypi_package(
     package: &PypiPackageData,
     output_dir: &Path,
     cache_dir: Option<&Path>,
+    manifest_path: &Path,
 ) -> Result<()> {
     create_dir_all(output_dir)
         .await
@@ -808,9 +810,20 @@ async fn download_pypi_package(
                 .file_name()
                 .ok_or_else(|| anyhow!("Path does not contain file name: {}", path))?
                 .to_string();
+            let lockfile_dir = if !manifest_path.is_dir() {
+                manifest_path
+                    .parent()
+                    .ok_or(anyhow!("could not get parent directory"))?
+            } else {
+                manifest_path
+            };
+
+            let source_path = lockfile_dir.join(path.to_string());
             let output_path = output_dir.join(file_name);
             tracing::debug!("Copy from {}", path);
-            fs::copy(Path::new(path.as_str()), &output_path).await?;
+            fs::copy(source_path, output_path)
+                .map_err(|e| anyhow!("could not copy local wheel file: {}", e))
+                .await?;
         }
         UrlOrPath::Url(url) => {
             let url = url
