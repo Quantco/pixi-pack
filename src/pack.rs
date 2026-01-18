@@ -485,7 +485,7 @@ async fn download_package(
         let output = compute_file_digest::<Sha256>(&output_path)?;
         if output != sha256hash {
             return Err(anyhow!(
-                "Download {} failed,{:x} != {:x} checksum mismatch",
+                "Download {} failed, checksum mismatch, expect: {:x}, but got: {:x}",
                 file_name,
                 sha256hash,
                 output,
@@ -495,7 +495,7 @@ async fn download_package(
         let output = compute_file_digest::<Md5>(&output_path)?;
         if output != md5hash {
             return Err(anyhow!(
-                "Download {} failed,{:x} != {:x} checksum mismatch",
+                "Download {} failed, checksum mismatch, expect: {:x}, but got: {:x}",
                 file_name,
                 md5hash,
                 output,
