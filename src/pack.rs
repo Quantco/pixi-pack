@@ -484,12 +484,22 @@ async fn download_package(
     if let Some(sha256hash) = package.package_record.sha256 {
         let output = compute_file_digest::<Sha256>(&output_path)?;
         if output != sha256hash {
-            return Err(anyhow!("Download {} failed, checksum mismatch", file_name));
+            return Err(anyhow!(
+                "Download {} failed,{:x} != {:x} checksum mismatch",
+                file_name,
+                sha256hash,
+                output,
+            ));
         }
     } else if let Some(md5hash) = package.package_record.md5 {
         let output = compute_file_digest::<Md5>(&output_path)?;
         if output != md5hash {
-            return Err(anyhow!("Download {} failed, checksum mismatch", file_name));
+            return Err(anyhow!(
+                "Download {} failed,{:x} != {:x} checksum mismatch",
+                file_name,
+                md5hash,
+                output,
+            ));
         }
     }
 
