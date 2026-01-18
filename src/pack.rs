@@ -478,6 +478,7 @@ async fn download_package(
             while let Some(chunk) = response.chunk().await? {
                 dest.write_all(&chunk).await?;
             }
+            dest.flush().await?;
         }
     }
 
