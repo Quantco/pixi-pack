@@ -21,6 +21,7 @@ use anyhow::Result;
 use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
 use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
+use rattler_digest::{Md5, Sha256, compute_file_digest};
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
 };
@@ -477,6 +478,18 @@ async fn download_package(
             while let Some(chunk) = response.chunk().await? {
                 dest.write_all(&chunk).await?;
             }
+        }
+    }
+
+    if let Some(sha256hash) = package.package_record.sha256 {
+        let output = compute_file_digest::<Sha256>(&output_path)?;
+        if output != sha256hash {
+            return Err(anyhow!("Download {} failed, checksum mismatch", file_name));
+        }
+    } else if let Some(md5hash) = package.package_record.md5 {
+        let output = compute_file_digest::<Md5>(&output_path)?;
+        if output != md5hash {
+            return Err(anyhow!("Download {} failed, checksum mismatch", file_name));
         }
     }
 
