@@ -841,3 +841,56 @@ async fn test_local_channel(
             .exists()
     );
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_local_build_package(options: Options) {
+    let mut pack_options = options.pack_options;
+    pack_options.manifest_path = PathBuf::from("examples/local-build/pixi.toml");
+
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{pack_result:?}");
+    assert!(pack_file.is_file());
+
+    let env_dir = unpack_options.output_directory.join("env");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{unpack_result:?}");
+
+    let local_dep_json = match Platform::current() {
+        Platform::Linux64 => env_dir.join("conda-meta/local-build-local-pkg-0.1.0-hb0f4dca_0.json"),
+        Platform::LinuxAarch64 => {
+            env_dir.join("conda-meta/local-build-local-pkg-0.1.0-he8cfe8b_0.json")
+        }
+        Platform::OsxArm64 => {
+            env_dir.join("conda-meta/local-build-local-pkg-0.1.0-h60d57d3_0.json")
+        }
+        Platform::Osx64 => env_dir.join("conda-meta/local-build-local-pkg-0.1.0-h0dc7051_0.json"),
+        Platform::Win64 => env_dir.join("conda-meta/local-build-local-pkg-0.1.0-h2433df5_0.json"),
+        _ => panic!("Unsupported platform"),
+    };
+
+    let main_pkg_json = match Platform::current() {
+        Platform::Linux64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-hb0f4dca_0.json"),
+        Platform::LinuxAarch64 => {
+            env_dir.join("conda-meta/local-build-main-pkg-0.1.0-he8cfe8b_0.json")
+        }
+        Platform::OsxArm64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-h60d57d3_0.json"),
+        Platform::Osx64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-h0dc7051_0.json"),
+        Platform::Win64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-h2433df5_0.json"),
+        _ => panic!("Unsupported platform"),
+    };
+    let curl_json = match Platform::current() {
+        Platform::Linux64 => env_dir.join("conda-meta/curl-8.17.0-h4e3cde8_1.json"),
+        Platform::LinuxAarch64 => env_dir.join("conda-meta/curl-8.17.0-h7bfdcfb_1.json"),
+        Platform::OsxArm64 => env_dir.join("conda-meta/curl-8.17.0-hdece5d2_1.json"),
+        Platform::Osx64 => env_dir.join("conda-meta/curl-8.17.0-h7dd4100_1.json"),
+        Platform::Win64 => env_dir.join("conda-meta/curl-8.17.0-h43ecb02_1.json"),
+        _ => panic!("Unsupported platform"),
+    };
+    assert!(main_pkg_json.exists(), "main-pkg not found in conda-meta");
+    assert!(local_dep_json.exists(), "local-pkg not found in conda-meta");
+    assert!(curl_json.exists(), "curl not found in conda-meta");
+}
