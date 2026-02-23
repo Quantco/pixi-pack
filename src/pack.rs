@@ -45,7 +45,7 @@ use anyhow::anyhow;
 
 static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OutputMode {
     Default,
     CreateExecutable,
@@ -118,17 +118,18 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.platform.as_str()
     ))?;
 
-    let temp_dir = if !matches!(options.output_mode, OutputMode::DirectoryOnly) {
-        Ok(tempfile::tempdir()
-            .map_err(|e| anyhow!("could not create temporary directory: {}", e))?)
+    let temp_dir = if options.output_mode != OutputMode::DirectoryOnly {
+        Some(
+            tempfile::tempdir()
+                .map_err(|e| anyhow!("could not create temporary directory: {}", e))?,
+        )
     } else {
-        Err(())
+        None
     };
-    let output_folder = if let Ok(temp_dir_ref) = temp_dir.as_ref() {
-        temp_dir_ref.path()
-    } else {
-        &options.output_file
-    };
+    let output_folder = temp_dir
+        .as_ref()
+        .map(|td| td.path())
+        .unwrap_or(&options.output_file);
 
     let channel_dir = output_folder.join(CHANNEL_DIRECTORY_NAME);
     let pypi_directory = output_folder.join(PYPI_DIRECTORY_NAME);
@@ -337,12 +338,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     .await?;
 
     // Pack = archive the contents.
-    if !matches!(options.output_mode, OutputMode::DirectoryOnly) {
+    if options.output_mode != OutputMode::DirectoryOnly {
         tracing::info!("Creating pack at {}", options.output_file.display());
         let bytes_written = archive_directory(
             output_folder,
             &options.output_file,
-            matches!(options.output_mode, OutputMode::CreateExecutable),
+            options.output_mode == OutputMode::CreateExecutable,
             options.pixi_unpack_source,
             options.platform,
         )

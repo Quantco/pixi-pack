@@ -40,7 +40,7 @@ fn options(
     #[default(OutputMode::Default)] output_mode: OutputMode,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = if matches!(output_mode, OutputMode::CreateExecutable) {
+    let pack_file = if output_mode == OutputMode::CreateExecutable {
         output_dir.path().join(if platform.is_windows() {
             "environment.ps1"
         } else {
@@ -142,7 +142,7 @@ async fn test_simple_python(
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
-    if matches!(output_mode, OutputMode::DirectoryOnly) {
+    if output_mode == OutputMode::DirectoryOnly {
         assert!(pack_file.is_dir())
     } else {
         assert!(pack_file.is_file())

@@ -54,23 +54,24 @@ pub struct UnpackOptions {
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
     let tmp_dir = if !options.pack_file.is_dir() {
-        Ok(tempfile::tempdir()
-            .map_err(|e| anyhow!("could not create temporary directory: {}", e))?)
+        Some(
+            tempfile::tempdir()
+                .map_err(|e| anyhow!("could not create temporary directory: {}", e))?,
+        )
     } else {
-        Err(())
+        None
     };
-    let unpack_dir = if let Ok(tmp_dir_ref) = tmp_dir.as_ref() {
-        tmp_dir_ref.path()
-    } else {
-        &options.pack_file
-    };
+    let unpack_dir = tmp_dir
+        .as_ref()
+        .map(|td| td.path())
+        .unwrap_or(&options.pack_file);
 
-    if tmp_dir.is_ok() {
-        tracing::info!("Unarchiving pack to {}", unpack_dir.display());
+    if let Some(td) = &tmp_dir {
+        tracing::info!("Unarchiving pack to {}", td.path().display());
         unarchive(&options.pack_file, unpack_dir)
             .await
             .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
-    };
+    }
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
@@ -113,10 +114,8 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     .await
     .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
 
-    if tmp_dir.is_ok() {
-        tmp_dir
-            .unwrap()
-            .close()
+    if let Some(td) = tmp_dir {
+        td.close()
             .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
     }
 
