@@ -10,7 +10,6 @@ use std::{
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::PermissionsExt as _;
 
-use countio::Counter;
 use fxhash::FxHashMap;
 use indicatif::HumanBytes;
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
@@ -599,17 +598,59 @@ impl std::io::Write for Output {
     }
 }
 
-fn open_output_file(target: &Path, ext: Option<&str>) -> Result<Counter<Output>> {
+struct CountingWriter {
+    inner: Output,
+    bytes_written: usize,
+}
+
+impl CountingWriter {
+    fn new(inner: Output) -> Self {
+        Self {
+            inner,
+            bytes_written: 0,
+        }
+    }
+
+    fn bytes_written(&self) -> usize {
+        self.bytes_written
+    }
+
+    fn get_ref(&self) -> &Output {
+        &self.inner
+    }
+}
+
+impl std::io::Write for CountingWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.bytes_written += n;
+        Ok(n)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(buf)?;
+        self.bytes_written += buf.len();
+        Ok(())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn open_output_file(target: &Path, ext: Option<&str>) -> Result<CountingWriter> {
     if target == "-" {
         // Use stdout
-        Ok(Counter::new(Output::Stdout(std::io::stdout())))
+        Ok(CountingWriter::new(Output::Stdout(std::io::stdout())))
     } else {
         let path = if let Some(extension) = ext {
             target.with_extension(extension)
         } else {
             target.to_path_buf()
         };
-        Ok(Counter::new(Output::File(std::fs::File::create(&path)?)))
+        Ok(CountingWriter::new(Output::File(std::fs::File::create(
+            &path,
+        )?)))
     }
 }
 
@@ -627,7 +668,7 @@ fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
 
     write_archive(archive, input_dir)?;
 
-    Ok(outfile.writer_bytes())
+    Ok(outfile.bytes_written())
 }
 
 async fn download_pixi_unpack_executable(
@@ -767,7 +808,7 @@ async fn create_self_extracting_executable(
         file_handle.set_permissions(perms)?;
     }
 
-    Ok(final_executable.writer_bytes())
+    Ok(final_executable.bytes_written())
 }
 
 /// Create an `environment.yml` file from the given packages.
