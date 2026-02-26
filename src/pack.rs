@@ -237,6 +237,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     package,
                     &pypi_directory,
                     options.cache_dir.as_deref(),
+                    &options.manifest_path,
                 )
                 .await?;
                 bar.pb.inc(1);
@@ -823,48 +824,70 @@ async fn download_pypi_package(
     package: &PypiPackageData,
     output_dir: &Path,
     cache_dir: Option<&Path>,
+    manifest_path: &Path,
 ) -> Result<()> {
     create_dir_all(output_dir)
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    let url = match &package.location {
-        UrlOrPath::Url(url) => url
-            .as_ref()
-            .strip_prefix("direct+")
-            .and_then(|str| Url::parse(str).ok())
-            .unwrap_or(url.clone()),
-        UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
-    };
+    match &package.location {
+        UrlOrPath::Path(path) => {
+            let file_name = path
+                .file_name()
+                .ok_or_else(|| anyhow!("Path does not contain file name: {}", path))?
+                .to_string();
+            let lockfile_dir = if !manifest_path.is_dir() {
+                manifest_path
+                    .parent()
+                    .ok_or(anyhow!("could not get parent directory"))?
+            } else {
+                manifest_path
+            };
 
-    // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
-    // Because it may be percent-encoded
-    let file_name = url.filename()?.to_string();
-    let output_path = output_dir.join(&file_name);
-
-    if let Some(cache_dir) = cache_dir {
-        let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
-        if cache_path.exists() {
-            tracing::debug!("Using cached package from {}", cache_path.display());
-            fs::copy(&cache_path, &output_path).await?;
-            return Ok(());
+            let source_path = lockfile_dir.join(path.to_string());
+            let output_path = output_dir.join(file_name);
+            tracing::debug!("Copy from {}", path);
+            fs::copy(source_path, output_path)
+                .map_err(|e| anyhow!("could not copy local wheel file: {}", e))
+                .await?;
         }
-    }
+        UrlOrPath::Url(url) => {
+            let url = url
+                .as_ref()
+                .strip_prefix("direct+")
+                .and_then(|str| Url::parse(str).ok())
+                .unwrap_or(url.clone());
 
-    let mut dest = File::create(&output_path).await?;
-    tracing::debug!("Fetching package {}", url);
+            // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
+            // Because it may be percent-encoded
+            let file_name = url.filename()?.to_string();
+            let output_path = output_dir.join(&file_name);
 
-    let mut response = client.get(url.clone()).send().await?.error_for_status()?;
+            if let Some(cache_dir) = cache_dir {
+                let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
+                if cache_path.exists() {
+                    tracing::debug!("Using cached package from {}", cache_path.display());
+                    fs::copy(&cache_path, &output_path).await?;
+                    return Ok(());
+                }
+            }
 
-    while let Some(chunk) = response.chunk().await? {
-        dest.write_all(&chunk).await?;
-    }
+            let mut dest = File::create(&output_path).await?;
+            tracing::debug!("Fetching package {}", url);
 
-    if let Some(cache_dir) = cache_dir {
-        let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
-        create_dir_all(&cache_subdir).await?;
-        let cache_path = cache_subdir.join(&file_name);
-        fs::copy(&output_path, &cache_path).await?;
+            let mut response = client.get(url.clone()).send().await?.error_for_status()?;
+
+            while let Some(chunk) = response.chunk().await? {
+                dest.write_all(&chunk).await?;
+            }
+
+            if let Some(cache_dir) = cache_dir {
+                let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
+                create_dir_all(&cache_subdir).await?;
+                let cache_path = cache_subdir.join(&file_name);
+                fs::copy(&output_path, &cache_path).await?;
+            }
+        }
     }
 
     Ok(())
