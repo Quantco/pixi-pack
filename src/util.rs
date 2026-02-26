@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -17,16 +17,4 @@ impl ProgressReporter {
         pb.enable_steady_tick(Duration::from_millis(500));
         Self { pb }
     }
-}
-
-/// Get the size of a file or directory in bytes.
-pub fn get_size<P: AsRef<Path>>(path: P) -> std::io::Result<u64> {
-    let metadata = std::fs::metadata(&path)?;
-    let mut size = metadata.len();
-    if metadata.is_dir() {
-        for entry in std::fs::read_dir(&path)? {
-            size += get_size(entry?.path())?;
-        }
-    }
-    Ok(size)
 }

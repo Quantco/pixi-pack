@@ -2,16 +2,19 @@
 
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::io::Write as _;
+use std::process::Stdio;
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
 
 use pixi_pack::{
-    Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata,
-    UnpackOptions, unarchive,
+    Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
+    PixiPackMetadata, UnpackOptions, unarchive,
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_lock::UrlOrPath;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
@@ -37,17 +40,17 @@ fn options(
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_non_wheel: bool,
     #[default("env")] env_name: String,
-    #[default(false)] create_executable: bool,
+    #[default(OutputMode::Archive)] output_mode: OutputMode,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = if create_executable {
-        output_dir.path().join(if platform.is_windows() {
+    let pack_file = match output_mode {
+        OutputMode::CreateExecutable => output_dir.path().join(if platform.is_windows() {
             "environment.ps1"
         } else {
             "environment.sh"
-        })
-    } else {
-        output_dir.path().join("environment.tar")
+        }),
+        OutputMode::DirectoryOnly => output_dir.path().join("environment"),
+        OutputMode::Archive => output_dir.path().join("environment.tar"),
     };
     let metadata = PixiPackMetadata {
         version: DEFAULT_PIXI_PACK_VERSION.to_string(),
@@ -65,7 +68,7 @@ fn options(
             metadata,
             injected_packages: vec![],
             ignore_pypi_non_wheel,
-            create_executable,
+            output_mode,
             pixi_unpack_source: None,
             cache_dir: None,
             config: None,
@@ -121,11 +124,13 @@ fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
 }
 
 #[rstest]
-#[case(false)]
-#[case(true)]
+#[case(false, OutputMode::Archive)]
+#[case(true, OutputMode::Archive)]
+#[case(false, OutputMode::DirectoryOnly)]
 #[tokio::test]
 async fn test_simple_python(
     #[case] use_pypi: bool,
+    #[case] output_mode: OutputMode,
     options: Options,
     #[with(use_pypi)] required_fs_objects: Vec<&'static str>,
 ) {
@@ -133,13 +138,26 @@ async fn test_simple_python(
     if use_pypi {
         pack_options.manifest_path = PathBuf::from("examples/pypi-wheel-packages/pixi.toml")
     }
+    pack_options.output_mode = output_mode;
 
-    let unpack_options = options.unpack_options;
+    let mut unpack_options = options.unpack_options;
+
+    // Adjust output paths when output_mode differs from fixture default.
+    if output_mode == OutputMode::DirectoryOnly {
+        let dir_path = options.output_dir.path().join("environment");
+        pack_options.output_file = dir_path.clone();
+        unpack_options.pack_file = dir_path;
+    }
+
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
-    assert!(pack_file.is_file());
+    if output_mode == OutputMode::DirectoryOnly {
+        assert!(pack_file.is_dir())
+    } else {
+        assert!(pack_file.is_file())
+    };
 
     let env_dir = unpack_options.output_directory.join("env");
     let activate_file = unpack_options.output_directory.join("activate.sh");
@@ -153,6 +171,64 @@ async fn test_simple_python(
         .for_each(|dir| {
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
+    // Pack to stdout via the pixi-pack binary
+    let pack_output = Command::new(env!("CARGO_BIN_EXE_pixi-pack"))
+        .arg("-o")
+        .arg("-")
+        .arg("examples/simple-python/pixi.toml")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("Failed to run pixi-pack");
+    assert!(
+        pack_output.status.success(),
+        "pixi-pack failed: {}",
+        String::from_utf8_lossy(&pack_output.stderr)
+    );
+
+    let tar_bytes = pack_output.stdout;
+    assert!(!tar_bytes.is_empty(), "pixi-pack stdout was empty");
+
+    // Unpack from stdin via the pixi-unpack binary
+    let unpack_dir = tempdir().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pixi-unpack"))
+        .arg("-o")
+        .arg(unpack_dir.path())
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn pixi-unpack");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let write_thread = std::thread::spawn(move || {
+        stdin.write_all(&tar_bytes).unwrap();
+    });
+
+    let unpack_output = child.wait_with_output().unwrap();
+    write_thread.join().unwrap();
+    assert!(
+        unpack_output.status.success(),
+        "pixi-unpack failed: {}",
+        String::from_utf8_lossy(&unpack_output.stderr)
+    );
+
+    // Verify unpacked environment
+    let env_dir = unpack_dir.path().join("env");
+    let activate_file = unpack_dir.path().join("activate.sh");
+    assert!(activate_file.is_file());
+    required_fs_objects.iter().for_each(|f| {
+        assert!(
+            env_dir.join(f).exists(),
+            "{:?} does not exist",
+            env_dir.join(f)
+        );
+    });
 }
 
 #[rstest]
@@ -238,9 +314,7 @@ async fn test_includes_repodata_patches(
 
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let unpack_dir = unpack_dir.path();
-    unarchive(pack_file.as_path(), unpack_dir)
-        .await
-        .expect("Failed to unarchive environment");
+    unarchive(pack_file.as_path(), unpack_dir).expect("Failed to unarchive environment");
 
     let mut repodata_raw = String::new();
 
@@ -256,10 +330,13 @@ async fn test_includes_repodata_patches(
     // in this example, the `libzlib` entry in the `python-3.12.3-h2628c8c_0_cpython.conda`
     // package is `libzlib >=1.2.13,<1.3.0a0`, but the upstream repodata was patched to
     // `libzlib >=1.2.13,<2.0.0a0` which is represented in the `pixi.lock` file
+    let python_archive =
+        DistArchiveIdentifier::try_from_filename("python-3.12.3-h2628c8c_0_cpython.conda")
+            .expect("invalid python archive identifier");
     assert!(
         repodata
             .conda_packages
-            .get("python-3.12.3-h2628c8c_0_cpython.conda")
+            .get(&python_archive)
             .expect("python not found in repodata")
             .depends
             .contains(&"libzlib >=1.2.13,<2.0.0a0".to_string()),
@@ -294,9 +371,7 @@ async fn test_compatibility(
 
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let unpack_dir = unpack_dir.path();
-    unarchive(pack_file.as_path(), unpack_dir)
-        .await
-        .expect("Failed to unarchive environment");
+    unarchive(pack_file.as_path(), unpack_dir).expect("Failed to unarchive environment");
     let environment_file = unpack_dir.join("environment.yml");
     let channel = unpack_dir.join("channel");
     assert!(environment_file.is_file());
@@ -416,7 +491,7 @@ async fn test_reproducible_shasum(
         "environment.sh"
     });
 
-    pack_options.create_executable = true;
+    pack_options.output_mode = OutputMode::CreateExecutable;
     pack_options.output_file = output_file.clone();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
@@ -434,7 +509,7 @@ async fn test_reproducible_shasum(
 #[tokio::test]
 async fn test_line_endings(
     #[case] platform: Platform,
-    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), true)]
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), OutputMode::CreateExecutable)]
     options: Options,
 ) {
     let pack_result = pixi_pack::pack(options.pack_options.clone()).await;
@@ -501,7 +576,7 @@ async fn test_custom_env_name(options: Options) {
 async fn test_run_packed_executable(options: Options, required_fs_objects: Vec<&'static str>) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options;
-    pack_options.create_executable = true;
+    pack_options.output_mode = OutputMode::CreateExecutable;
 
     #[cfg(target_os = "windows")]
     {
@@ -739,7 +814,7 @@ async fn test_pixi_pack_source(
     let mut pack_options = options.pack_options.clone();
     let output_file = options.output_dir.path().join("environment.sh");
 
-    pack_options.create_executable = true;
+    pack_options.output_mode = OutputMode::CreateExecutable;
     pack_options.output_file = output_file.clone();
 
     // Build the path
