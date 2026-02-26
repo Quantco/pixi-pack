@@ -128,3 +128,7 @@ unpack/
 # pixi environments
 .pixi
 *.egg-info
+
+# Claude
+.claude/*.local.*
+.claude/worktrees/
