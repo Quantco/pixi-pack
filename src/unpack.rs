@@ -69,7 +69,6 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     if let Some(td) = &tmp_dir {
         tracing::info!("Unarchiving pack to {}", td.path().display());
         unarchive(&options.pack_file, unpack_dir)
-            .await
             .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
     }
 
@@ -205,7 +204,7 @@ async fn collect_packages(channel_dir: &Path) -> Result<FxHashMap<String, Packag
 }
 
 /// Unarchive a tarball.
-async fn unarchive_generic<T: std::io::Read>(source: T, target_dir: &Path) -> Result<()> {
+fn unarchive_generic<T: std::io::Read>(source: T, target_dir: &Path) -> Result<()> {
     let reader = std::io::BufReader::new(source);
     let mut archive = Archive::new(reader);
 
@@ -216,13 +215,13 @@ async fn unarchive_generic<T: std::io::Read>(source: T, target_dir: &Path) -> Re
     Ok(())
 }
 
-pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+pub fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     if archive_path == "-" {
-        unarchive_generic(std::io::stdin(), target_dir).await
+        unarchive_generic(std::io::stdin(), target_dir)
     } else {
         let file = std::fs::File::open(archive_path)
             .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
-        unarchive_generic(file, target_dir).await
+        unarchive_generic(file, target_dir)
     }
 }
 

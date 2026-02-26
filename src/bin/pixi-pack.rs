@@ -61,7 +61,7 @@ struct Cli {
     create_executable: bool,
 
     /// Create pack as a folder instead of a tar
-    #[arg(long, default_value = "false")]
+    #[arg(long, default_value = "false", conflicts_with = "create_executable")]
     directory_only: bool,
 
     /// Optional path or URL to a pixi-unpack executable.
@@ -97,13 +97,13 @@ fn define_output_mode(create_executable: bool, directory_only: bool) -> OutputMo
     } else if create_executable {
         OutputMode::CreateExecutable
     } else {
-        OutputMode::Default
+        OutputMode::Archive
     }
 }
 
 fn default_output_file(platform: Platform, mode: OutputMode) -> PathBuf {
     match mode {
-        OutputMode::Default => cwd().join("environment.tar"),
+        OutputMode::Archive => cwd().join("environment.tar"),
         OutputMode::CreateExecutable => {
             if platform.is_windows() {
                 cwd().join("environment.ps1")
@@ -124,6 +124,7 @@ async fn main() -> Result<()> {
 
     tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(cli.verbose)
+        .with_writer(std::io::stderr)
         .init();
 
     tracing::debug!("Starting pixi-pack CLI");

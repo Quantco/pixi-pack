@@ -2,6 +2,8 @@
 
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::io::Write as _;
+use std::process::Stdio;
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
@@ -37,17 +39,17 @@ fn options(
     #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_non_wheel: bool,
     #[default("env")] env_name: String,
-    #[default(OutputMode::Default)] output_mode: OutputMode,
+    #[default(OutputMode::Archive)] output_mode: OutputMode,
 ) -> Options {
     let output_dir = tempdir().expect("Couldn't create a temp dir for tests");
-    let pack_file = if output_mode == OutputMode::CreateExecutable {
-        output_dir.path().join(if platform.is_windows() {
+    let pack_file = match output_mode {
+        OutputMode::CreateExecutable => output_dir.path().join(if platform.is_windows() {
             "environment.ps1"
         } else {
             "environment.sh"
-        })
-    } else {
-        output_dir.path().join("environment.tar")
+        }),
+        OutputMode::DirectoryOnly => output_dir.path().join("environment"),
+        OutputMode::Archive => output_dir.path().join("environment.tar"),
     };
     let metadata = PixiPackMetadata {
         version: DEFAULT_PIXI_PACK_VERSION.to_string(),
@@ -121,8 +123,8 @@ fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
 }
 
 #[rstest]
-#[case(false, OutputMode::Default)]
-#[case(true, OutputMode::Default)]
+#[case(false, OutputMode::Archive)]
+#[case(true, OutputMode::Archive)]
 #[case(false, OutputMode::DirectoryOnly)]
 #[tokio::test]
 async fn test_simple_python(
@@ -137,7 +139,15 @@ async fn test_simple_python(
     }
     pack_options.output_mode = output_mode;
 
-    let unpack_options = options.unpack_options;
+    let mut unpack_options = options.unpack_options;
+
+    // Adjust output paths when output_mode differs from fixture default.
+    if output_mode == OutputMode::DirectoryOnly {
+        let dir_path = options.output_dir.path().join("environment");
+        pack_options.output_file = dir_path.clone();
+        unpack_options.pack_file = dir_path;
+    }
+
     let pack_file = unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
@@ -160,6 +170,60 @@ async fn test_simple_python(
         .for_each(|dir| {
             assert!(dir.exists(), "{:?} does not exist", dir);
         });
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
+    // Pack to stdout via the pixi-pack binary
+    let pack_output = Command::new(env!("CARGO_BIN_EXE_pixi-pack"))
+        .arg("-o")
+        .arg("-")
+        .arg("examples/simple-python/pixi.toml")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("Failed to run pixi-pack");
+    assert!(
+        pack_output.status.success(),
+        "pixi-pack failed: {}",
+        String::from_utf8_lossy(&pack_output.stderr)
+    );
+
+    let tar_bytes = pack_output.stdout;
+    assert!(!tar_bytes.is_empty(), "pixi-pack stdout was empty");
+
+    // Unpack from stdin via the pixi-unpack binary
+    let unpack_dir = tempdir().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pixi-unpack"))
+        .arg("-o")
+        .arg(unpack_dir.path())
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn pixi-unpack");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let write_thread = std::thread::spawn(move || {
+        stdin.write_all(&tar_bytes).unwrap();
+    });
+
+    let unpack_output = child.wait_with_output().unwrap();
+    write_thread.join().unwrap();
+    assert!(
+        unpack_output.status.success(),
+        "pixi-unpack failed: {}",
+        String::from_utf8_lossy(&unpack_output.stderr)
+    );
+
+    // Verify unpacked environment
+    let env_dir = unpack_dir.path().join("env");
+    let activate_file = unpack_dir.path().join("activate.sh");
+    assert!(activate_file.is_file());
+    required_fs_objects.iter().for_each(|f| {
+        assert!(env_dir.join(f).exists(), "{:?} does not exist", env_dir.join(f));
+    });
 }
 
 #[rstest]
@@ -246,7 +310,6 @@ async fn test_includes_repodata_patches(
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let unpack_dir = unpack_dir.path();
     unarchive(pack_file.as_path(), unpack_dir)
-        .await
         .expect("Failed to unarchive environment");
 
     let mut repodata_raw = String::new();
@@ -302,7 +365,6 @@ async fn test_compatibility(
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let unpack_dir = unpack_dir.path();
     unarchive(pack_file.as_path(), unpack_dir)
-        .await
         .expect("Failed to unarchive environment");
     let environment_file = unpack_dir.join("environment.yml");
     let channel = unpack_dir.join("channel");

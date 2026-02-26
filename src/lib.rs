@@ -7,7 +7,7 @@ pub use pack::{OutputMode, PackOptions, pack};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
 pub use unpack::{UnpackOptions, unarchive, unpack};
-pub use util::{ProgressReporter, get_size};
+pub use util::ProgressReporter;
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const PYPI_DIRECTORY_NAME: &str = "pypi";

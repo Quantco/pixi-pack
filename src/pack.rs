@@ -47,7 +47,7 @@ static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OutputMode {
-    Default,
+    Archive,
     CreateExecutable,
     DirectoryOnly,
 }
@@ -361,6 +361,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             options.output_file.display(),
             output_size
         );
+    } else {
+        tracing::info!(
+            "Created pack directory at {}.",
+            options.output_file.display(),
+        );
+        eprintln!(
+            "📦 Created pack directory at {}.",
+            options.output_file.display(),
+        );
     }
 
     Ok(())
@@ -632,6 +641,12 @@ impl std::io::Write for CountingWriter {
         self.inner.write_all(buf)?;
         self.bytes_written += buf.len();
         Ok(())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        let n = self.inner.write_vectored(bufs)?;
+        self.bytes_written += n;
+        Ok(n)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
