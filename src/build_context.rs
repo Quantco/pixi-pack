@@ -103,6 +103,7 @@ impl BuildContext for PixiPackBuildContext {
         source: &'a std::path::Path,
         subdirectory: Option<&'a std::path::Path>,
         output_dir: &'a std::path::Path,
+        sources: uv_configuration::SourceStrategy,
         build_kind: uv_configuration::BuildKind,
         version_id: Option<&'a str>,
     ) -> anyhow::Result<Option<uv_distribution_filename::DistFilename>, BuildDispatchError> {
