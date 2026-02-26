@@ -12,6 +12,7 @@ use pixi_pack::{
     Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
     PixiPackMetadata, UnpackOptions, unarchive,
 };
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_lock::UrlOrPath;
@@ -222,7 +223,11 @@ async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
     let activate_file = unpack_dir.path().join("activate.sh");
     assert!(activate_file.is_file());
     required_fs_objects.iter().for_each(|f| {
-        assert!(env_dir.join(f).exists(), "{:?} does not exist", env_dir.join(f));
+        assert!(
+            env_dir.join(f).exists(),
+            "{:?} does not exist",
+            env_dir.join(f)
+        );
     });
 }
 
@@ -309,8 +314,7 @@ async fn test_includes_repodata_patches(
 
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let unpack_dir = unpack_dir.path();
-    unarchive(pack_file.as_path(), unpack_dir)
-        .expect("Failed to unarchive environment");
+    unarchive(pack_file.as_path(), unpack_dir).expect("Failed to unarchive environment");
 
     let mut repodata_raw = String::new();
 
@@ -326,10 +330,14 @@ async fn test_includes_repodata_patches(
     // in this example, the `libzlib` entry in the `python-3.12.3-h2628c8c_0_cpython.conda`
     // package is `libzlib >=1.2.13,<1.3.0a0`, but the upstream repodata was patched to
     // `libzlib >=1.2.13,<2.0.0a0` which is represented in the `pixi.lock` file
+    let python_archive = DistArchiveIdentifier::try_from_filename(
+        "python-3.12.3-h2628c8c_0_cpython.conda",
+    )
+    .expect("invalid python archive identifier");
     assert!(
         repodata
             .conda_packages
-            .get("python-3.12.3-h2628c8c_0_cpython.conda")
+            .get(&python_archive)
             .expect("python not found in repodata")
             .depends
             .contains(&"libzlib >=1.2.13,<2.0.0a0".to_string()),
@@ -364,8 +372,7 @@ async fn test_compatibility(
 
     let unpack_dir = tempdir().expect("Couldn't create a temp dir for tests");
     let unpack_dir = unpack_dir.path();
-    unarchive(pack_file.as_path(), unpack_dir)
-        .expect("Failed to unarchive environment");
+    unarchive(pack_file.as_path(), unpack_dir).expect("Failed to unarchive environment");
     let environment_file = unpack_dir.join("environment.yml");
     let channel = unpack_dir.join("channel");
     assert!(environment_file.is_file());
