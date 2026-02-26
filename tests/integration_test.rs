@@ -94,10 +94,10 @@ fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
         _ => panic!("Unsupported platform"),
     };
     let ordered_enum_required_file = match Platform::current() {
-        Platform::Linux64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::LinuxAarch64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::OsxArm64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::Osx64 => "lib/python3.11/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::Linux64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::LinuxAarch64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::OsxArm64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Platform::Osx64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
         Platform::Win64 => "lib/site-packages/ordered_enum-0.0.9.dist-info",
         _ => panic!("Unsupported platform"),
     };
