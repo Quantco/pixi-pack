@@ -21,6 +21,7 @@ use anyhow::Result;
 use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
 use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
+use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
 };
@@ -433,6 +434,16 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     Ok(client)
 }
 
+async fn write_all_chunk<W>(response: &mut reqwest::Response, dest: &mut W) -> anyhow::Result<()>
+where
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    while let Some(chunk) = response.chunk().await? {
+        dest.write_all(&chunk).await?;
+    }
+    Ok(())
+}
+
 /// Download a conda package to a given output directory.
 async fn download_package(
     client: &ClientWithMiddleware,
@@ -475,8 +486,23 @@ async fn download_package(
 
             tracing::debug!("Fetching package {}", package.location);
             let mut response = client.get(url.clone()).send().await?.error_for_status()?;
-            while let Some(chunk) = response.chunk().await? {
-                dest.write_all(&chunk).await?;
+
+            if let Some(expected_sha) = package.package_record.sha256 {
+                let mut dest = HashingWriter::<_, Sha256>::new(dest);
+                write_all_chunk(&mut response, &mut dest).await?;
+                let (_f, hash) = dest.finalize();
+                if hash != expected_sha {
+                    anyhow::bail!("Download {file_name} failed, checksum mismatch");
+                }
+            } else if let Some(expected_md5) = package.package_record.md5 {
+                let mut dest = HashingWriter::<_, Md5>::new(dest);
+                write_all_chunk(&mut response, &mut dest).await?;
+                let (_f, hash) = dest.finalize();
+                if hash != expected_md5 {
+                    anyhow::bail!("Download {file_name} failed, checksum mismatch");
+                }
+            } else {
+                write_all_chunk(&mut response, &mut dest).await?;
             }
         }
     }
