@@ -280,3 +280,12 @@ conda env create -p ./env --file environment.yml
 >
 > - Add `pip` to your `pixi.lock` file using `pixi add pip`.
 > - Configuring `conda` (or `mamba`) to not install `pip` by default by running `conda config --set add_pip_as_python_dependency false` (or by adding `add_pip_as_python_dependency: False` to your `~/.condarc`)
+
+## Build attestations
+
+In addition to the `intoto` files, we also upload build attestations to GitHub.
+You can verify a binary using the `gh` CLI:
+
+```bash
+gh attestation verify --repo Quantco/pixi-pack pixi-pack-<architecture>
+```
