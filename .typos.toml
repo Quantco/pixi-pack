@@ -1,5 +1,4 @@
 [default.extend-words]
-intoto = "intoto"
 concurreny = "concurreny" # xref: https://github.com/conda/rattler/pull/1479
 
 [files]
