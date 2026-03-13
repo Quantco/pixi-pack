@@ -77,19 +77,18 @@ jobs:
           mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           mv target/${{ matrix.target }}/release/pixi-unpack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        if: needs.metadata.outputs.release == 'true'
-        with:
-          subject-path: |
-            pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
-            pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
-
       - name: Upload Artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pixi-pack-${{ matrix.target }}
           path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
+          if-no-files-found: error
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: pixi-unpack-${{ matrix.target }}
+          path: pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
   release:
@@ -116,4 +115,4 @@ jobs:
           generate_release_notes: true
           tag_name: v${{ needs.metadata.outputs.version }}
           draft: true
-          files: pixi-pack-*
+          files: pixi-*
