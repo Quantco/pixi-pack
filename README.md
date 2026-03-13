@@ -283,7 +283,7 @@ conda env create -p ./env --file environment.yml
 
 ## Build attestations
 
-In addition to the `intoto` files, we also upload build attestations to GitHub.
+Build attestations are uploaded to GitHub Artifact Attestations.
 You can verify a binary using the `gh` CLI:
 
 ```bash
