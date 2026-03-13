@@ -27,11 +27,6 @@ jobs:
     name: Build Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: [metadata]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-      attestations: write
     strategy:
       fail-fast: false
       matrix:
