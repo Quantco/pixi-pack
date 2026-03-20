@@ -65,7 +65,7 @@ tracing-subscriber = { version = "0.3.22", features = [
 url = "2.5.7"
 tempfile = "3.23.0"
 walkdir = "2.5.0"
-tar = "0.4.44"
+tar = "0.4.45"
 base64 = "0.22.1"
 indexmap = "2.12.1"
 ahash = "0.8.12"
