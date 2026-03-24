@@ -12,6 +12,8 @@ updates:
           - "*"
     commit-message:
       prefix: ci
+    cooldown:
+      default-days: 7
   - package-ecosystem: cargo
     directory: /
     schedule:
@@ -24,3 +26,5 @@ updates:
       prefix: build
     labels:
       - dependencies
+    cooldown:
+      default-days: 7
