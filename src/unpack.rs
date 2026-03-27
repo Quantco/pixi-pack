@@ -15,9 +15,7 @@ use rattler::{
     install::{Installer, PythonInfo},
     package_cache::{CacheKey, PackageCache},
 };
-use rattler_conda_types::{
-    PackageRecord, Platform, RepoData, RepoDataRecord,
-};
+use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
 use rattler_package_streaming::fs::extract;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
@@ -257,7 +255,7 @@ async fn create_prefix(
 
             let package_path = channel_dir
                 .join(&package_record.subdir)
-                .join(file_name.to_string());
+                .join(&file_name);
             let normalized_path = package_path.canonicalize().unwrap();
 
             let url = Url::from_file_path(&normalized_path)
