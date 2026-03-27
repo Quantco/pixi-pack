@@ -686,7 +686,7 @@ impl std::io::Write for CountingWriter {
 }
 
 fn open_output_file(target: &Path, ext: Option<&str>) -> Result<CountingWriter> {
-    if target == "-" {
+    if target == Path::new("-") {
         // Use stdout
         Ok(CountingWriter::new(Output::Stdout(std::io::stdout())))
     } else {

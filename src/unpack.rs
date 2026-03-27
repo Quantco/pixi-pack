@@ -222,7 +222,7 @@ fn unarchive_generic<T: std::io::Read>(source: T, target_dir: &Path) -> Result<(
 }
 
 pub fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
-    if archive_path == "-" {
+    if archive_path == Path::new("-") {
         unarchive_generic(std::io::stdin(), target_dir)
     } else {
         let file = std::fs::File::open(archive_path)
