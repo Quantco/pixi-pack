@@ -53,15 +53,24 @@ pub struct UnpackOptions {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
-    let tmp_dir =
-        tempfile::tempdir().map_err(|e| anyhow!("Could not create temporary directory: {}", e))?;
-    let unpack_dir = tmp_dir.path();
+    let tmp_dir = if !options.pack_file.is_dir() {
+        Some(
+            tempfile::tempdir()
+                .map_err(|e| anyhow!("could not create temporary directory: {}", e))?,
+        )
+    } else {
+        None
+    };
+    let unpack_dir = tmp_dir
+        .as_ref()
+        .map(|td| td.path())
+        .unwrap_or(&options.pack_file);
 
-    tracing::info!("Unarchiving pack to {}", unpack_dir.display());
-
-    unarchive(&options.pack_file, unpack_dir)
-        .await
-        .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
+    if let Some(td) = &tmp_dir {
+        tracing::info!("Unarchiving pack to {}", td.path().display());
+        unarchive(&options.pack_file, unpack_dir)
+            .map_err(|e| anyhow!("Could not unarchive: {}", e))?;
+    }
 
     validate_metadata_file(unpack_dir.join(PIXI_PACK_METADATA_PATH)).await?;
 
@@ -104,9 +113,10 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     .await
     .map_err(|e| anyhow!("Could not create activation script: {}", e))?;
 
-    tmp_dir
-        .close()
-        .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
+    if let Some(td) = tmp_dir {
+        td.close()
+            .map_err(|e| anyhow!("Could not remove temporary directory: {}", e))?;
+    }
 
     tracing::info!(
         "Finished unpacking to {}.",
@@ -198,11 +208,8 @@ async fn collect_packages(
 }
 
 /// Unarchive a tarball.
-pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
-    let file = std::fs::File::open(archive_path)
-        .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
-
-    let reader = std::io::BufReader::new(file);
+fn unarchive_generic<T: std::io::Read>(source: T, target_dir: &Path) -> Result<()> {
+    let reader = std::io::BufReader::new(source);
     let mut archive = Archive::new(reader);
 
     archive
@@ -210,6 +217,16 @@ pub async fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
         .map_err(|e| anyhow!("could not unpack archive: {}", e))?;
 
     Ok(())
+}
+
+pub fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+    if archive_path == Path::new("-") {
+        unarchive_generic(std::io::stdin(), target_dir)
+    } else {
+        let file = std::fs::File::open(archive_path)
+            .map_err(|e| anyhow!("could not open archive {:#?}: {}", archive_path, e))?;
+        unarchive_generic(file, target_dir)
+    }
 }
 
 async fn create_prefix(

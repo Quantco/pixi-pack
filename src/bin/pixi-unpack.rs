@@ -65,6 +65,7 @@ async fn main() -> Result<()> {
 
     tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(cli.verbose)
+        .with_writer(std::io::stderr)
         .init();
 
     tracing::debug!("Starting pixi-unpack CLI");

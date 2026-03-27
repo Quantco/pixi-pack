@@ -1,6 +1,5 @@
 ---
 source: tests/integration_test.rs
-assertion_line: 425
 expression: "&sha256_digest"
 ---
 646306FDAAF9FAA8081A403A7611435C4F24B35F6A4BFC2859F90E2678EB6690
