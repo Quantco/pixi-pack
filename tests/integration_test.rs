@@ -159,6 +159,9 @@ async fn test_simple_python(
     };
 
     let env_dir = unpack_options.output_directory.join("env");
+    #[cfg(target_os = "windows")]
+    let activate_file = unpack_options.output_directory.join("activate.bat");
+    #[cfg(not(target_os = "windows"))]
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
@@ -219,6 +222,9 @@ async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
 
     // Verify unpacked environment
     let env_dir = unpack_dir.path().join("env");
+    #[cfg(target_os = "windows")]
+    let activate_file = unpack_dir.path().join("activate.bat");
+    #[cfg(not(target_os = "windows"))]
     let activate_file = unpack_dir.path().join("activate.sh");
     assert!(activate_file.is_file());
     required_fs_objects.iter().for_each(|f| {
@@ -256,6 +262,9 @@ async fn test_inject(
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
+    #[cfg(target_os = "windows")]
+    let activate_file = unpack_options.output_directory.join("activate.bat");
+    #[cfg(not(target_os = "windows"))]
     let activate_file = unpack_options.output_directory.join("activate.sh");
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
