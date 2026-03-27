@@ -14,7 +14,7 @@ use pixi_pack::{
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
-use rattler_conda_types::package::DistArchiveIdentifier;
+use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_lock::UrlOrPath;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
@@ -331,7 +331,7 @@ async fn test_includes_repodata_patches(
     // package is `libzlib >=1.2.13,<1.3.0a0`, but the upstream repodata was patched to
     // `libzlib >=1.2.13,<2.0.0a0` which is represented in the `pixi.lock` file
     let python_archive =
-        DistArchiveIdentifier::try_from_filename("python-3.12.3-h2628c8c_0_cpython.conda")
+        ArchiveIdentifier::try_from_filename("python-3.12.3-h2628c8c_0_cpython.conda")
             .expect("invalid python archive identifier");
     assert!(
         repodata
