@@ -22,7 +22,7 @@ use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
 use rattler_conda_types::{
     ChannelInfo, PackageRecord, Platform, RepoData,
-    package::{CondaArchiveType, DistArchiveIdentifier},
+    package::{CondaArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier},
 };
 use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
@@ -42,11 +42,18 @@ use walkdir::WalkDir;
 
 use crate::{
     CHANNEL_DIRECTORY_NAME, Config, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
-    ProgressReporter, get_size,
+    ProgressReporter,
 };
 use anyhow::anyhow;
 
 static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OutputMode {
+    Archive,
+    CreateExecutable,
+    DirectoryOnly,
+}
 
 /// Options for packing a pixi environment.
 #[derive(Debug, Clone)]
@@ -60,7 +67,7 @@ pub struct PackOptions {
     pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
-    pub create_executable: bool,
+    pub output_mode: OutputMode,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
 }
@@ -114,11 +121,21 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.platform.as_str()
     ))?;
 
-    let output_folder =
-        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
+    let temp_dir = if options.output_mode != OutputMode::DirectoryOnly {
+        Some(
+            tempfile::tempdir()
+                .map_err(|e| anyhow!("could not create temporary directory: {}", e))?,
+        )
+    } else {
+        None
+    };
+    let output_folder = temp_dir
+        .as_ref()
+        .map(|td| td.path())
+        .unwrap_or(&options.output_file);
 
-    let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
-    let pypi_directory = output_folder.path().join(PYPI_DIRECTORY_NAME);
+    let channel_dir = output_folder.join(CHANNEL_DIRECTORY_NAME);
+    let pypi_directory = output_folder.join(PYPI_DIRECTORY_NAME);
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
     let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
@@ -207,6 +224,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .to_str()
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
+        CondaArchiveIdentifier::try_from_filename(&filename)
+            .ok_or(anyhow!("could not parse package filename: {}", filename))?;
 
         fs::copy(&path, channel_dir.join(subdir).join(&filename))
             .await
@@ -311,42 +330,53 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
-    let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
+    let metadata_path = output_folder.join(PIXI_PACK_METADATA_PATH);
     let metadata = serde_json::to_string_pretty(&options.metadata)?;
     fs::write(metadata_path, metadata.as_bytes()).await?;
 
     // Create environment file.
     tracing::info!("Creating environment.yml file");
     create_environment_file(
-        output_folder.path(),
+        output_folder,
         conda_packages.iter().map(|(_, p)| p),
         &pypi_packages_from_lockfile,
     )
     .await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating pack at {}", options.output_file.display());
-    archive_directory(
-        output_folder.path(),
-        &options.output_file,
-        options.create_executable,
-        options.pixi_unpack_source,
-        options.platform,
-    )
-    .await
-    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    if options.output_mode != OutputMode::DirectoryOnly {
+        tracing::info!("Creating pack at {}", options.output_file.display());
+        let bytes_written = archive_directory(
+            output_folder,
+            &options.output_file,
+            options.output_mode == OutputMode::CreateExecutable,
+            options.pixi_unpack_source,
+            options.platform,
+        )
+        .await
+        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
-    let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
-    tracing::info!(
-        "Created pack at {} with size {}.",
-        options.output_file.display(),
-        output_size
-    );
-    eprintln!(
-        "📦 Created pack at {} with size {}.",
-        options.output_file.display(),
-        output_size
-    );
+        let output_size = HumanBytes(bytes_written as u64).to_string();
+        tracing::info!(
+            "Created pack at {} with size {}.",
+            options.output_file.display(),
+            output_size
+        );
+        eprintln!(
+            "📦 Created pack at {} with size {}.",
+            options.output_file.display(),
+            output_size
+        );
+    } else {
+        tracing::info!(
+            "Created pack directory at {}.",
+            options.output_file.display(),
+        );
+        eprintln!(
+            "📦 Created pack directory at {}.",
+            options.output_file.display(),
+        );
+    }
 
     Ok(())
 }
@@ -525,7 +555,7 @@ async fn archive_directory(
     create_executable: bool,
     pixi_unpack_source: Option<UrlOrPath>,
     platform: Platform,
-) -> Result<()> {
+) -> Result<usize> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
         create_self_extracting_executable(input_dir, archive_target, pixi_unpack_source, platform)
@@ -572,8 +602,106 @@ where
     Ok(())
 }
 
-fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
-    let outfile = std::fs::File::create(archive_target).map_err(|e| {
+enum Output {
+    Stdout(std::io::Stdout),
+    File(std::fs::File),
+}
+
+macro_rules! for_output {
+    ($value:expr, $pattern:pat => $result:expr) => {
+        match $value {
+            Output::Stdout($pattern) => $result,
+            Output::File($pattern) => $result,
+        }
+    };
+}
+
+impl std::io::Write for Output {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        for_output!(self, inner => inner.write(buf))
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        for_output!(self, inner => inner.write_all(buf))
+    }
+
+    fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        for_output!(self, inner => inner.write_fmt(fmt))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        for_output!(self, inner => inner.flush())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> Result<usize, std::io::Error> {
+        for_output!(self, inner => inner.write_vectored(bufs))
+    }
+}
+
+struct CountingWriter {
+    inner: Output,
+    bytes_written: usize,
+}
+
+impl CountingWriter {
+    fn new(inner: Output) -> Self {
+        Self {
+            inner,
+            bytes_written: 0,
+        }
+    }
+
+    fn bytes_written(&self) -> usize {
+        self.bytes_written
+    }
+
+    fn get_ref(&self) -> &Output {
+        &self.inner
+    }
+}
+
+impl std::io::Write for CountingWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.bytes_written += n;
+        Ok(n)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(buf)?;
+        self.bytes_written += buf.len();
+        Ok(())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        let n = self.inner.write_vectored(bufs)?;
+        self.bytes_written += n;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn open_output_file(target: &Path, ext: Option<&str>) -> Result<CountingWriter> {
+    if target == Path::new("-") {
+        // Use stdout
+        Ok(CountingWriter::new(Output::Stdout(std::io::stdout())))
+    } else {
+        let path = if let Some(extension) = ext {
+            target.with_extension(extension)
+        } else {
+            target.to_path_buf()
+        };
+        Ok(CountingWriter::new(Output::File(std::fs::File::create(
+            &path,
+        )?)))
+    }
+}
+
+fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
+    let mut outfile = open_output_file(archive_target, None).map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",
             archive_target.display(),
@@ -581,12 +709,12 @@ fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
         )
     })?;
 
-    let writer = std::io::BufWriter::new(outfile);
+    let writer = std::io::BufWriter::new(&mut outfile);
     let archive = Builder::new(writer);
 
     write_archive(archive, input_dir)?;
 
-    Ok(())
+    Ok(outfile.bytes_written())
 }
 
 async fn download_pixi_unpack_executable(
@@ -667,7 +795,7 @@ async fn create_self_extracting_executable(
     target: &Path,
     pixi_pack_source: Option<UrlOrPath>,
     platform: Platform,
-) -> Result<()> {
+) -> Result<usize> {
     let line_ending = if platform.is_windows() {
         b"\r\n".to_vec()
     } else {
@@ -675,9 +803,11 @@ async fn create_self_extracting_executable(
     };
 
     // Set target executable path
-    let executable_path = target.with_extension(if platform.is_windows() { "ps1" } else { "sh" });
-    let mut final_executable = std::fs::File::create(&executable_path)
-        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+    let mut final_executable = open_output_file(
+        target,
+        Some(if platform.is_windows() { "ps1" } else { "sh" }),
+    )
+    .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
 
     // Write header
     let windows_header = include_str!("header.ps1");
@@ -691,8 +821,10 @@ async fn create_self_extracting_executable(
     final_executable.write_all(&line_ending)?; // Add a newline after the header
 
     // Write archive containing environment
-    let writer =
-        base64::write::EncoderWriter::new(std::io::BufWriter::new(&final_executable), &STANDARD);
+    let writer = base64::write::EncoderWriter::new(
+        std::io::BufWriter::new(&mut final_executable),
+        &STANDARD,
+    );
     let archive = Builder::new(writer);
     write_archive(archive, input_dir)?;
     final_executable.write_all(&line_ending)?;
@@ -714,13 +846,15 @@ async fn create_self_extracting_executable(
     // Make the script executable
     // This won't be executed when cross-packing due to Windows FS not supporting Unix permissions
     #[cfg(not(target_os = "windows"))]
-    if !platform.is_windows() {
-        let mut perms = final_executable.metadata()?.permissions();
+    if !platform.is_windows()
+        && let Output::File(file_handle) = final_executable.get_ref()
+    {
+        let mut perms = file_handle.metadata()?.permissions();
         perms.set_mode(0o755);
-        final_executable.set_permissions(perms)?;
+        file_handle.set_permissions(perms)?;
     }
 
-    Ok(())
+    Ok(final_executable.bytes_written())
 }
 
 /// Create an `environment.yml` file from the given packages.
