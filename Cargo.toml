@@ -35,23 +35,23 @@ clap_complete = "4.6.0"
 clap-verbosity-flag = { version = "3.0.4", features = ["tracing"] }
 futures = "0.3.32"
 indicatif = "0.18.4"
-rattler = { version = "0.39.5", default-features = false }
-rattler_config = "0.2.21"
-rattler_digest = { version = "1.2.0", features = ["tokio"] }
-rattler_conda_types = "0.42.2"
-rattler_index = "0.27.6"
-rattler_lock = "0.26.7"
-rattler_networking = { version = "0.25.27", default-features = false, features = [
+rattler = { version = "0.40.3", default-features = false }
+rattler_config = "0.3.6"
+rattler_digest = { version = "1.2.3", features = ["tokio"] }
+rattler_conda_types = "0.44.3"
+rattler_index = "0.27.20"
+rattler_lock = "0.27.4"
+rattler_networking = { version = "0.26.6", default-features = false, features = [
   "s3",
   "rattler_config",
 ] }
-rattler_package_streaming = { version = "0.23.19", default-features = false }
-rattler_shell = "0.25.13"
+rattler_package_streaming = { version = "0.24.6", default-features = false }
+rattler_shell = "0.26.6"
 reqwest = { version = "0.12.28", default-features = false, features = [
   "http2",
   "macos-system-configuration",
 ] }
-reqwest-middleware = "0.5.1"
+reqwest-middleware = "0.4.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
@@ -70,19 +70,17 @@ base64 = "0.22.1"
 indexmap = "2.13.0"
 ahash = "0.8.12"
 uv-build-frontend = "0.0.6"
-uv-cache = "0.0.11"
-uv-cache-info = "0.0.11"
+uv-cache = "0.0.6"
 uv-client = "0.0.6"
 uv-configuration = "0.0.6"
 uv-dispatch = "0.0.6"
 uv-distribution = "0.0.6"
-uv-distribution-filename = "0.0.11"
-uv-distribution-types = "0.0.11"
+uv-distribution-filename = "0.0.6"
+uv-distribution-types = "0.0.6"
 uv-git = "0.0.6"
-uv-install-wheel = "0.0.11"
 uv-installer = "0.0.6"
-uv-pep508 = "0.0.11"
-uv-preview = "0.0.11"
+uv-pep508 = "0.0.6"
+uv-preview = "0.0.6"
 uv-python = "0.0.6"
 uv-types = "0.0.6"
 uv-workspace = "0.0.6"

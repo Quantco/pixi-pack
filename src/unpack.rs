@@ -15,7 +15,9 @@ use rattler::{
     install::{Installer, PythonInfo},
     package_cache::{CacheKey, PackageCache},
 };
-use rattler_conda_types::{PackageRecord, Platform, RepoData, RepoDataRecord};
+use rattler_conda_types::{
+    PackageRecord, Platform, RepoData, RepoDataRecord, package::DistArchiveIdentifier,
+};
 use rattler_package_streaming::fs::extract;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
@@ -138,9 +140,11 @@ async fn collect_packages_in_subdir(
     })?;
 
     let mut conda_packages = repodata.conda_packages;
-    let packages = repodata.packages;
-    conda_packages.extend(packages);
-    Ok(conda_packages)
+    conda_packages.extend(repodata.packages);
+    Ok(conda_packages
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect())
 }
 
 async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
@@ -256,7 +260,9 @@ async fn create_prefix(
 
             let repodata_record = RepoDataRecord {
                 package_record,
-                file_name,
+                identifier: file_name
+                    .parse::<DistArchiveIdentifier>()
+                    .expect("package filename should be a valid archive identifier"),
                 url,
                 channel: None,
             };

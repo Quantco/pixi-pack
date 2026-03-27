@@ -20,7 +20,10 @@ use tokio::{
 use anyhow::Result;
 use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
-use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
+use rattler_conda_types::{
+    ChannelInfo, PackageRecord, Platform, RepoData,
+    package::{CondaArchiveType, DistArchiveIdentifier},
+};
 use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
@@ -175,15 +178,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
     for package in conda_packages_from_lockfile {
-        let filename = package.file_name;
+        let filename = package.file_name.to_string();
         conda_packages.push((filename, package.package_record));
     }
 
-    let injected_packages: Vec<(PathBuf, ArchiveType)> = options
+    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = options
         .injected_packages
         .iter()
         .filter_map(|e| {
-            ArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
+            CondaArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
         })
         .collect();
@@ -192,8 +195,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     for (path, archive_type) in injected_packages.iter() {
         // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
-            ArchiveType::TarBz2 => package_record_from_tar_bz2(path),
-            ArchiveType::Conda => package_record_from_conda(path),
+            CondaArchiveType::TarBz2 => package_record_from_tar_bz2(path),
+            CondaArchiveType::Conda => package_record_from_conda(path),
         }?;
 
         // step 2: Copy file into channel dir
@@ -403,7 +406,6 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
             for v in value {
                 mirrors.push(Mirror {
                     url: ensure_trailing_slash(v),
-                    no_jlap: false,
                     no_bz2: false,
                     no_zstd: false,
                     max_failures: None,
@@ -456,14 +458,14 @@ async fn download_package(
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    let file_name = &package.file_name;
-    let output_path = output_dir.join(file_name);
+    let file_name = package.file_name.to_string();
+    let output_path = output_dir.join(&file_name);
 
     // Check cache first if enabled
     if let Some(cache_dir) = cache_dir {
         let cache_path = cache_dir
             .join(&package.package_record.subdir)
-            .join(file_name);
+            .join(&file_name);
         if cache_path.exists() {
             tracing::debug!("Using cached package from {}", cache_path.display());
             fs::copy(&cache_path, &output_path).await?;
@@ -511,7 +513,7 @@ async fn download_package(
     if let Some(cache_dir) = cache_dir {
         let cache_subdir = cache_dir.join(&package.package_record.subdir);
         create_dir_all(&cache_subdir).await?;
-        let cache_path = cache_subdir.join(file_name);
+        let cache_path = cache_subdir.join(&file_name);
         fs::copy(&output_path, &cache_path).await?;
     }
 
@@ -794,7 +796,12 @@ async fn create_repodata_files(
 
         let conda_packages = packages
             .into_iter()
-            .map(|(filename, p)| (filename.to_string(), p.clone()))
+            .map(|(filename, p)| {
+                let id = filename
+                    .parse::<DistArchiveIdentifier>()
+                    .expect("package filename should be a valid archive identifier");
+                (id, p.clone())
+            })
             .collect();
 
         let repodata = RepoData {
@@ -804,6 +811,7 @@ async fn create_repodata_files(
             }),
             packages: Default::default(),
             conda_packages,
+            experimental_v3: Default::default(),
             removed: Default::default(),
             version: Some(2),
         };

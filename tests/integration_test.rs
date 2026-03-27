@@ -12,6 +12,7 @@ use pixi_pack::{
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_lock::UrlOrPath;
 use rattler_shell::shell::{Bash, ShellEnum};
 use rstest::*;
@@ -259,7 +260,11 @@ async fn test_includes_repodata_patches(
     assert!(
         repodata
             .conda_packages
-            .get("python-3.12.3-h2628c8c_0_cpython.conda")
+            .get(
+                &"python-3.12.3-h2628c8c_0_cpython.conda"
+                    .parse::<DistArchiveIdentifier>()
+                    .expect("valid archive identifier"),
+            )
             .expect("python not found in repodata")
             .depends
             .contains(&"libzlib >=1.2.13,<2.0.0a0".to_string()),
