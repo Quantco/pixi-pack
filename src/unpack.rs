@@ -253,9 +253,7 @@ async fn create_prefix(
         .map(|(file_name, package_record)| {
             let cache_key = CacheKey::from(&package_record);
 
-            let package_path = channel_dir
-                .join(&package_record.subdir)
-                .join(&file_name);
+            let package_path = channel_dir.join(&package_record.subdir).join(&file_name);
             let normalized_path = package_path.canonicalize().unwrap();
 
             let url = Url::from_file_path(&normalized_path)
