@@ -15,7 +15,7 @@ use pixi_pack::{
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
 use rattler_lock::UrlOrPath;
-use rattler_shell::shell::{Bash, ShellEnum};
+use rattler_shell::shell::{Bash, Shell, ShellEnum};
 use rstest::*;
 use serial_test::serial;
 use tempfile::{TempDir, tempdir};
@@ -159,10 +159,11 @@ async fn test_simple_python(
     };
 
     let env_dir = unpack_options.output_directory.join("env");
-    #[cfg(target_os = "windows")]
-    let activate_file = unpack_options.output_directory.join("activate.bat");
-    #[cfg(not(target_os = "windows"))]
-    let activate_file = unpack_options.output_directory.join("activate.sh");
+    let default_shell = ShellEnum::default();
+    let shell_ref = unpack_options.shell.as_ref().unwrap_or(&default_shell);
+    let activate_file = unpack_options
+        .output_directory
+        .join(format!("activate.{}", shell_ref.extension()));
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
@@ -262,10 +263,11 @@ async fn test_inject(
     assert!(pack_file.is_file());
 
     let env_dir = unpack_options.output_directory.join("env");
-    #[cfg(target_os = "windows")]
-    let activate_file = unpack_options.output_directory.join("activate.bat");
-    #[cfg(not(target_os = "windows"))]
-    let activate_file = unpack_options.output_directory.join("activate.sh");
+    let default_shell = ShellEnum::default();
+    let shell_ref = unpack_options.shell.as_ref().unwrap_or(&default_shell);
+    let activate_file = unpack_options
+        .output_directory
+        .join(format!("activate.{}", shell_ref.extension()));
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{:?}", unpack_result);
     assert!(activate_file.is_file());
