@@ -22,7 +22,7 @@ use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
 use rattler_conda_types::{
     ChannelInfo, PackageRecord, Platform, RepoData,
-    package::{CondaArchiveType, DistArchiveIdentifier},
+    package::{ArchiveIdentifier, ArchiveType},
 };
 use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
@@ -192,18 +192,18 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         .map_err(|e: anyhow::Error| anyhow!("could not download package: {}", e))?;
     bar.pb.finish_and_clear();
 
-    let mut conda_packages: Vec<(DistArchiveIdentifier, PackageRecord)> = Vec::new();
+    let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
     for package in conda_packages_from_lockfile {
         let filename = package.file_name;
         conda_packages.push((filename, package.package_record));
     }
 
-    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = options
+    let injected_packages: Vec<(PathBuf, ArchiveType)> = options
         .injected_packages
         .iter()
         .filter_map(|e| {
-            CondaArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
+            ArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
         })
         .collect();
@@ -212,8 +212,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     for (path, archive_type) in injected_packages.iter() {
         // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
-            CondaArchiveType::TarBz2 => package_record_from_tar_bz2(path),
-            CondaArchiveType::Conda => package_record_from_conda(path),
+            ArchiveType::TarBz2 => package_record_from_tar_bz2(path),
+            ArchiveType::Conda => package_record_from_conda(path),
         }?;
 
         // step 2: Copy file into channel dir
@@ -224,14 +224,14 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .to_str()
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
-        let package_identifier = DistArchiveIdentifier::try_from_filename(&filename)
+        ArchiveIdentifier::try_from_filename(&filename)
             .ok_or(anyhow!("could not parse package filename: {}", filename))?;
 
         fs::copy(&path, channel_dir.join(subdir).join(&filename))
             .await
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
 
-        conda_packages.push((package_identifier, package_record));
+        conda_packages.push((filename, package_record));
     }
 
     // In case we injected packages, we need to validate that these packages are solvable with the
@@ -912,7 +912,7 @@ async fn create_environment_file(
 
 /// Create `repodata.json` files for the given packages.
 async fn create_repodata_files(
-    packages: impl Iterator<Item = &(DistArchiveIdentifier, PackageRecord)>,
+    packages: impl Iterator<Item = &(String, PackageRecord)>,
     channel_dir: &Path,
 ) -> Result<()> {
     let mut packages_per_subdir = HashMap::new();
@@ -941,7 +941,6 @@ async fn create_repodata_files(
             }),
             packages: Default::default(),
             conda_packages,
-            experimental_whl_packages: Default::default(),
             removed: Default::default(),
             version: Some(2),
         };
