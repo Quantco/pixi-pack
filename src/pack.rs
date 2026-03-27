@@ -20,8 +20,6 @@ use tokio::{
 use anyhow::Result;
 use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
-use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
-use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
 use rattler_conda_types::{
     ChannelInfo, PackageRecord, Platform, RepoData,
     package::{CondaArchiveType, DistArchiveIdentifier},
