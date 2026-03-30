@@ -21,7 +21,11 @@ use tokio::{
 use anyhow::Result;
 use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
-use rattler_conda_types::{ChannelInfo, PackageRecord, Platform, RepoData, package::ArchiveType};
+use rattler_conda_types::{
+    ChannelInfo, PackageRecord, Platform, RepoData,
+    package::{CondaArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier},
+};
+use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
     CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
 };
@@ -40,11 +44,18 @@ use walkdir::WalkDir;
 
 use crate::{
     CHANNEL_DIRECTORY_NAME, Config, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
-    ProgressReporter, get_size,
+    ProgressReporter,
 };
 use anyhow::anyhow;
 
 static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OutputMode {
+    Archive,
+    CreateExecutable,
+    DirectoryOnly,
+}
 
 /// Options for packing a pixi environment.
 #[derive(Debug, Clone)]
@@ -58,7 +69,7 @@ pub struct PackOptions {
     pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
-    pub create_executable: bool,
+    pub output_mode: OutputMode,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
 }
@@ -183,11 +194,21 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         ))?
         .collect();
 
-    let output_folder =
-        tempfile::tempdir().map_err(|e| anyhow!("could not create temporary directory: {}", e))?;
+    let temp_dir = if options.output_mode != OutputMode::DirectoryOnly {
+        Some(
+            tempfile::tempdir()
+                .map_err(|e| anyhow!("could not create temporary directory: {}", e))?,
+        )
+    } else {
+        None
+    };
+    let output_folder = temp_dir
+        .as_ref()
+        .map(|td| td.path())
+        .unwrap_or(&options.output_file);
 
-    let channel_dir = output_folder.path().join(CHANNEL_DIRECTORY_NAME);
-    let pypi_directory = output_folder.path().join(PYPI_DIRECTORY_NAME);
+    let channel_dir = output_folder.join(CHANNEL_DIRECTORY_NAME);
+    let pypi_directory = output_folder.join(PYPI_DIRECTORY_NAME);
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
     let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
@@ -302,15 +323,16 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     let mut conda_packages: Vec<(String, PackageRecord)> = Vec::new();
 
     for package in conda_packages_from_lockfile {
-        let filename = package.file_name;
+        let filename = package.file_name.to_string();
         conda_packages.push((filename, package.package_record));
     }
 
-    let injected_packages: Vec<(PathBuf, ArchiveType)> = built_source_packages
+    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = options
+        .injected_packages
         .iter()
         .chain(options.injected_packages.iter())
         .filter_map(|e| {
-            ArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
+            CondaArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
         })
         .collect();
@@ -319,8 +341,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     for (path, archive_type) in injected_packages.iter() {
         // step 1: Derive PackageRecord from index.json inside the package
         let package_record = match archive_type {
-            ArchiveType::TarBz2 => package_record_from_tar_bz2(path),
-            ArchiveType::Conda => package_record_from_conda(path),
+            CondaArchiveType::TarBz2 => package_record_from_tar_bz2(path),
+            CondaArchiveType::Conda => package_record_from_conda(path),
         }?;
 
         // step 2: Copy file into channel dir
@@ -331,6 +353,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .to_str()
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
+        CondaArchiveIdentifier::try_from_filename(&filename)
+            .ok_or(anyhow!("could not parse package filename: {}", filename))?;
 
         fs::copy(&path, channel_dir.join(subdir).join(&filename))
             .await
@@ -365,6 +389,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     package,
                     &pypi_directory,
                     options.cache_dir.as_deref(),
+                    &options.manifest_path,
                 )
                 .await?;
                 bar.pb.inc(1);
@@ -435,42 +460,53 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
-    let metadata_path = output_folder.path().join(PIXI_PACK_METADATA_PATH);
+    let metadata_path = output_folder.join(PIXI_PACK_METADATA_PATH);
     let metadata = serde_json::to_string_pretty(&options.metadata)?;
     fs::write(metadata_path, metadata.as_bytes()).await?;
 
     // Create environment file.
     tracing::info!("Creating environment.yml file");
     create_environment_file(
-        output_folder.path(),
+        output_folder,
         conda_packages.iter().map(|(_, p)| p),
         &pypi_packages_from_lockfile,
     )
     .await?;
 
     // Pack = archive the contents.
-    tracing::info!("Creating pack at {}", options.output_file.display());
-    archive_directory(
-        output_folder.path(),
-        &options.output_file,
-        options.create_executable,
-        options.pixi_unpack_source,
-        options.platform,
-    )
-    .await
-    .map_err(|e| anyhow!("could not archive directory: {}", e))?;
+    if options.output_mode != OutputMode::DirectoryOnly {
+        tracing::info!("Creating pack at {}", options.output_file.display());
+        let bytes_written = archive_directory(
+            output_folder,
+            &options.output_file,
+            options.output_mode == OutputMode::CreateExecutable,
+            options.pixi_unpack_source,
+            options.platform,
+        )
+        .await
+        .map_err(|e| anyhow!("could not archive directory: {}", e))?;
 
-    let output_size = HumanBytes(get_size(&options.output_file)?).to_string();
-    tracing::info!(
-        "Created pack at {} with size {}.",
-        options.output_file.display(),
-        output_size
-    );
-    eprintln!(
-        "📦 Created pack at {} with size {}.",
-        options.output_file.display(),
-        output_size
-    );
+        let output_size = HumanBytes(bytes_written as u64).to_string();
+        tracing::info!(
+            "Created pack at {} with size {}.",
+            options.output_file.display(),
+            output_size
+        );
+        eprintln!(
+            "📦 Created pack at {} with size {}.",
+            options.output_file.display(),
+            output_size
+        );
+    } else {
+        tracing::info!(
+            "Created pack directory at {}.",
+            options.output_file.display(),
+        );
+        eprintln!(
+            "📦 Created pack directory at {}.",
+            options.output_file.display(),
+        );
+    }
 
     Ok(())
 }
@@ -530,7 +566,6 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
             for v in value {
                 mirrors.push(Mirror {
                     url: ensure_trailing_slash(v),
-                    no_jlap: false,
                     no_bz2: false,
                     no_zstd: false,
                     max_failures: None,
@@ -561,6 +596,16 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     Ok(client)
 }
 
+async fn write_all_chunk<W>(response: &mut reqwest::Response, dest: &mut W) -> anyhow::Result<()>
+where
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    while let Some(chunk) = response.chunk().await? {
+        dest.write_all(&chunk).await?;
+    }
+    Ok(())
+}
+
 /// Download a conda package to a given output directory.
 async fn download_package(
     client: &ClientWithMiddleware,
@@ -573,14 +618,14 @@ async fn download_package(
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    let file_name = &package.file_name;
-    let output_path = output_dir.join(file_name);
+    let file_name = package.file_name.to_string();
+    let output_path = output_dir.join(&file_name);
 
     // Check cache first if enabled
     if let Some(cache_dir) = cache_dir {
         let cache_path = cache_dir
             .join(&package.package_record.subdir)
-            .join(file_name);
+            .join(&file_name);
         if cache_path.exists() {
             tracing::debug!("Using cached package from {}", cache_path.display());
             fs::copy(&cache_path, &output_path).await?;
@@ -603,8 +648,23 @@ async fn download_package(
 
             tracing::debug!("Fetching package {}", package.location);
             let mut response = client.get(url.clone()).send().await?.error_for_status()?;
-            while let Some(chunk) = response.chunk().await? {
-                dest.write_all(&chunk).await?;
+
+            if let Some(expected_sha) = package.package_record.sha256 {
+                let mut dest = HashingWriter::<_, Sha256>::new(dest);
+                write_all_chunk(&mut response, &mut dest).await?;
+                let (_f, hash) = dest.finalize();
+                if hash != expected_sha {
+                    anyhow::bail!("Download {file_name} failed, checksum mismatch");
+                }
+            } else if let Some(expected_md5) = package.package_record.md5 {
+                let mut dest = HashingWriter::<_, Md5>::new(dest);
+                write_all_chunk(&mut response, &mut dest).await?;
+                let (_f, hash) = dest.finalize();
+                if hash != expected_md5 {
+                    anyhow::bail!("Download {file_name} failed, checksum mismatch");
+                }
+            } else {
+                write_all_chunk(&mut response, &mut dest).await?;
             }
         }
     }
@@ -613,7 +673,7 @@ async fn download_package(
     if let Some(cache_dir) = cache_dir {
         let cache_subdir = cache_dir.join(&package.package_record.subdir);
         create_dir_all(&cache_subdir).await?;
-        let cache_path = cache_subdir.join(file_name);
+        let cache_path = cache_subdir.join(&file_name);
         fs::copy(&output_path, &cache_path).await?;
     }
 
@@ -625,7 +685,7 @@ async fn archive_directory(
     create_executable: bool,
     pixi_unpack_source: Option<UrlOrPath>,
     platform: Platform,
-) -> Result<()> {
+) -> Result<usize> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
         create_self_extracting_executable(input_dir, archive_target, pixi_unpack_source, platform)
@@ -672,8 +732,106 @@ where
     Ok(())
 }
 
-fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
-    let outfile = std::fs::File::create(archive_target).map_err(|e| {
+enum Output {
+    Stdout(std::io::Stdout),
+    File(std::fs::File),
+}
+
+macro_rules! for_output {
+    ($value:expr, $pattern:pat => $result:expr) => {
+        match $value {
+            Output::Stdout($pattern) => $result,
+            Output::File($pattern) => $result,
+        }
+    };
+}
+
+impl std::io::Write for Output {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        for_output!(self, inner => inner.write(buf))
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        for_output!(self, inner => inner.write_all(buf))
+    }
+
+    fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        for_output!(self, inner => inner.write_fmt(fmt))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        for_output!(self, inner => inner.flush())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> Result<usize, std::io::Error> {
+        for_output!(self, inner => inner.write_vectored(bufs))
+    }
+}
+
+struct CountingWriter {
+    inner: Output,
+    bytes_written: usize,
+}
+
+impl CountingWriter {
+    fn new(inner: Output) -> Self {
+        Self {
+            inner,
+            bytes_written: 0,
+        }
+    }
+
+    fn bytes_written(&self) -> usize {
+        self.bytes_written
+    }
+
+    fn get_ref(&self) -> &Output {
+        &self.inner
+    }
+}
+
+impl std::io::Write for CountingWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.bytes_written += n;
+        Ok(n)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(buf)?;
+        self.bytes_written += buf.len();
+        Ok(())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        let n = self.inner.write_vectored(bufs)?;
+        self.bytes_written += n;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn open_output_file(target: &Path, ext: Option<&str>) -> Result<CountingWriter> {
+    if target == Path::new("-") {
+        // Use stdout
+        Ok(CountingWriter::new(Output::Stdout(std::io::stdout())))
+    } else {
+        let path = if let Some(extension) = ext {
+            target.with_extension(extension)
+        } else {
+            target.to_path_buf()
+        };
+        Ok(CountingWriter::new(Output::File(std::fs::File::create(
+            &path,
+        )?)))
+    }
+}
+
+fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
+    let mut outfile = open_output_file(archive_target, None).map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",
             archive_target.display(),
@@ -681,12 +839,12 @@ fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<()> {
         )
     })?;
 
-    let writer = std::io::BufWriter::new(outfile);
+    let writer = std::io::BufWriter::new(&mut outfile);
     let archive = Builder::new(writer);
 
     write_archive(archive, input_dir)?;
 
-    Ok(())
+    Ok(outfile.bytes_written())
 }
 
 async fn download_pixi_unpack_executable(
@@ -767,7 +925,7 @@ async fn create_self_extracting_executable(
     target: &Path,
     pixi_pack_source: Option<UrlOrPath>,
     platform: Platform,
-) -> Result<()> {
+) -> Result<usize> {
     let line_ending = if platform.is_windows() {
         b"\r\n".to_vec()
     } else {
@@ -775,9 +933,11 @@ async fn create_self_extracting_executable(
     };
 
     // Set target executable path
-    let executable_path = target.with_extension(if platform.is_windows() { "ps1" } else { "sh" });
-    let mut final_executable = std::fs::File::create(&executable_path)
-        .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
+    let mut final_executable = open_output_file(
+        target,
+        Some(if platform.is_windows() { "ps1" } else { "sh" }),
+    )
+    .map_err(|e| anyhow!("could not create final executable file: {}", e))?;
 
     // Write header
     let windows_header = include_str!("header.ps1");
@@ -791,8 +951,10 @@ async fn create_self_extracting_executable(
     final_executable.write_all(&line_ending)?; // Add a newline after the header
 
     // Write archive containing environment
-    let writer =
-        base64::write::EncoderWriter::new(std::io::BufWriter::new(&final_executable), &STANDARD);
+    let writer = base64::write::EncoderWriter::new(
+        std::io::BufWriter::new(&mut final_executable),
+        &STANDARD,
+    );
     let archive = Builder::new(writer);
     write_archive(archive, input_dir)?;
     final_executable.write_all(&line_ending)?;
@@ -814,13 +976,15 @@ async fn create_self_extracting_executable(
     // Make the script executable
     // This won't be executed when cross-packing due to Windows FS not supporting Unix permissions
     #[cfg(not(target_os = "windows"))]
-    if !platform.is_windows() {
-        let mut perms = final_executable.metadata()?.permissions();
+    if !platform.is_windows()
+        && let Output::File(file_handle) = final_executable.get_ref()
+    {
+        let mut perms = file_handle.metadata()?.permissions();
         perms.set_mode(0o755);
-        final_executable.set_permissions(perms)?;
+        file_handle.set_permissions(perms)?;
     }
 
-    Ok(())
+    Ok(final_executable.bytes_written())
 }
 
 /// Create an `environment.yml` file from the given packages.
@@ -896,7 +1060,12 @@ async fn create_repodata_files(
 
         let conda_packages = packages
             .into_iter()
-            .map(|(filename, p)| (filename.to_string(), p.clone()))
+            .map(|(filename, p)| {
+                let id = filename
+                    .parse::<DistArchiveIdentifier>()
+                    .expect("package filename should be a valid archive identifier");
+                (id, p.clone())
+            })
             .collect();
 
         let repodata = RepoData {
@@ -906,6 +1075,7 @@ async fn create_repodata_files(
             }),
             packages: Default::default(),
             conda_packages,
+            experimental_v3: Default::default(),
             removed: Default::default(),
             version: Some(2),
         };
@@ -926,48 +1096,70 @@ async fn download_pypi_package(
     package: &PypiPackageData,
     output_dir: &Path,
     cache_dir: Option<&Path>,
+    manifest_path: &Path,
 ) -> Result<()> {
     create_dir_all(output_dir)
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    let url = match &package.location {
-        UrlOrPath::Url(url) => url
-            .as_ref()
-            .strip_prefix("direct+")
-            .and_then(|str| Url::parse(str).ok())
-            .unwrap_or(url.clone()),
-        UrlOrPath::Path(path) => anyhow::bail!("Path not supported: {}", path),
-    };
+    match &package.location {
+        UrlOrPath::Path(path) => {
+            let file_name = path
+                .file_name()
+                .ok_or_else(|| anyhow!("Path does not contain file name: {}", path))?
+                .to_string();
+            let lockfile_dir = if !manifest_path.is_dir() {
+                manifest_path
+                    .parent()
+                    .ok_or(anyhow!("could not get parent directory"))?
+            } else {
+                manifest_path
+            };
 
-    // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
-    // Because it may be percent-encoded
-    let file_name = url.filename()?.to_string();
-    let output_path = output_dir.join(&file_name);
-
-    if let Some(cache_dir) = cache_dir {
-        let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
-        if cache_path.exists() {
-            tracing::debug!("Using cached package from {}", cache_path.display());
-            fs::copy(&cache_path, &output_path).await?;
-            return Ok(());
+            let source_path = lockfile_dir.join(path.to_string());
+            let output_path = output_dir.join(file_name);
+            tracing::debug!("Copy from {}", path);
+            fs::copy(source_path, output_path)
+                .map_err(|e| anyhow!("could not copy local wheel file: {}", e))
+                .await?;
         }
-    }
+        UrlOrPath::Url(url) => {
+            let url = url
+                .as_ref()
+                .strip_prefix("direct+")
+                .and_then(|str| Url::parse(str).ok())
+                .unwrap_or(url.clone());
 
-    let mut dest = File::create(&output_path).await?;
-    tracing::debug!("Fetching package {}", url);
+            // Use `RemoteSource::filename()` from `uv_distribution_types` to decode filename
+            // Because it may be percent-encoded
+            let file_name = url.filename()?.to_string();
+            let output_path = output_dir.join(&file_name);
 
-    let mut response = client.get(url.clone()).send().await?.error_for_status()?;
+            if let Some(cache_dir) = cache_dir {
+                let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
+                if cache_path.exists() {
+                    tracing::debug!("Using cached package from {}", cache_path.display());
+                    fs::copy(&cache_path, &output_path).await?;
+                    return Ok(());
+                }
+            }
 
-    while let Some(chunk) = response.chunk().await? {
-        dest.write_all(&chunk).await?;
-    }
+            let mut dest = File::create(&output_path).await?;
+            tracing::debug!("Fetching package {}", url);
 
-    if let Some(cache_dir) = cache_dir {
-        let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
-        create_dir_all(&cache_subdir).await?;
-        let cache_path = cache_subdir.join(&file_name);
-        fs::copy(&output_path, &cache_path).await?;
+            let mut response = client.get(url.clone()).send().await?.error_for_status()?;
+
+            while let Some(chunk) = response.chunk().await? {
+                dest.write_all(&chunk).await?;
+            }
+
+            if let Some(cache_dir) = cache_dir {
+                let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
+                create_dir_all(&cache_subdir).await?;
+                let cache_path = cache_subdir.join(&file_name);
+                fs::copy(&output_path, &cache_path).await?;
+            }
+        }
     }
 
     Ok(())

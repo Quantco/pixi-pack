@@ -15,8 +15,8 @@ jobs:
       version: ${{ steps.version-metadata.outputs.newVersion }}
     steps:
       - name: Checkout source code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: Quantco/ui-actions/version-metadata@cd71d2a0e30b25569f6d723e57acca83347e58fc # v1.0.18
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: Quantco/ui-actions/version-metadata@adeb1cf49655487534b4ddaab09c3b7bdfd1d628 # v1.0.19
         id: version-metadata
         with:
           file: ./Cargo.toml
@@ -54,9 +54,9 @@ jobs:
             os: macos-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -67,7 +67,7 @@ jobs:
           sudo apt-get install -y musl-tools
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: build-${{ matrix.target }}-${{ matrix.os }}
 
@@ -78,7 +78,7 @@ jobs:
           mv target/${{ matrix.target }}/release/pixi-unpack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         if: needs.metadata.outputs.release == 'true'
         with:
           subject-path: |
@@ -86,83 +86,41 @@ jobs:
             pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pixi-pack-${{ matrix.target }}
           path: pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pixi-unpack-${{ matrix.target }}
           path: pixi-unpack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
-  hashes:
-    name: Compute hashes
+  release:
+    name: Create Release
     needs: [metadata, build]
     if: needs.metadata.outputs.release == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      hashes: ${{ steps.hash.outputs.hashes }}
-    steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - name: Download artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
-        with:
-          pattern: pixi-*
-          merge-multiple: true
-      - name: Compute hashes
-        id: hash
-        run: |
-          set -exuo pipefail
-          files=$(ls pixi-*)
-          echo "hashes=$(sha256sum $files | base64 -w0)" >> "${GITHUB_OUTPUT}"
-
-  provenance:
-    needs: [metadata, hashes]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-    if: needs.metadata.outputs.release == 'true'
-    # This cannot be pinned: https://github.com/slsa-framework/slsa-github-generator?tab=readme-ov-file#referencing-slsa-builders-and-generators
-    # https://github.com/slsa-framework/slsa-verifier/issues/12
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: "${{ needs.hashes.outputs.hashes }}"
-      upload-assets: false
-
-  release:
-    name: Create Release
-    needs: [metadata, build, provenance]
-    if: needs.metadata.outputs.release == 'true'
-    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: pixi-*
-          merge-multiple: true
-      - name: Download provenance
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
-        with:
-          name: ${{ needs.provenance.outputs.provenance-name }}
           merge-multiple: true
       - name: Push v${{ needs.metadata.outputs.version }} tag
         run: |
           git tag v${{ needs.metadata.outputs.version }}
           git push origin v${{ needs.metadata.outputs.version }}
       - name: Create Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           generate_release_notes: true
           tag_name: v${{ needs.metadata.outputs.version }}
           draft: true
-          files: |
-            ${{ needs.provenance.outputs.provenance-name }}
-            pixi-*
+          files: pixi-*
