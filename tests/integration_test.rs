@@ -931,6 +931,13 @@ async fn test_local_channel(
 #[rstest]
 #[tokio::test]
 async fn test_local_build_package(options: Options) {
+    if cfg!(windows) {
+        // pixi-build hits Windows PATH length limits in GitHub Actions CI
+        // (vcvars64.bat fails with "input line too long" on deeply nested paths).
+        // This could be fixed upstream by moving the build folder to a short stable path.
+        return;
+    }
+
     let mut pack_options = options.pack_options;
     pack_options.manifest_path = PathBuf::from("examples/local-build/pixi.toml");
 
@@ -954,7 +961,6 @@ async fn test_local_build_package(options: Options) {
             env_dir.join("conda-meta/local-build-local-pkg-0.1.0-h60d57d3_0.json")
         }
         Platform::Osx64 => env_dir.join("conda-meta/local-build-local-pkg-0.1.0-h0dc7051_0.json"),
-        Platform::Win64 => env_dir.join("conda-meta/local-build-local-pkg-0.1.0-h2433df5_0.json"),
         _ => panic!("Unsupported platform"),
     };
 
@@ -965,7 +971,6 @@ async fn test_local_build_package(options: Options) {
         }
         Platform::OsxArm64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-h60d57d3_0.json"),
         Platform::Osx64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-h0dc7051_0.json"),
-        Platform::Win64 => env_dir.join("conda-meta/local-build-main-pkg-0.1.0-h2433df5_0.json"),
         _ => panic!("Unsupported platform"),
     };
     let curl_json = match Platform::current() {
@@ -973,7 +978,6 @@ async fn test_local_build_package(options: Options) {
         Platform::LinuxAarch64 => env_dir.join("conda-meta/curl-8.17.0-h7bfdcfb_1.json"),
         Platform::OsxArm64 => env_dir.join("conda-meta/curl-8.17.0-hdece5d2_1.json"),
         Platform::Osx64 => env_dir.join("conda-meta/curl-8.17.0-h7dd4100_1.json"),
-        Platform::Win64 => env_dir.join("conda-meta/curl-8.17.0-h43ecb02_1.json"),
         _ => panic!("Unsupported platform"),
     };
     assert!(main_pkg_json.exists(), "main-pkg not found in conda-meta");

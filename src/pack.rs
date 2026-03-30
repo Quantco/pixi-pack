@@ -327,8 +327,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         conda_packages.push((filename, package.package_record));
     }
 
-    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = options
-        .injected_packages
+    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = built_source_packages
         .iter()
         .chain(options.injected_packages.iter())
         .filter_map(|e| {
