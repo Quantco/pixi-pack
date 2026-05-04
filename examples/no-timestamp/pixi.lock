@@ -1,21 +1,16 @@
-version: 5
+version: 6
 environments:
   default:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
+    options:
+      pypi-prerelease-mode: if-necessary-or-explicit
     packages:
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/mpi-1.0-openmpi.tar.bz2
 packages:
-- kind: conda
-  name: mpi
-  version: '1.0'
-  build: openmpi
-  subdir: osx-64
-  url: https://conda.anaconda.org/conda-forge/osx-64/mpi-1.0-openmpi.tar.bz2
+- conda: https://conda.anaconda.org/conda-forge/osx-64/mpi-1.0-openmpi.tar.bz2
   sha256: 1326b28195e8808cebc18a593f84c5cbd606826a150dd7e0365f11b86238b5df
   md5: 8c3bc725bf4d10fc6e56031f7543771f
-  arch: x86_64
-  platform: osx
   license: BSD 3-clause
   size: 4394
