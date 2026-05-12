@@ -907,11 +907,7 @@ async fn create_environment_file(
         environment.push_str(&format!("    - --find-links ./{PYPI_DIRECTORY_NAME}\n"));
 
         for p in pypi_packages {
-            environment.push_str(&format!(
-                "    - {}=={}\n",
-                p.name(),
-                p.version_string()
-            ));
+            environment.push_str(&format!("    - {}=={}\n", p.name(), p.version_string()));
         }
     }
 
