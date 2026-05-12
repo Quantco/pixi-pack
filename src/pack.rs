@@ -26,7 +26,8 @@ use rattler_conda_types::{
 };
 use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
-    CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
+    CondaBinaryData, CondaPackageData, LockFile, LockedPackage, PypiDistributionData,
+    PypiPackageData, UrlOrPath,
 };
 use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware,
@@ -116,7 +117,14 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.environment
     ))?;
 
-    let packages = env.packages(options.platform).ok_or(anyhow!(
+    let platform = env
+        .platforms()
+        .find(|p| p.subdir() == options.platform)
+        .ok_or(anyhow!(
+            "platform not found in lockfile: {}",
+            options.platform.as_str()
+        ))?;
+    let packages = env.packages(platform).ok_or(anyhow!(
         "platform not found in lockfile: {}",
         options.platform.as_str()
     ))?;
@@ -142,15 +150,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     for package in packages {
         match package {
-            LockedPackageRef::Conda(CondaPackageData::Binary(binary_data)) => {
-                conda_packages_from_lockfile.push(binary_data.clone())
+            LockedPackage::Conda(CondaPackageData::Binary(binary_data)) => {
+                conda_packages_from_lockfile.push((**binary_data).clone())
             }
-            LockedPackageRef::Conda(CondaPackageData::Source(_)) => {
+            LockedPackage::Conda(CondaPackageData::Source(_)) => {
                 anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
             }
-            LockedPackageRef::Pypi(pypi_data, _) => {
-                let package_name = pypi_data.name.clone();
-                let location = pypi_data.location.clone();
+            LockedPackage::Pypi(pypi_data) => {
+                let package_name = pypi_data.name().clone();
+                let location = pypi_data.location().clone();
                 let is_wheel = location
                     .file_name()
                     .filter(|x| x.ends_with("whl"))
@@ -294,7 +302,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
         let wheel_file_name = WheelFilename::from_str(&filename)?;
-        let pypi_data = PypiPackageData {
+        let pypi_data: PypiPackageData = PypiDistributionData {
             name: wheel_file_name
                 .name
                 .as_str()
@@ -308,11 +316,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             location: path_str
                 .parse()
                 .map_err(|e| anyhow!("could not convert path type: {}", e))?,
+            index_url: None,
             hash: None,
             requires_dist: vec![],
             requires_python: None,
-            editable: false,
-        };
+        }
+        .into();
         create_dir_all(&pypi_directory)
             .await
             .map_err(|e| anyhow!("could not create pypi directory: {}", e))?;
@@ -898,7 +907,11 @@ async fn create_environment_file(
         environment.push_str(&format!("    - --find-links ./{PYPI_DIRECTORY_NAME}\n"));
 
         for p in pypi_packages {
-            environment.push_str(&format!("    - {}=={}\n", p.name, p.version));
+            environment.push_str(&format!(
+                "    - {}=={}\n",
+                p.name(),
+                p.version_string()
+            ));
         }
     }
 
@@ -942,6 +955,8 @@ async fn create_repodata_files(
             info: Some(ChannelInfo {
                 subdir: Some(subdir.clone()),
                 base_url: None,
+                repodata_revisions: Vec::new(),
+                channel_relations: None,
             }),
             packages: Default::default(),
             conda_packages,
@@ -972,7 +987,7 @@ async fn download_pypi_package(
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    match &package.location {
+    match package.location().inner() {
         UrlOrPath::Path(path) => {
             let file_name = path
                 .file_name()

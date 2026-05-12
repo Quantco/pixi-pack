@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{Arc, LazyLock},
+    sync::Arc,
 };
 
 use anyhow::{Result, anyhow};
@@ -29,13 +29,13 @@ use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use url::Url;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{BuildOptions, NoBinary, NoBuild, RAYON_INITIALIZE};
+use uv_configuration::{BuildOptions, NoBinary, NoBuild, initialize_rayon_once};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_distribution_types::{Dist, Resolution};
 use uv_installer::Preparer;
 use uv_pep508::VerbatimUrl;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{HashStrategy, InFlight};
 
@@ -91,7 +91,7 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     // way around that.
     // xref https://github.com/rayon-rs/rayon/issues/93
     // xref https://github.com/prefix-dev/pixi/blob/4dc02c840d63e75f16a2da6a8fc74a7f67218cb3/src/environment/conda_prefix.rs#L294
-    LazyLock::force(&RAYON_INITIALIZE);
+    initialize_rayon_once();
 
     let target_prefix = std::path::absolute(options.output_directory.join(options.env_name))
         .map_err(|e| anyhow!("Could not make path absolute: {e}"))?;
@@ -394,10 +394,12 @@ async fn install_pypi_packages(
         venv.root().display(),
     );
 
-    let client =
-        RegistryClientBuilder::new(BaseClientBuilder::default(), pypi_cache.clone()).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), pypi_cache.clone())
+        .build()
+        .map_err(|e| anyhow!("Could not build registry client: {}", e))?;
     let context = PixiPackBuildContext::new(pypi_cache.clone());
-    let distribute_database = DistributionDatabase::new(&client, &context, 1usize);
+    let downloads_semaphore = Arc::new(tokio::sync::Semaphore::new(1));
+    let distribute_database = DistributionDatabase::new(&client, &context, downloads_semaphore);
     let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
     let preparer = Preparer::new(
         &pypi_cache,
@@ -414,7 +416,7 @@ async fn install_pypi_packages(
         .await
         .map_err(|e| anyhow!("Could not unzip all pypi packages: {}", e))?;
     // install all wheel packages
-    uv_installer::Installer::new(&venv, Preview::new(PreviewFeatures::default()))
+    uv_installer::Installer::new(&venv, Preview::default())
         .install(unzipped_dists)
         .await
         .map_err(|e| anyhow!("Could not install all pypi packages: {}", e))?;
