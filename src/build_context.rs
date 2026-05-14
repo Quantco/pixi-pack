@@ -58,7 +58,7 @@ impl BuildContext for PixiPackBuildContext {
         unimplemented!()
     }
 
-    fn sources(&self) -> uv_configuration::SourceStrategy {
+    fn sources(&self) -> &uv_configuration::NoSources {
         unimplemented!()
     }
 
@@ -70,13 +70,13 @@ impl BuildContext for PixiPackBuildContext {
         &'a self,
         requirements: &'a [uv_distribution_types::Requirement],
         build_stack: &'a uv_types::BuildStack,
-    ) -> anyhow::Result<uv_distribution_types::Resolution, BuildDispatchError> {
+    ) -> anyhow::Result<uv_types::ResolvedRequirements, BuildDispatchError> {
         unimplemented!()
     }
 
     async fn install<'a>(
         &'a self,
-        resolution: &'a uv_distribution_types::Resolution,
+        resolution: &'a uv_types::ResolvedRequirements,
         venv: &'a uv_python::PythonEnvironment,
         build_stack: &'a uv_types::BuildStack,
     ) -> anyhow::Result<Vec<uv_distribution_types::CachedDist>, BuildDispatchError> {
@@ -90,7 +90,7 @@ impl BuildContext for PixiPackBuildContext {
         install_path: &'a std::path::Path,
         version_id: Option<&'a str>,
         dist: Option<&'a uv_distribution_types::SourceDist>,
-        sources: uv_configuration::SourceStrategy,
+        sources: &'a uv_configuration::NoSources,
         build_kind: uv_configuration::BuildKind,
         build_output: uv_configuration::BuildOutput,
         build_stack: uv_types::BuildStack,
@@ -103,7 +103,7 @@ impl BuildContext for PixiPackBuildContext {
         source: &'a std::path::Path,
         subdirectory: Option<&'a std::path::Path>,
         output_dir: &'a std::path::Path,
-        sources: uv_configuration::SourceStrategy,
+        sources: uv_configuration::NoSources,
         build_kind: uv_configuration::BuildKind,
         version_id: Option<&'a str>,
     ) -> anyhow::Result<Option<uv_distribution_filename::DistFilename>, BuildDispatchError> {

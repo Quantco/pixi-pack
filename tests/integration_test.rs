@@ -448,11 +448,11 @@ async fn test_pypi_non_wheel_ignore(
 }
 
 fn sha256_digest_bytes(path: &PathBuf) -> String {
+    let bytes = fs::read(path).unwrap();
     let mut hasher = Sha256::new();
-    let mut file = fs::File::open(path).unwrap();
-    let _bytes_written = io::copy(&mut file, &mut hasher).unwrap();
+    hasher.update(&bytes);
     let digest = hasher.finalize();
-    format!("{:X}", digest)
+    digest.iter().map(|b| format!("{:02X}", b)).collect()
 }
 
 #[rstest]
