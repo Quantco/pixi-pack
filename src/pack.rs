@@ -30,7 +30,7 @@ use rattler_lock::{
     PypiPackageData, UrlOrPath,
 };
 use rattler_networking::{
-    AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware,
+    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware, S3Middleware,
     authentication_storage, mirror_middleware::Mirror,
 };
 use reqwest_middleware::ClientWithMiddleware;
@@ -471,6 +471,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
         auth_storage,
     )))
+    .with(GCSMiddleware::default())
     .build();
     Ok(client)
 }
