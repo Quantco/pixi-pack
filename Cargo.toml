@@ -43,6 +43,7 @@ rattler_index = "0.28.2"
 rattler_lock = "0.30.0"
 rattler_networking = { version = "0.26.12", default-features = false, features = [
   "s3",
+  "gcs",
   "rattler_config",
 ] }
 rattler_package_streaming = { version = "0.25.1", default-features = false }

@@ -30,7 +30,7 @@ use rattler_lock::{
     PypiPackageData, UrlOrPath,
 };
 use rattler_networking::{
-    AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware,
+    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware, S3Middleware,
     authentication_storage, mirror_middleware::Mirror,
 };
 use reqwest_middleware::ClientWithMiddleware;
@@ -390,6 +390,83 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    use serial_test::serial;
+    use tempfile::tempdir;
+
+    struct EnvVarGuard {
+        key: &'static str,
+        old_value: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &OsString) -> Self {
+            let old_value = std::env::var_os(key);
+            unsafe { std::env::set_var(key, value) };
+            Self { key, old_value }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.old_value {
+                Some(old_value) => unsafe { std::env::set_var(self.key, old_value) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_gcs_url_does_not_fail_in_reqwest_url_builder() {
+        // Ensure GCS middleware gets a chance to intercept and rewrite the `gcs://` URL
+        // before it hits reqwest's request execution layer.
+        let temp_dir = tempdir().unwrap();
+
+        let options = PackOptions {
+            environment: "default".to_string(),
+            platform: Platform::current(),
+            auth_file: None,
+            output_file: temp_dir.path().join("out.tar"),
+            manifest_path: temp_dir.path().to_path_buf(),
+            metadata: PixiPackMetadata::default(),
+            cache_dir: None,
+            injected_packages: vec![],
+            ignore_pypi_non_wheel: false,
+            output_mode: OutputMode::Archive,
+            pixi_unpack_source: None,
+            config: None,
+        };
+
+        let client = reqwest_client_from_options(&options).unwrap();
+
+        // Force the middleware's credential resolution to fail quickly and deterministically,
+        // without relying on machine-specific ADC discovery or talking to GCE metadata servers.
+        let invalid_credentials_path = temp_dir.path().join("invalid-gcp-creds.json");
+        std::fs::write(&invalid_credentials_path, "not-json").unwrap();
+        let _guard = EnvVarGuard::set(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            &invalid_credentials_path.as_os_str().to_os_string(),
+        );
+
+        let url: Url = "gcs://example-bucket/noarch/repodata.json".parse().unwrap();
+
+        let result = client.get(url).send().await;
+        if let Err(err) = result {
+            let message = err.to_string();
+            assert!(
+                !message.contains("builder error for url"),
+                "unexpected reqwest builder error: {message}"
+            );
+        }
+    }
+}
+
 /// Get the authentication storage from the given auth file path.
 fn get_auth_store(auth_file: Option<PathBuf>) -> Result<AuthenticationStorage> {
     let mut store = AuthenticationStorage::from_env_and_defaults()?;
@@ -471,6 +548,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
         auth_storage,
     )))
+    .with(GCSMiddleware::default())
     .build();
     Ok(client)
 }
