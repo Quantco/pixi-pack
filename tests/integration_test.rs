@@ -37,7 +37,8 @@ fn options(
     #[default("default")] environment: String,
     #[default(Platform::current())] platform: Platform,
     #[default(None)] auth_file: Option<PathBuf>,
-    #[default(Some(ShellEnum::Bash(Bash)))] shell: Option<ShellEnum>,
+    #[default(Some(ShellEnum::Bash(Bash { flavor: rattler_shell::shell::BashFlavor::Bash })))]
+    shell: Option<ShellEnum>,
     #[default(false)] ignore_pypi_non_wheel: bool,
     #[default("env")] env_name: String,
     #[default(OutputMode::Archive)] output_mode: OutputMode,
