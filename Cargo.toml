@@ -15,17 +15,15 @@ opt-level = "z"
 default = ["native-tls"]
 native-tls = [
   "reqwest/native-tls",
-  "reqwest/native-tls-alpn",
   "rattler/native-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+  "rattler_networking/rustls",
+  "rattler_package_streaming/rustls",
 ]
 rustls-tls = [
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
-  "rattler/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+  "reqwest/rustls",
+  "rattler/rustls",
+  "rattler_networking/rustls",
+  "rattler_package_streaming/rustls",
 ]
 
 [dependencies]
@@ -48,10 +46,7 @@ rattler_networking = { version = "0.27.2", default-features = false, features = 
 ] }
 rattler_package_streaming = { version = "0.26.2", default-features = false }
 rattler_shell = "0.27.2"
-reqwest = { version = "0.13.3", default-features = false, features = [
-  "http2",
-  "macos-system-configuration",
-] }
+reqwest = { version = "0.13.3", default-features = false, features = ["http2"] }
 reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
