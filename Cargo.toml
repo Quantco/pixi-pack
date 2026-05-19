@@ -1,7 +1,7 @@
 [package]
 name = "pixi-pack"
 description = "A command line tool to pack and unpack conda environments for easy sharing"
-version = "0.7.8"
+version = "0.7.9"
 edition = "2024"
 
 # See https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -15,17 +15,15 @@ opt-level = "z"
 default = ["native-tls"]
 native-tls = [
   "reqwest/native-tls",
-  "reqwest/native-tls-alpn",
   "rattler/native-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+  "rattler_networking/rustls",
+  "rattler_package_streaming/rustls",
 ]
 rustls-tls = [
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
-  "rattler/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+  "reqwest/rustls",
+  "rattler/rustls",
+  "rattler_networking/rustls",
+  "rattler_package_streaming/rustls",
 ]
 
 [dependencies]
@@ -35,24 +33,21 @@ clap_complete = "4.6.5"
 clap-verbosity-flag = { version = "3.0.4", features = ["tracing"] }
 futures = "0.3.32"
 indicatif = "0.18.4"
-rattler = { version = "0.42.0", default-features = false }
-rattler_config = "0.3.12"
-rattler_digest = { version = "1.2.4", features = ["tokio"] }
-rattler_conda_types = "0.46.1"
-rattler_index = "0.28.2"
-rattler_lock = "0.30.0"
-rattler_networking = { version = "0.26.12", default-features = false, features = [
+rattler = { version = "0.43.2", default-features = false }
+rattler_config = "0.4.1"
+rattler_digest = { version = "1.3.0", features = ["tokio"] }
+rattler_conda_types = "0.46.4"
+rattler_index = "0.30.1"
+rattler_lock = "0.30.3"
+rattler_networking = { version = "0.27.2", default-features = false, features = [
   "s3",
   "gcs",
   "rattler_config",
 ] }
-rattler_package_streaming = { version = "0.25.1", default-features = false }
-rattler_shell = "0.26.12"
-reqwest = { version = "0.12.28", default-features = false, features = [
-  "http2",
-  "macos-system-configuration",
-] }
-reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.4.2" }
+rattler_package_streaming = { version = "0.26.2", default-features = false }
+rattler_shell = "0.27.2"
+reqwest = { version = "0.13.3", default-features = false, features = ["http2"] }
+reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
@@ -66,25 +61,25 @@ tracing-subscriber = { version = "0.3.23", features = [
 url = "2.5.8"
 tempfile = "3.27.0"
 walkdir = "2.5.0"
-tar = "0.4.45"
+tar = "0.4.46"
 base64 = "0.22.1"
 indexmap = "2.14.0"
 ahash = "0.8.12"
-uv-build-frontend = "0.0.45"
-uv-cache = "0.0.45"
-uv-client = "0.0.45"
-uv-configuration = "0.0.45"
-uv-dispatch = "0.0.45"
-uv-distribution = "0.0.45"
-uv-distribution-filename = "0.0.45"
-uv-distribution-types = "0.0.45"
-uv-git = "0.0.45"
-uv-installer = "0.0.45"
-uv-pep508 = "0.0.45"
-uv-preview = "0.0.45"
-uv-python = "0.0.45"
-uv-types = "0.0.45"
-uv-workspace = "0.0.45"
+uv-build-frontend = "0.0.48"
+uv-cache = "0.0.48"
+uv-client = "0.0.48"
+uv-configuration = "0.0.48"
+uv-dispatch = "0.0.48"
+uv-distribution = "0.0.48"
+uv-distribution-filename = "0.0.48"
+uv-distribution-types = "0.0.48"
+uv-git = "0.0.48"
+uv-installer = "0.0.48"
+uv-pep508 = "0.0.48"
+uv-preview = "0.0.48"
+uv-python = "0.0.48"
+uv-types = "0.0.48"
+uv-workspace = "0.0.48"
 
 [dev-dependencies]
 async-std = "1.13.2"
