@@ -251,20 +251,20 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
                 let bar = ProgressBar::new_spinner();
 
-				let record = source_data.record().ok_or_else(|| {
-					anyhow!(
-						"Source package '{}' does not have a full package record (version/build unknown). \
-						Make sure the lock file was resolved with full metadata.",
-						source_data.name().as_normalized()
-					)
-				})?;
+                let record = source_data.record().ok_or_else(|| {
+                    anyhow!(
+                        "Source package '{}' does not have a full package record (version/build unknown). \
+                        Make sure the lock file was resolved with full metadata.",
+                        source_data.name().as_normalized()
+                    )
+                })?;
 
-				let expected_filename = format!(
-					"{}-{}-{}.conda",
-					record.name.as_normalized(),
-					record.version,
-					record.build
-				);
+                let expected_filename = format!(
+                    "{}-{}-{}.conda",
+                    record.name.as_normalized(),
+                    record.version,
+                    record.build
+                );
 
                 bar.set_message(format!("Building {expected_filename}"));
                 bar.enable_steady_tick(std::time::Duration::from_millis(100));
