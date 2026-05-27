@@ -10,11 +10,12 @@ use std::{
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::PermissionsExt as _;
 
-use indicatif::HumanBytes;
+use indicatif::{HumanBytes, ProgressBar};
 use rattler_index::{package_record_from_conda, package_record_from_tar_bz2};
 use tokio::{
     fs::{self, File, create_dir_all},
     io::AsyncWriteExt,
+    process::Command as TokioCommand,
 };
 
 use anyhow::Result;
@@ -33,6 +34,7 @@ use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware, S3Middleware,
     authentication_storage, mirror_middleware::Mirror,
 };
+
 use reqwest_middleware::ClientWithMiddleware;
 use tar::{Builder, HeaderMode};
 use tokio::io::AsyncReadExt;
@@ -100,6 +102,74 @@ fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
     })
 }
 
+async fn build_local_package(
+    manifest_path: &Path,
+    output_dir: &Path,
+    platform: &str,
+) -> Result<()> {
+    let manifest_dir = manifest_path
+        .parent()
+        .expect("manifest_path should have a parent directory");
+    let mut command = TokioCommand::new("pixi");
+    command
+        .arg("build")
+        .arg("--output-dir")
+        .arg(output_dir)
+        .arg("--build-platform")
+        .arg(platform)
+        .arg("--path")
+        .arg(manifest_path);
+
+    let is_verbose = tracing::enabled!(tracing::Level::WARN);
+
+    if is_verbose {
+        eprintln!(
+            "🔧 Running: pixi build --output-dir {} --build-platform {} (in {})",
+            output_dir.display(),
+            platform,
+            manifest_dir.display()
+        );
+
+        let status = command
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .await?;
+
+        if !status.success() {
+            anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+        }
+    } else {
+        let output = command.output().await?;
+
+        if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            eprintln!("❌ Build failed with exit code: {:?}", output.status.code());
+            eprintln!(
+                "Command: pixi build --output-dir {} --build-platform {} (in {})",
+                output_dir.display(),
+                platform,
+                manifest_dir.display()
+            );
+
+            if !stdout.is_empty() {
+                eprintln!("📤 stdout:");
+                eprintln!("{}", stdout);
+            }
+            if !stderr.is_empty() {
+                eprintln!("📤 stderr:");
+                eprintln!("{}", stderr);
+            }
+
+            anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+        }
+    }
+
+    Ok(())
+}
+
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<()> {
     let lockfile = load_lockfile(&options.manifest_path)?;
@@ -147,14 +217,77 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let mut conda_packages_from_lockfile: Vec<CondaBinaryData> = Vec::new();
     let mut pypi_packages_from_lockfile: Vec<PypiPackageData> = Vec::new();
+    let mut built_source_packages: Vec<PathBuf> = Vec::new();
+    let mut _temp_dirs: Vec<tempfile::TempDir> = Vec::new();
 
     for package in packages {
         match package {
             LockedPackage::Conda(CondaPackageData::Binary(binary_data)) => {
                 conda_packages_from_lockfile.push((**binary_data).clone())
             }
-            LockedPackage::Conda(CondaPackageData::Source(_)) => {
-                anyhow::bail!("Conda source packages are not yet supported by pixi-pack")
+            LockedPackage::Conda(CondaPackageData::Source(source_data)) => {
+                let base_dir = if options.manifest_path.is_file() {
+                    options.manifest_path.parent().unwrap_or(Path::new("."))
+                } else {
+                    &options.manifest_path
+                };
+                let relative_path = match &source_data.location {
+                    UrlOrPath::Path(p) => PathBuf::from(p.to_path().as_str()),
+                    UrlOrPath::Url(u) => {
+                        anyhow::bail!("Unexpected URL for local package source: {}", u)
+                    }
+                };
+
+                let pkg_dir = base_dir.join(&relative_path);
+                let manifest_path = pkg_dir.join("pixi.toml");
+                let canonical_manifest_path = manifest_path.canonicalize().map_err(|e| {
+                    anyhow!(
+                        "Cannot find manifest file {}: {}",
+                        manifest_path.display(),
+                        e
+                    )
+                })?;
+                let build_temp_dir = tempfile::tempdir()
+                    .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
+                let bar = ProgressBar::new_spinner();
+
+                let record = source_data.record().ok_or_else(|| {
+                    anyhow!(
+                        "Source package '{}' does not have a full package record (version/build unknown). \
+                        Make sure the lock file was resolved with full metadata.",
+                        source_data.name().as_normalized()
+                    )
+                })?;
+
+                let expected_filename = format!(
+                    "{}-{}-{}.conda",
+                    record.name.as_normalized(),
+                    record.version,
+                    record.build
+                );
+
+                bar.set_message(format!("Building {expected_filename}"));
+                bar.enable_steady_tick(std::time::Duration::from_millis(100));
+                build_local_package(
+                    &canonical_manifest_path,
+                    build_temp_dir.path(),
+                    options.platform.as_str(),
+                )
+                .await?;
+                bar.finish_with_message(format!("✅ Built {expected_filename}"));
+
+                let built_package = build_temp_dir.path().join(&expected_filename);
+
+                if !built_package.exists() {
+                    anyhow::bail!(
+                        "Expected built package {} not found in {:?}",
+                        expected_filename,
+                        build_temp_dir.path()
+                    );
+                }
+
+                built_source_packages.push(built_package);
+                _temp_dirs.push(build_temp_dir);
             }
             LockedPackage::Pypi(pypi_data) => {
                 let package_name = pypi_data.name().clone();
@@ -207,9 +340,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         conda_packages.push((filename, package.package_record));
     }
 
-    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = options
-        .injected_packages
+    let injected_packages: Vec<(PathBuf, CondaArchiveType)> = built_source_packages
         .iter()
+        .chain(options.injected_packages.iter())
         .filter_map(|e| {
             CondaArchiveType::split_str(e.as_path().to_string_lossy().as_ref())
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
@@ -241,6 +374,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
         conda_packages.push((filename, package_record));
     }
+    drop(_temp_dirs);
 
     // In case we injected packages, we need to validate that these packages are solvable with the
     // environment (i.e., that each packages dependencies and run constraints are still satisfied).
