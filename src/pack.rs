@@ -27,10 +27,11 @@ use rattler_conda_types::{
 };
 use rattler_digest::{HashingWriter, Md5, Sha256};
 use rattler_lock::{
-    CondaBinaryData, CondaPackageData, LockFile, LockedPackageRef, PypiPackageData, UrlOrPath,
+    CondaBinaryData, CondaPackageData, LockFile, LockedPackage, PypiDistributionData,
+    PypiPackageData, UrlOrPath,
 };
 use rattler_networking::{
-    AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, S3Middleware,
+    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware, S3Middleware,
     authentication_storage, mirror_middleware::Mirror,
 };
 
@@ -186,13 +187,17 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.environment
     ))?;
 
-    let packages: Vec<_> = env
-        .packages(options.platform)
+    let platform = env
+        .platforms()
+        .find(|p| p.subdir() == options.platform)
         .ok_or(anyhow!(
             "platform not found in lockfile: {}",
             options.platform.as_str()
-        ))?
-        .collect();
+        ))?;
+    let packages = env.packages(platform).ok_or(anyhow!(
+        "platform not found in lockfile: {}",
+        options.platform.as_str()
+    ))?;
 
     let temp_dir = if options.output_mode != OutputMode::DirectoryOnly {
         Some(
@@ -217,10 +222,10 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     for package in packages {
         match package {
-            LockedPackageRef::Conda(CondaPackageData::Binary(binary_data)) => {
-                conda_packages_from_lockfile.push(binary_data.clone())
+            LockedPackage::Conda(CondaPackageData::Binary(binary_data)) => {
+                conda_packages_from_lockfile.push((**binary_data).clone())
             }
-            LockedPackageRef::Conda(CondaPackageData::Source(source_data)) => {
+            LockedPackage::Conda(CondaPackageData::Source(source_data)) => {
                 let base_dir = if options.manifest_path.is_file() {
                     options.manifest_path.parent().unwrap_or(Path::new("."))
                 } else {
@@ -246,12 +251,20 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
                 let bar = ProgressBar::new_spinner();
 
-                let expected_filename = format!(
-                    "{}-{}-{}.conda",
-                    source_data.package_record.name.as_normalized(),
-                    source_data.package_record.version,
-                    source_data.package_record.build
-                );
+				let record = source_data.record().ok_or_else(|| {
+					anyhow!(
+						"Source package '{}' does not have a full package record (version/build unknown). \
+						Make sure the lock file was resolved with full metadata.",
+						source_data.name().as_normalized()
+					)
+				})?;
+
+				let expected_filename = format!(
+					"{}-{}-{}.conda",
+					record.name.as_normalized(),
+					record.version,
+					record.build
+				);
 
                 bar.set_message(format!("Building {expected_filename}"));
                 bar.enable_steady_tick(std::time::Duration::from_millis(100));
@@ -276,9 +289,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 built_source_packages.push(built_package);
                 _temp_dirs.push(build_temp_dir);
             }
-            LockedPackageRef::Pypi(pypi_data, _) => {
-                let package_name = pypi_data.name.clone();
-                let location = pypi_data.location.clone();
+            LockedPackage::Pypi(pypi_data) => {
+                let package_name = pypi_data.name().clone();
+                let location = pypi_data.location().clone();
                 let is_wheel = location
                     .file_name()
                     .filter(|x| x.ends_with("whl"))
@@ -423,7 +436,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             .ok_or(anyhow!("could not convert filename to string"))?
             .to_string();
         let wheel_file_name = WheelFilename::from_str(&filename)?;
-        let pypi_data = PypiPackageData {
+        let pypi_data: PypiPackageData = PypiDistributionData {
             name: wheel_file_name
                 .name
                 .as_str()
@@ -437,11 +450,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             location: path_str
                 .parse()
                 .map_err(|e| anyhow!("could not convert path type: {}", e))?,
+            index_url: None,
             hash: None,
             requires_dist: vec![],
             requires_python: None,
-            editable: false,
-        };
+        }
+        .into();
         create_dir_all(&pypi_directory)
             .await
             .map_err(|e| anyhow!("could not create pypi directory: {}", e))?;
@@ -591,6 +605,7 @@ fn reqwest_client_from_options(options: &PackOptions) -> Result<ClientWithMiddle
     .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
         auth_storage,
     )))
+    .with(GCSMiddleware::default())
     .build();
     Ok(client)
 }
@@ -1027,7 +1042,7 @@ async fn create_environment_file(
         environment.push_str(&format!("    - --find-links ./{PYPI_DIRECTORY_NAME}\n"));
 
         for p in pypi_packages {
-            environment.push_str(&format!("    - {}=={}\n", p.name, p.version));
+            environment.push_str(&format!("    - {}=={}\n", p.name(), p.version_string()));
         }
     }
 
@@ -1071,6 +1086,8 @@ async fn create_repodata_files(
             info: Some(ChannelInfo {
                 subdir: Some(subdir.clone()),
                 base_url: None,
+                repodata_revisions: Vec::new(),
+                channel_relations: None,
             }),
             packages: Default::default(),
             conda_packages,
@@ -1101,7 +1118,7 @@ async fn download_pypi_package(
         .await
         .map_err(|e| anyhow!("could not create download directory: {}", e))?;
 
-    match &package.location {
+    match package.location().inner() {
         UrlOrPath::Path(path) => {
             let file_name = path
                 .file_name()
