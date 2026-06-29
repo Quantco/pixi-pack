@@ -28,7 +28,7 @@ use tar::Archive;
 use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use url::Url;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{BuildOptions, NoBinary, NoBuild, initialize_rayon_once};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, WheelFilename};
@@ -394,9 +394,12 @@ async fn install_pypi_packages(
         venv.root().display(),
     );
 
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), pypi_cache.clone())
-        .build()
-        .map_err(|e| anyhow!("Could not build registry client: {}", e))?;
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().connectivity(Connectivity::Offline),
+        pypi_cache.clone(),
+    )
+    .build()
+    .map_err(|e| anyhow!("Could not build registry client: {}", e))?;
     let context = PixiPackBuildContext::new(pypi_cache.clone());
     let downloads_semaphore = Arc::new(tokio::sync::Semaphore::new(1));
     let distribute_database = DistributionDatabase::new(&client, &context, downloads_semaphore);
