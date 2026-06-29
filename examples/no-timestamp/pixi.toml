@@ -5,3 +5,6 @@ platforms = ["osx-64"]
 
 [dependencies]
 mpi = { version = "1.0", build = "openmpi" }
+
+[tool.update]
+autoupdate-schedule = "never"
