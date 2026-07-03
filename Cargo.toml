@@ -16,10 +16,10 @@ default = ["native-tls"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
-  "rattler_networking/rustls",
-  "rattler_package_streaming/rustls",
+  "rattler_networking/native-tls",
+  "rattler_package_streaming/native-tls",
 ]
-rustls-tls = [
+rustls = [
   "reqwest/rustls",
   "rattler/rustls",
   "rattler_networking/rustls",
