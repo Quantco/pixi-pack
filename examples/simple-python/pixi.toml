@@ -18,3 +18,6 @@ python = ">=3.12"
 openssl = { version = "3.3.1", build = "*_0" }
 # needed because conda and micromamba include pip by default when installing python, pixi doesn't
 pip = "*"
+
+[tool.update]
+autoupdate-schedule = "never"

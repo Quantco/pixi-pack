@@ -9,3 +9,6 @@ test = "python -c 'print(\"Hello world!\")'"
 [dependencies]
 python = "3.9.*"
 private-package = "*"
+
+[tool.update]
+autoupdate-schedule = "never"

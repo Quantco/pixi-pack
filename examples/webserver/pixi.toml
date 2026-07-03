@@ -20,3 +20,6 @@ python-build = "*"
 [environments]
 default = { features = ["dev"], solve-group = "prod" }
 prod = { features = [], solve-group = "prod" }
+
+[tool.update]
+autoupdate-schedule = "never"
