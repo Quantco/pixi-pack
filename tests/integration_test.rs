@@ -932,13 +932,6 @@ async fn test_local_channel(
 #[rstest]
 #[tokio::test]
 async fn test_local_build_package(options: Options) {
-    if cfg!(windows) {
-        // pixi-build hits Windows PATH length limits in GitHub Actions CI
-        // (vcvars64.bat fails with "input line too long" on deeply nested paths).
-        // This could be fixed upstream by moving the build folder to a short stable path.
-        return;
-    }
-
     let mut pack_options = options.pack_options;
     pack_options.manifest_path = PathBuf::from("examples/local-build/pixi.toml");
 
