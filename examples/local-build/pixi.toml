@@ -16,3 +16,6 @@ backend = { name = "pixi-build-cmake", version = "==0.4.3" }
 
 [package.run-dependencies]
 local-build-local-pkg = { path = "./local-pkg" }
+
+[tool.update]
+autoupdate-schedule = "never"
