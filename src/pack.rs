@@ -112,8 +112,8 @@ async fn build_local_package(
         .expect("manifest_path should have a parent directory");
     let mut command = TokioCommand::new("pixi");
     command
-        .arg("build")
-        .arg("--output-dir")
+        .arg("publish")
+        .arg("--target-dir")
         .arg(output_dir)
         .arg("--build-platform")
         .arg(platform)
@@ -124,7 +124,7 @@ async fn build_local_package(
 
     if is_verbose {
         eprintln!(
-            "🔧 Running: pixi build --output-dir {} --build-platform {} (in {})",
+            "🔧 Running: pixi publish --target-dir {} --build-platform {} (in {})",
             output_dir.display(),
             platform,
             manifest_dir.display()
@@ -137,7 +137,7 @@ async fn build_local_package(
             .await?;
 
         if !status.success() {
-            anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+            anyhow::bail!("Failed to publish package in {}", manifest_dir.display());
         }
     } else {
         let output = command.output().await?;
@@ -146,9 +146,12 @@ async fn build_local_package(
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
-            eprintln!("❌ Build failed with exit code: {:?}", output.status.code());
             eprintln!(
-                "Command: pixi build --output-dir {} --build-platform {} (in {})",
+                "❌ Publish failed with exit code: {:?}",
+                output.status.code()
+            );
+            eprintln!(
+                "Command: pixi publish --target-dir {} --build-platform {} (in {})",
                 output_dir.display(),
                 platform,
                 manifest_dir.display()
@@ -163,7 +166,7 @@ async fn build_local_package(
                 eprintln!("{}", stderr);
             }
 
-            anyhow::bail!("Failed to build package in {}", manifest_dir.display());
+            anyhow::bail!("Failed to publish package in {}", manifest_dir.display());
         }
     }
 
@@ -251,22 +254,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
                 let bar = ProgressBar::new_spinner();
 
-                let record = source_data.record().ok_or_else(|| {
-                    anyhow!(
-                        "Source package '{}' does not have a full package record (version/build unknown). \
-                        Make sure the lock file was resolved with full metadata.",
-                        source_data.name().as_normalized()
-                    )
-                })?;
-
-                let expected_filename = format!(
-                    "{}-{}-{}.conda",
-                    record.name.as_normalized(),
-                    record.version,
-                    record.build
-                );
-
-                bar.set_message(format!("Building {expected_filename}"));
+                bar.set_message(format!("Publishing {:?}", source_data.name()));
                 bar.enable_steady_tick(std::time::Duration::from_millis(100));
                 build_local_package(
                     &canonical_manifest_path,
@@ -274,17 +262,33 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     options.platform.as_str(),
                 )
                 .await?;
-                bar.finish_with_message(format!("✅ Built {expected_filename}"));
+                bar.finish_with_message(format!(
+                    "✅ Built and published {}",
+                    source_data.name().as_source()
+                ));
 
-                let built_package = build_temp_dir.path().join(&expected_filename);
+                let built_package = std::fs::read_dir(build_temp_dir.path())
+                    .map_err(|e| anyhow!("Failed to read build directory: {}", e))?
+                    .next()
+                    .ok_or_else(|| anyhow!("Build directory is empty"))?
+                    .map_err(|e| anyhow!("Failed to read directory entry: {}", e))?
+                    .path();
 
-                if !built_package.exists() {
-                    anyhow::bail!(
-                        "Expected built package {} not found in {:?}",
-                        expected_filename,
-                        build_temp_dir.path()
-                    );
-                }
+                anyhow::ensure!(
+                    built_package.extension().and_then(|s| s.to_str()) == Some("conda"),
+                    "Expected built package to be a .conda file, got: {}",
+                    built_package.to_string_lossy()
+                );
+                anyhow::ensure!(
+                    built_package
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.starts_with(source_data.name().as_source()))
+                        .unwrap_or(false),
+                    "Expected built package to start with {}, got: {}",
+                    source_data.name().as_source(),
+                    built_package.to_string_lossy()
+                );
 
                 built_source_packages.push(built_package);
                 _temp_dirs.push(build_temp_dir);

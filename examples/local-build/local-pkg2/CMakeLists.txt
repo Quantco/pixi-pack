@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(local_build_local_pkg2)
+project(local_build_local_pkg2 C)
 
-install(FILES CMakeLists.txt DESTINATION .)
+add_executable(hello-pkg2 hello.c)
+install(TARGETS hello-pkg2 DESTINATION bin)
