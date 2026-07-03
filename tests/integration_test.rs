@@ -941,3 +941,67 @@ async fn test_local_channel(
             .exists()
     );
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_local_build_package(options: Options) {
+    if cfg!(windows) {
+        // pixi-build hits Windows PATH length limits in GitHub Actions CI
+        // (vcvars64.bat fails with "input line too long" on deeply nested paths).
+        // This could be fixed upstream by moving the build folder to a short stable path.
+        return;
+    }
+
+    let mut pack_options = options.pack_options;
+    pack_options.manifest_path = PathBuf::from("examples/local-build/pixi.toml");
+
+    let unpack_options = options.unpack_options;
+    let pack_file = unpack_options.pack_file.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{pack_result:?}");
+    assert!(pack_file.is_file());
+
+    let env_dir = unpack_options.output_directory.join("env");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{unpack_result:?}");
+
+    let curl_json = match Platform::current() {
+        Platform::Linux64 => env_dir.join("conda-meta/curl-8.17.0-h4e3cde8_1.json"),
+        Platform::LinuxAarch64 => env_dir.join("conda-meta/curl-8.17.0-h7bfdcfb_1.json"),
+        Platform::OsxArm64 => env_dir.join("conda-meta/curl-8.17.0-hdece5d2_1.json"),
+        Platform::Osx64 => env_dir.join("conda-meta/curl-8.17.0-h7dd4100_1.json"),
+        _ => panic!("Unsupported platform"),
+    };
+    assert!(curl_json.exists(), "curl not found in conda-meta");
+
+    let conda_meta = env_dir.join("conda-meta");
+    let has_pkg = |prefix: &str| {
+        fs::read_dir(&conda_meta).unwrap().flatten().any(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with(prefix) && name.ends_with(".json")
+        })
+    };
+    assert!(
+        has_pkg("local-build-main-pkg-0.1.0-"),
+        "main-pkg not found in conda-meta"
+    );
+    assert!(
+        has_pkg("local-build-local-pkg-0.1.0-"),
+        "local-pkg not found in conda-meta"
+    );
+
+    assert!(
+        env_dir.join("bin/hello-main").exists(),
+        "hello-main binary not found"
+    );
+    assert!(
+        env_dir.join("bin/hello-pkg").exists(),
+        "hello-pkg binary not found"
+    );
+    assert!(
+        env_dir.join("bin/hello-pkg2").exists(),
+        "hello-pkg2 binary not found"
+    );
+}

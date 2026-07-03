@@ -1,0 +1,10 @@
+[package]
+name = "local-build-local-pkg-2"
+version = "0.1.0"
+
+[package.build]
+# xref: https://github.com/prefix-dev/pixi/issues/6524
+backend = { name = "pixi-build-cmake", version = "==0.4.3" }
+
+[package.run-dependencies]
+curl = "==8.17.0"
