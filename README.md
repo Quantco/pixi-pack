@@ -247,7 +247,7 @@ You can cache downloaded packages to speed up subsequent pack operations by usin
 pixi-pack --use-cache ~/.pixi-pack/cache
 ```
 
-This will store all downloaded packages in the specified directory and reuse them in future pack operations. The cache follows the same structure as conda channels, organizing packages by platform subdirectories (e.g., linux-64, win-64, etc.).
+This will store all downloaded packages in the specified directory and reuse them in future pack operations. The cache follows the same structure as conda channels, organizing packages by platform subdirectories (e.g., linux-64, win-64, etc.). A `CACHEDIR.TAG` file is written to the cache directory so that backup and archiving tools can skip it (see the [cache directory tag specification](https://bford.info/cachedir/)).
 
 Using a cache is particularly useful when:
 
