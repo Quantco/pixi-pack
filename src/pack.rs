@@ -952,12 +952,12 @@ async fn create_repodata_files(
             info: Some(ChannelInfo {
                 subdir: Some(subdir.clone()),
                 base_url: None,
-                repodata_revisions: Vec::new(),
+                repodata_revisions: Default::default(),
                 channel_relations: None,
             }),
             packages: Default::default(),
             conda_packages,
-            experimental_v3: Default::default(),
+            v3: Default::default(),
             removed: Default::default(),
             version: Some(2),
         };
