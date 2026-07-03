@@ -254,7 +254,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     .map_err(|e| anyhow!("could not create temporary build directory: {}", e))?;
                 let bar = ProgressBar::new_spinner();
 
-                bar.set_message(format!("Publishing {:?}", source_data.name()));
+                bar.set_message(format!("Publishing {}", source_data.name().as_source()));
                 bar.enable_steady_tick(std::time::Duration::from_millis(100));
                 build_local_package(
                     &canonical_manifest_path,
