@@ -43,6 +43,7 @@ rattler_networking = { version = "0.30.0", default-features = false, features = 
   "s3",
   "gcs",
   "rattler_config",
+  "system-integration",
 ] }
 rattler_package_streaming = { version = "0.26.6", default-features = false }
 rattler_shell = "0.27.8"
