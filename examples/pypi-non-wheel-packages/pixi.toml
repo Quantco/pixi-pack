@@ -11,3 +11,6 @@ python = "3.11.*"
 pyboy = "~=1.6.9"
 # wheel
 ordered-enum = ">=0.0.9,<0.0.10"
+
+[tool.update]
+autoupdate-schedule = "never"
