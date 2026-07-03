@@ -797,6 +797,19 @@ async fn test_package_caching(
     // Both output files should exist and be valid
     assert!(options.pack_options.output_file.exists());
     assert!(output_file2.exists());
+
+    // A CACHEDIR.TAG file should have been created in the cache directory,
+    // marking it as a cache directory for backup and archiving tools.
+    let cachedir_tag = cache_dir.join("CACHEDIR.TAG");
+    assert!(
+        cachedir_tag.is_file(),
+        "CACHEDIR.TAG should be created in the cache directory"
+    );
+    let tag_contents = fs::read_to_string(&cachedir_tag).unwrap();
+    assert!(
+        tag_contents.starts_with("Signature: 8a477f597d28d172789f06886806bc55"),
+        "CACHEDIR.TAG should start with the standard cache directory tag signature"
+    );
 }
 
 #[rstest]

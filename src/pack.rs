@@ -51,6 +51,32 @@ use anyhow::anyhow;
 
 static DEFAULT_REQWEST_TIMEOUT_SEC: Duration = Duration::from_secs(5 * 60);
 
+/// Contents of the `CACHEDIR.TAG` file written to the cache directory.
+///
+/// See <https://bford.info/cachedir/> for the specification. The signature on
+/// the first line marks the directory as a cache so that backup and archiving
+/// tools can skip it.
+const CACHEDIR_TAG_CONTENT: &str = "Signature: 8a477f597d28d172789f06886806bc55\n\
+# This file is a cache directory tag created by pixi-pack.\n\
+# For information about cache directory tags see https://bford.info/cachedir/\n";
+
+/// Write a `CACHEDIR.TAG` file to the given cache directory if it does not
+/// already exist, marking it as a cache directory.
+async fn write_cachedir_tag(cache_dir: &Path) -> Result<()> {
+    create_dir_all(cache_dir)
+        .await
+        .map_err(|e| anyhow!("could not create cache directory: {}", e))?;
+
+    let tag_path = cache_dir.join("CACHEDIR.TAG");
+    if tag_path.exists() {
+        return Ok(());
+    }
+
+    fs::write(&tag_path, CACHEDIR_TAG_CONTENT)
+        .await
+        .map_err(|e| anyhow!("could not write CACHEDIR.TAG file: {}", e))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OutputMode {
     Archive,
@@ -184,6 +210,12 @@ pub async fn pack(options: PackOptions) -> Result<()> {
 
     let client = reqwest_client_from_options(&options)
         .map_err(|e| anyhow!("could not create reqwest client from auth storage: {e}"))?;
+
+    // Mark the cache directory (if any) with a CACHEDIR.TAG file so that backup
+    // and archiving tools can skip it.
+    if let Some(cache_dir) = options.cache_dir.as_deref() {
+        write_cachedir_tag(cache_dir).await?;
+    }
 
     let env = lockfile.environment(&options.environment).ok_or(anyhow!(
         "environment not found in lockfile: {}",
@@ -1090,12 +1122,12 @@ async fn create_repodata_files(
             info: Some(ChannelInfo {
                 subdir: Some(subdir.clone()),
                 base_url: None,
-                repodata_revisions: Vec::new(),
+                repodata_revisions: Default::default(),
                 channel_relations: None,
             }),
             packages: Default::default(),
             conda_packages,
-            experimental_v3: Default::default(),
+            v3: Default::default(),
             removed: Default::default(),
             version: Some(2),
         };
