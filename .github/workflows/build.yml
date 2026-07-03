@@ -72,6 +72,12 @@ jobs:
           key: build-${{ matrix.target }}-${{ matrix.os }}
 
       - name: Build
+        env:
+          # GCC on aarch64 defaults to outline atomics, emitting calls to
+          # __aarch64_*_sync helpers that live in libgcc. Static musl builds link
+          # with -nodefaultlibs, so those symbols are unresolved (libdbus-sys, a C
+          # dependency of rattler's keyring backend, hits this). Inline the atomics.
+          CFLAGS_aarch64_unknown_linux_musl: -mno-outline-atomics
         run: |
           cargo build --profile release --locked --color always${{ endsWith(matrix.target, 'musl') && ' --no-default-features --features rustls-tls' || '' }} --target ${{ matrix.target }} --bins
           mv target/${{ matrix.target }}/release/pixi-pack${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }} pixi-pack-${{ matrix.target }}${{ endsWith(matrix.target, 'windows-msvc') && '.exe' || '' }}
