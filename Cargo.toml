@@ -33,20 +33,20 @@ clap_complete = "4.6.5"
 clap-verbosity-flag = { version = "3.0.4", features = ["tracing"] }
 futures = "0.3.32"
 indicatif = "0.18.4"
-rattler = { version = "0.46.0", default-features = false }
-rattler_config = "0.5.2"
-rattler_digest = { version = "1.3.1", features = ["tokio"] }
-rattler_conda_types = "0.47.2"
-rattler_index = "0.30.7"
-rattler_lock = "0.31.3"
-rattler_networking = { version = "0.30.0", default-features = false, features = [
+rattler = { version = "0.48.1", default-features = false }
+rattler_config = "0.6.2"
+rattler_digest = { version = "1.3.2", features = ["tokio"] }
+rattler_conda_types = "0.49.0"
+rattler_index = "0.30.11"
+rattler_lock = "0.32.0"
+rattler_networking = { version = "0.30.3", default-features = false, features = [
   "s3",
   "gcs",
   "rattler_config",
   "system-integration",
 ] }
-rattler_package_streaming = { version = "0.26.6", default-features = false }
-rattler_shell = "0.27.8"
+rattler_package_streaming = { version = "0.26.9", default-features = false }
+rattler_shell = "0.27.12"
 reqwest = { version = "0.13.3", default-features = false, features = ["http2"] }
 reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1" }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -63,28 +63,28 @@ url = "2.5.8"
 tempfile = "3.27.0"
 walkdir = "2.5.0"
 tar = "0.4.46"
-base64 = "0.22.1"
+base64 = "0.23.0"
 indexmap = "2.14.0"
 ahash = "0.8.12"
-uv-build-frontend = "0.0.50"
-uv-cache = "0.0.50"
-uv-client = "0.0.50"
-uv-configuration = "0.0.50"
-uv-dispatch = "0.0.50"
-uv-distribution = "0.0.50"
-uv-distribution-filename = "0.0.50"
-uv-distribution-types = "0.0.50"
-uv-git = "0.0.50"
-uv-installer = "0.0.50"
-uv-pep508 = "0.0.50"
-uv-preview = "0.0.50"
-uv-python = "0.0.50"
-uv-types = "0.0.50"
-uv-workspace = "0.0.50"
+uv-build-frontend = "0.0.57"
+uv-cache = "0.0.57"
+uv-client = "0.0.57"
+uv-configuration = "0.0.57"
+uv-dispatch = "0.0.57"
+uv-distribution = "0.0.57"
+uv-distribution-filename = "0.0.57"
+uv-distribution-types = "0.0.57"
+uv-git = "0.0.57"
+uv-installer = "0.0.57"
+uv-pep508 = "0.0.57"
+uv-preview = "0.0.57"
+uv-python = "0.0.57"
+uv-types = "0.0.57"
+uv-workspace = "0.0.57"
 
 [dev-dependencies]
 async-std = "1.13.2"
 rstest = "0.26.1"
 sha2 = "0.11.0"
 insta = "1.47.2"
-serial_test = "3.4.0"
+serial_test = "4.0.1"
