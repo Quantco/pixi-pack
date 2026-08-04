@@ -3,6 +3,28 @@ preview = ["pixi-build"]
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "win-64", "osx-64", "osx-arm64"]
 
+# Pin the compiler so the run_exports floor of the built packages (e.g.
+# `libstdcxx >=15`) stays stable. `pixi publish` re-solves the build
+# environment against live conda-forge, while the runtime environment comes
+# from this lockfile, so an unpinned compiler breaks the two apart whenever
+# conda-forge migrates to a new compiler. win-64 is not pinned here: its
+# `cxx_compiler` variant is `vs2022`, which takes no numeric version.
+[workspace.target.linux-64.build-variants]
+c_compiler_version = ["15"]
+cxx_compiler_version = ["15"]
+
+[workspace.target.linux-aarch64.build-variants]
+c_compiler_version = ["15"]
+cxx_compiler_version = ["15"]
+
+[workspace.target.osx-64.build-variants]
+c_compiler_version = ["22"]
+cxx_compiler_version = ["22"]
+
+[workspace.target.osx-arm64.build-variants]
+c_compiler_version = ["22"]
+cxx_compiler_version = ["22"]
+
 [dependencies]
 local-build-main-pkg = { path = "." }
 
