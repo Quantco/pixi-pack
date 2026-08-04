@@ -88,6 +88,7 @@ impl BuildContext for PixiPackBuildContext {
         source: &'a std::path::Path,
         subdirectory: Option<&'a std::path::Path>,
         install_path: &'a std::path::Path,
+        stop_discovery_at: Option<&'a std::path::Path>,
         version_id: Option<&'a str>,
         dist: Option<&'a uv_distribution_types::SourceDist>,
         sources: &'a uv_configuration::NoSources,
