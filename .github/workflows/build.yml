@@ -59,8 +59,8 @@ jobs:
       - name: Install Rust Toolchain
         run: |
           rustup toolchain install stable \
-          --profile minimal --no-self-update \
-          --target "${{ matrix.target }}"
+            --profile minimal --no-self-update \
+            --target "${{ matrix.target }}"
 
       - name: Install musl tools
         if: endsWith(matrix.target, 'musl')
