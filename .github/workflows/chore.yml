@@ -1,6 +1,6 @@
 name: Chore
 on:
-  pull_request:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] safe and needed for PRs from forks
     branches: [main]
     types: [opened, reopened, edited, synchronize]
 
