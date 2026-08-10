@@ -58,3 +58,10 @@ repos:
         entry: pixi run -e lint shellcheck
         language: system
         types: [shell]
+      # zizmor
+      - id: zizmor
+        name: zizmor
+        entry: pixi run zizmor --min-severity high --fix --offline .
+        language: system
+        types: [yaml]
+        pass_filenames: false
