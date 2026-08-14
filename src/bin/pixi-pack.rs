@@ -7,10 +7,7 @@ use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 
 use anyhow::Result;
-use pixi_pack::{
-    Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
-    PixiPackMetadata, pack,
-};
+use pixi_pack::{Config, OutputMode, PackOptions, PixiPackMetadata, pack};
 use rattler_lock::UrlOrPath;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
@@ -27,8 +24,8 @@ struct Cli {
     #[arg(short, long, default_value = "default")]
     environment: String,
 
-    /// Platform to pack: a conda subdir (e.g. `linux-64`) or the name of a
-    /// platform defined in the lockfile (e.g. `jetson`)
+    /// Platform to pack: a conda subdir (e.g. `linux-64`) or a platform name
+    /// from the lockfile (e.g. `jetson`)
     #[arg(short, long, default_value = Platform::current().as_str())]
     platform: String,
 
@@ -102,20 +99,6 @@ fn define_output_mode(create_executable: bool, directory_only: bool) -> OutputMo
     }
 }
 
-fn default_output_file(platform: Platform, mode: OutputMode) -> PathBuf {
-    match mode {
-        OutputMode::Archive => cwd().join("environment.tar"),
-        OutputMode::CreateExecutable => {
-            if platform.is_windows() {
-                cwd().join("environment.ps1")
-            } else {
-                cwd().join("environment.sh")
-            }
-        }
-        OutputMode::DirectoryOnly => cwd().join("environment"),
-    }
-}
-
 /* -------------------------------------------- MAIN ------------------------------------------- */
 
 /// The main entrypoint for the pixi-pack CLI.
@@ -155,15 +138,24 @@ async fn main() -> Result<()> {
         None => {
             let output_mode = define_output_mode(create_executable, directory_only);
 
-            // Resolve the platform to a concrete conda subdir: either it is
-            // one already (e.g. `linux-64`), or it is the name of a platform
-            // defined in the lockfile (e.g. `jetson`).
-            let subdir = platform.parse::<Platform>().or_else(|_| {
-                pixi_pack::resolve_platform(&manifest_path, &environment, &platform)
-            })?;
-
-            let output_file =
-                output_file.unwrap_or_else(|| default_output_file(subdir, output_mode));
+            let output_file = match output_file {
+                Some(file) => file,
+                None => match output_mode {
+                    OutputMode::Archive => cwd().join("environment.tar"),
+                    OutputMode::DirectoryOnly => cwd().join("environment"),
+                    OutputMode::CreateExecutable => {
+                        // A named platform can point at any subdir, so ask the
+                        // lockfile before picking `.ps1` or `.sh`.
+                        let subdir =
+                            pixi_pack::resolve_platform(&manifest_path, &environment, &platform)?;
+                        if subdir.is_windows() {
+                            cwd().join("environment.ps1")
+                        } else {
+                            cwd().join("environment.sh")
+                        }
+                    }
+                },
+            };
 
             let config = if let Some(config_path) = config {
                 let config = Config::load_from_files(vec![&config_path.clone()])
@@ -179,11 +171,7 @@ async fn main() -> Result<()> {
                 auth_file,
                 output_file,
                 manifest_path,
-                metadata: PixiPackMetadata {
-                    version: DEFAULT_PIXI_PACK_VERSION.to_string(),
-                    pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-                    platform: subdir,
-                },
+                metadata: PixiPackMetadata::default(),
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
                 output_mode,

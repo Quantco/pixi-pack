@@ -1,7 +1,7 @@
 [project]
 name = "named-platforms"
 channels = ["conda-forge"]
-# Named platforms: packs can be selected by name, e.g. `pixi-pack --platform jetson`.
+# Named platforms: pack them by name, e.g. `pixi-pack --platform jetson`.
 platforms = [
   { name = "workstation", platform = "linux-64" },
   { name = "jetson", platform = "linux-aarch64", cuda = "13" },

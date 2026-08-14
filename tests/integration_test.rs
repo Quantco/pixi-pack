@@ -585,13 +585,13 @@ async fn test_named_platform_pack(
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
 
-    // The metadata records the concrete conda subdir the pack was created for.
+    // The pack records the real conda subdir, not the platform name.
     let metadata: PixiPackMetadata =
         serde_json::from_str(&fs::read_to_string(dir_path.join("pixi-pack.json")).unwrap())
             .unwrap();
     assert_eq!(metadata.platform, expected_subdir);
 
-    // The packages of the named platform are in the pack.
+    // And it contains the packages that belong to the named platform.
     let openssl_package = match expected_subdir {
         Platform::LinuxAarch64 => "openssl-3.3.1-h68df207_0.conda",
         Platform::Linux64 => "openssl-3.3.1-h4ab18f5_0.conda",
