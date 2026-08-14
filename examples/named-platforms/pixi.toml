@@ -1,0 +1,19 @@
+[project]
+name = "named-platforms"
+channels = ["conda-forge"]
+# Named platforms: packs can be selected by name, e.g. `pixi-pack --platform jetson`.
+platforms = [
+  { name = "workstation", platform = "linux-64" },
+  { name = "jetson", platform = "linux-aarch64", cuda = "13" },
+  { name = "jetson-cuda12", platform = "linux-aarch64", cuda = "12" },
+  "osx-arm64",
+]
+
+[tasks]
+
+[dependencies]
+# specifically pin this version as we are hardcoding it in the tests
+openssl = { version = "3.3.1", build = "*_0" }
+
+[tool.update]
+autoupdate-schedule = "never"

@@ -27,9 +27,10 @@ struct Cli {
     #[arg(short, long, default_value = "default")]
     environment: String,
 
-    /// Platform to pack
+    /// Platform to pack: a conda subdir (e.g. `linux-64`) or the name of a
+    /// platform defined in the lockfile (e.g. `jetson`)
     #[arg(short, long, default_value = Platform::current().as_str())]
-    platform: Platform,
+    platform: String,
 
     /// Authentication file for fetching packages
     #[arg(long)]
@@ -153,8 +154,16 @@ async fn main() -> Result<()> {
         }
         None => {
             let output_mode = define_output_mode(create_executable, directory_only);
+
+            // Resolve the platform to a concrete conda subdir: either it is
+            // one already (e.g. `linux-64`), or it is the name of a platform
+            // defined in the lockfile (e.g. `jetson`).
+            let subdir = platform.parse::<Platform>().or_else(|_| {
+                pixi_pack::resolve_platform(&manifest_path, &environment, &platform)
+            })?;
+
             let output_file =
-                output_file.unwrap_or_else(|| default_output_file(platform, output_mode));
+                output_file.unwrap_or_else(|| default_output_file(subdir, output_mode));
 
             let config = if let Some(config_path) = config {
                 let config = Config::load_from_files(vec![&config_path.clone()])
@@ -173,7 +182,7 @@ async fn main() -> Result<()> {
                 metadata: PixiPackMetadata {
                     version: DEFAULT_PIXI_PACK_VERSION.to_string(),
                     pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-                    platform,
+                    platform: subdir,
                 },
                 injected_packages: inject,
                 ignore_pypi_non_wheel,

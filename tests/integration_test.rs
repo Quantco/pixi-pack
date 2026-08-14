@@ -62,7 +62,7 @@ fn options(
     Options {
         pack_options: PackOptions {
             environment,
-            platform,
+            platform: platform.to_string(),
             auth_file,
             output_file: pack_file.clone(),
             manifest_path,
@@ -318,7 +318,7 @@ async fn test_includes_repodata_patches(
     #[with(PathBuf::from("examples/repodata-patches/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.platform = Platform::Win64;
+    pack_options.platform = Platform::Win64.to_string();
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
@@ -562,9 +562,68 @@ async fn test_no_timestamp(
     #[with(PathBuf::from("examples/no-timestamp/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.platform = Platform::Osx64;
+    pack_options.platform = Platform::Osx64.to_string();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok());
+}
+
+#[rstest]
+#[case::by_name("jetson", Platform::LinuxAarch64)]
+#[case::by_subdir_fallback("linux-64", Platform::Linux64)]
+#[tokio::test]
+async fn test_named_platform_pack(
+    #[case] platform: &str,
+    #[case] expected_subdir: Platform,
+    #[with(PathBuf::from("examples/named-platforms/pixi.toml"))] options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.platform = platform.to_string();
+    pack_options.output_mode = OutputMode::DirectoryOnly;
+    let dir_path = options.output_dir.path().join("environment");
+    pack_options.output_file = dir_path.clone();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    // The metadata records the concrete conda subdir the pack was created for.
+    let metadata: PixiPackMetadata =
+        serde_json::from_str(&fs::read_to_string(dir_path.join("pixi-pack.json")).unwrap())
+            .unwrap();
+    assert_eq!(metadata.platform, expected_subdir);
+
+    // The packages of the named platform are in the pack.
+    let openssl_package = match expected_subdir {
+        Platform::LinuxAarch64 => "openssl-3.3.1-h68df207_0.conda",
+        Platform::Linux64 => "openssl-3.3.1-h4ab18f5_0.conda",
+        _ => panic!("unexpected subdir"),
+    };
+    assert!(
+        dir_path
+            .join("channel")
+            .join(expected_subdir.as_str())
+            .join(openssl_package)
+            .is_file()
+    );
+}
+
+#[rstest]
+#[case::ambiguous_subdir(
+    "linux-aarch64",
+    "platform linux-aarch64 is ambiguous, use one of the platform names from the lockfile instead: jetson, jetson-cuda12"
+)]
+#[case::unknown_name("does-not-exist", "platform not found in lockfile: does-not-exist")]
+#[tokio::test]
+async fn test_named_platform_pack_failure(
+    #[case] platform: &str,
+    #[case] expected_error: &str,
+    #[with(PathBuf::from("examples/named-platforms/pixi.toml"))] options: Options,
+) {
+    let mut pack_options = options.pack_options;
+    pack_options.platform = platform.to_string();
+
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_err());
+    assert_eq!(pack_result.err().unwrap().to_string(), expected_error);
 }
 
 #[rstest]

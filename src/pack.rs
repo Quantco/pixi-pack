@@ -88,7 +88,9 @@ pub enum OutputMode {
 #[derive(Debug, Clone)]
 pub struct PackOptions {
     pub environment: String,
-    pub platform: Platform,
+    /// The platform to pack, either a conda subdir (e.g. `linux-64`) or the
+    /// name of a platform defined in the lockfile (e.g. `jetson`).
+    pub platform: String,
     pub auth_file: Option<PathBuf>,
     pub output_file: PathBuf,
     pub manifest_path: PathBuf,
@@ -99,6 +101,51 @@ pub struct PackOptions {
     pub output_mode: OutputMode,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
+}
+
+/// Find a platform in the locked environment, either by its name (e.g.
+/// "jetson" or "linux-64") or, as a fallback, by its conda subdir (e.g.
+/// "linux-aarch64" when the lockfile names that platform "jetson").
+fn find_platform<'lock>(
+    env: &rattler_lock::Environment<'lock>,
+    requested: &str,
+) -> Result<rattler_lock::Platform<'lock>> {
+    if let Some(platform) = env.platforms().find(|p| p.name().as_str() == requested) {
+        return Ok(platform);
+    }
+
+    let subdir_matches: Vec<_> = env
+        .platforms()
+        .filter(|p| p.subdir().as_str() == requested)
+        .collect();
+    match subdir_matches.as_slice() {
+        [platform] => Ok(*platform),
+        [] => Err(anyhow!("platform not found in lockfile: {}", requested)),
+        multiple => {
+            let mut names: Vec<_> = multiple.iter().map(|p| p.name().as_str()).collect();
+            names.sort_unstable();
+            Err(anyhow!(
+                "platform {} is ambiguous, use one of the platform names from the lockfile instead: {}",
+                requested,
+                names.join(", ")
+            ))
+        }
+    }
+}
+
+/// Resolve a platform name or conda subdir against the lockfile belonging to
+/// the given manifest, returning the concrete conda subdir it refers to.
+pub fn resolve_platform(
+    manifest_path: &Path,
+    environment: &str,
+    platform: &str,
+) -> Result<Platform> {
+    let lockfile = load_lockfile(manifest_path)?;
+    let env = lockfile.environment(environment).ok_or(anyhow!(
+        "environment not found in lockfile: {}",
+        environment
+    ))?;
+    Ok(find_platform(&env, platform)?.subdir())
 }
 
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
@@ -222,16 +269,11 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         options.environment
     ))?;
 
-    let platform = env
-        .platforms()
-        .find(|p| p.subdir() == options.platform)
-        .ok_or(anyhow!(
-            "platform not found in lockfile: {}",
-            options.platform.as_str()
-        ))?;
+    let platform = find_platform(&env, &options.platform)?;
+    let subdir = platform.subdir();
     let packages = env.packages(platform).ok_or(anyhow!(
         "platform not found in lockfile: {}",
-        options.platform.as_str()
+        options.platform
     ))?;
 
     let temp_dir = if options.output_mode != OutputMode::DirectoryOnly {
@@ -291,7 +333,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 build_local_package(
                     &canonical_manifest_path,
                     build_temp_dir.path(),
-                    options.platform.as_str(),
+                    subdir.as_str(),
                 )
                 .await?;
                 bar.finish_with_message(format!(
@@ -510,7 +552,13 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
     let metadata_path = output_folder.join(PIXI_PACK_METADATA_PATH);
-    let metadata = serde_json::to_string_pretty(&options.metadata)?;
+    // Record the concrete conda subdir; the requested platform may have been a
+    // lockfile-defined platform name (e.g. `jetson`).
+    let metadata = PixiPackMetadata {
+        platform: subdir,
+        ..options.metadata.clone()
+    };
+    let metadata = serde_json::to_string_pretty(&metadata)?;
     fs::write(metadata_path, metadata.as_bytes()).await?;
 
     // Create environment file.
@@ -530,7 +578,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             &options.output_file,
             options.output_mode == OutputMode::CreateExecutable,
             options.pixi_unpack_source,
-            options.platform,
+            subdir,
         )
         .await
         .map_err(|e| anyhow!("could not archive directory: {}", e))?;
