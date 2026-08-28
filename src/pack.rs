@@ -123,17 +123,39 @@ fn find_platform<'lock>(
         .collect();
     match subdir_matches.as_slice() {
         [platform] => Ok(*platform),
-        [] => Err(anyhow!("platform not found in lockfile: {}", requested)),
+        [] => Err(anyhow!(
+            "platform not found in lockfile: {}\nValid values for --platform: {}",
+            requested,
+            platform_choices(env)
+        )),
         multiple => {
             let mut names: Vec<_> = multiple.iter().map(|p| p.name().as_str()).collect();
             names.sort_unstable();
             Err(anyhow!(
-                "platform {} is ambiguous, use one of the platform names from the lockfile instead: {}",
+                "platform {} is ambiguous, use one of the platform names from the lockfile instead: {}\nValid values for --platform: {}",
                 requested,
-                names.join(", ")
+                names.join(", "),
+                platform_choices(env)
             ))
         }
     }
+}
+
+fn platform_choices(env: &rattler_lock::Environment<'_>) -> String {
+    let mut choices: Vec<_> = env
+        .platforms()
+        .map(|platform| {
+            let name = platform.name().as_str();
+            let subdir = platform.subdir().as_str();
+            if name == subdir {
+                name.to_string()
+            } else {
+                format!("{} ({})", name, subdir)
+            }
+        })
+        .collect();
+    choices.sort_unstable();
+    choices.join(", ")
 }
 
 /// Find an environment in the lockfile by name.

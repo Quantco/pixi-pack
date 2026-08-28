@@ -609,9 +609,12 @@ async fn test_named_platform_pack(
 #[rstest]
 #[case::ambiguous_subdir(
     "linux-aarch64",
-    "platform linux-aarch64 is ambiguous, use one of the platform names from the lockfile instead: jetson, jetson-cuda12"
+    "platform linux-aarch64 is ambiguous, use one of the platform names from the lockfile instead: jetson, jetson-cuda12\nValid values for --platform: jetson (linux-aarch64), jetson-cuda12 (linux-aarch64), osx-arm64, workstation (linux-64)"
 )]
-#[case::unknown_name("does-not-exist", "platform not found in lockfile: does-not-exist")]
+#[case::unknown_name(
+    "does-not-exist",
+    "platform not found in lockfile: does-not-exist\nValid values for --platform: jetson (linux-aarch64), jetson-cuda12 (linux-aarch64), osx-arm64, workstation (linux-64)"
+)]
 #[tokio::test]
 async fn test_named_platform_pack_failure(
     #[case] platform: &str,
