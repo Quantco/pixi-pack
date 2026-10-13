@@ -4,8 +4,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    reviewers:
-      - quantco/ci
     groups:
       gh-actions:
         patterns:

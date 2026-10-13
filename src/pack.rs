@@ -88,10 +88,14 @@ pub enum OutputMode {
 #[derive(Debug, Clone)]
 pub struct PackOptions {
     pub environment: String,
-    pub platform: Platform,
+    /// Platform to pack: a conda subdir like `linux-64`, or a platform name
+    /// from the lockfile like `jetson`.
+    pub platform: String,
     pub auth_file: Option<PathBuf>,
     pub output_file: PathBuf,
     pub manifest_path: PathBuf,
+    /// Metadata to write into the pack. `pack` fills in the resolved platform
+    /// itself, so the `platform` field here is ignored.
     pub metadata: PixiPackMetadata,
     pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
@@ -99,6 +103,82 @@ pub struct PackOptions {
     pub output_mode: OutputMode,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
+}
+
+/// Find the requested platform in the locked environment.
+/// A platform name from the lockfile like `jetson` wins over a conda subdir,
+/// a plain subdir like `linux-aarch64` only works when a single named
+/// platform uses it.
+fn find_platform<'lock>(
+    env: &rattler_lock::Environment<'lock>,
+    requested: &str,
+) -> Result<rattler_lock::Platform<'lock>> {
+    if let Some(platform) = env.platforms().find(|p| p.name().as_str() == requested) {
+        return Ok(platform);
+    }
+
+    let subdir_matches: Vec<_> = env
+        .platforms()
+        .filter(|p| p.subdir().as_str() == requested)
+        .collect();
+    match subdir_matches.as_slice() {
+        [platform] => Ok(*platform),
+        [] => Err(anyhow!(
+            "platform not found in lockfile: {}\nValid values for --platform: {}",
+            requested,
+            platform_choices(env)
+        )),
+        multiple => {
+            let mut names: Vec<_> = multiple.iter().map(|p| p.name().as_str()).collect();
+            names.sort_unstable();
+            Err(anyhow!(
+                "platform {} is ambiguous, use one of the platform names from the lockfile instead: {}\nValid values for --platform: {}",
+                requested,
+                names.join(", "),
+                platform_choices(env)
+            ))
+        }
+    }
+}
+
+fn platform_choices(env: &rattler_lock::Environment<'_>) -> String {
+    let mut choices: Vec<_> = env
+        .platforms()
+        .map(|platform| {
+            let name = platform.name().as_str();
+            let subdir = platform.subdir().as_str();
+            if name == subdir {
+                name.to_string()
+            } else {
+                format!("{} ({})", name, subdir)
+            }
+        })
+        .collect();
+    choices.sort_unstable();
+    choices.join(", ")
+}
+
+/// Find an environment in the lockfile by name.
+fn find_environment<'lock>(
+    lockfile: &'lock LockFile,
+    environment: &str,
+) -> Result<rattler_lock::Environment<'lock>> {
+    lockfile.environment(environment).ok_or(anyhow!(
+        "environment not found in lockfile: {}",
+        environment
+    ))
+}
+
+/// Resolve a platform name or conda subdir to the concrete subdir it points
+/// to in the lockfile of the given manifest.
+pub fn resolve_platform(
+    manifest_path: &Path,
+    environment: &str,
+    platform: &str,
+) -> Result<Platform> {
+    let lockfile = load_lockfile(manifest_path)?;
+    let env = find_environment(&lockfile, environment)?;
+    Ok(find_platform(&env, platform)?.subdir())
 }
 
 fn load_lockfile(manifest_path: &Path) -> Result<LockFile> {
@@ -217,21 +297,13 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         write_cachedir_tag(cache_dir).await?;
     }
 
-    let env = lockfile.environment(&options.environment).ok_or(anyhow!(
-        "environment not found in lockfile: {}",
-        options.environment
-    ))?;
+    let env = find_environment(&lockfile, &options.environment)?;
 
-    let platform = env
-        .platforms()
-        .find(|p| p.subdir() == options.platform)
-        .ok_or(anyhow!(
-            "platform not found in lockfile: {}",
-            options.platform.as_str()
-        ))?;
+    let platform = find_platform(&env, &options.platform)?;
+    let subdir = platform.subdir();
     let packages = env.packages(platform).ok_or(anyhow!(
         "platform not found in lockfile: {}",
-        options.platform.as_str()
+        options.platform
     ))?;
 
     let temp_dir = if options.output_mode != OutputMode::DirectoryOnly {
@@ -291,7 +363,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                 build_local_package(
                     &canonical_manifest_path,
                     build_temp_dir.path(),
-                    options.platform.as_str(),
+                    subdir.as_str(),
                 )
                 .await?;
                 bar.finish_with_message(format!(
@@ -510,7 +582,13 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
     let metadata_path = output_folder.join(PIXI_PACK_METADATA_PATH);
-    let metadata = serde_json::to_string_pretty(&options.metadata)?;
+    // Always record the real conda subdir here, a platform name like `jetson`
+    // means nothing on the machine that unpacks this.
+    let metadata = PixiPackMetadata {
+        platform: subdir,
+        ..options.metadata
+    };
+    let metadata = serde_json::to_string_pretty(&metadata)?;
     fs::write(metadata_path, metadata.as_bytes()).await?;
 
     // Create environment file.
@@ -530,7 +608,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
             &options.output_file,
             options.output_mode == OutputMode::CreateExecutable,
             options.pixi_unpack_source,
-            options.platform,
+            subdir,
         )
         .await
         .map_err(|e| anyhow!("could not archive directory: {}", e))?;
