@@ -1,6 +1,6 @@
 name: Chore
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] safe and needed for PRs from forks
+  pull_request:
     branches: [main]
     types: [opened, reopened, edited, synchronize]
 
@@ -24,7 +24,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Post comment about invalid PR title
-        if: failure()
+        # PRs from forks only get a read-only token
+        if: failure() && github.event.pull_request.head.repo.full_name == github.repository
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
           header: conventional-commit-pr-title
@@ -40,7 +41,7 @@ jobs:
             ```
             </details>
       - name: Delete comment about invalid PR title
-        if: success()
+        if: success() && github.event.pull_request.head.repo.full_name == github.repository
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
           header: conventional-commit-pr-title
@@ -48,6 +49,8 @@ jobs:
 
   assign-labels:
     name: Assign Labels
+    # PRs from forks only get a read-only token
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
