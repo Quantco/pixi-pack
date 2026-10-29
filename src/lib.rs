@@ -1,8 +1,14 @@
+#[cfg(feature = "app")]
+mod app;
 mod build_context;
+mod launch;
 mod pack;
 mod unpack;
 mod util;
 
+#[cfg(feature = "app")]
+pub use app::{AppConfig, AppFormat, AppMacOsConfig, create_app};
+pub use launch::{LAUNCHER_CONFIG_FILE_NAME, LauncherConfig, find_bundled_launcher_config, launch};
 pub use pack::{OutputMode, PackOptions, pack, resolve_platform};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};

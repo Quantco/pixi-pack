@@ -197,6 +197,39 @@ pixi-pack --create-executable --pixi-unpack-source ./pixi-unpack-x86_64-unknown-
 > [!TIP]
 > The produced executable is a simple shell script that contains both the `pixi-unpack` binary as well as the packed environment.
 
+### macOS applications (experimental)
+
+With the `app` cargo feature, `pixi-pack` can turn an environment into a macOS application (`.app`) and disk image (`.dmg`) that users install by drag and drop.
+This requires a macOS host. Describe the application in a TOML file:
+
+```toml
+# app.toml
+name = "Ocean Viewer"
+identifier = "org.example.ocean-viewer"
+version = "1.0.0"
+# executable in the environment to start
+entry-point = "napari"
+icons = ["icon.png"]
+formats = ["dmg"] # "app" and/or "dmg"
+
+[macos]
+minimum-system-version = "11.0"
+signing-identity = "Developer ID Application: Jane Doe (TEAMID)"
+```
+
+```bash
+pixi-pack --create-app app.toml --platform osx-arm64
+```
+
+The application contains `pixi-unpack`, the pack and a small launcher config.
+On first launch, the environment is unpacked into `~/Library/Application Support/<identifier>`; later launches start the entry point right away.
+When a new version of the application is opened, its environment replaces the old one.
+
+If `signing-identity` is set, the application is signed with `codesign`.
+It is notarized if `APPLE_KEYCHAIN_PROFILE`, or `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`, or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH` are set.
+Bundling is done with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager).
+See [`examples/macos-app`](examples/macos-app) for a complete example.
+
 ### Inject additional packages
 
 You can inject additional packages into the environment that are not specified in `pixi.lock` by using the `--inject` flag:

@@ -975,7 +975,7 @@ fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
     Ok(outfile.bytes_written())
 }
 
-async fn download_pixi_unpack_executable(
+pub(crate) async fn download_pixi_unpack_executable(
     pixi_pack_source: Option<UrlOrPath>,
     platform: Platform,
 ) -> Result<Vec<u8>> {

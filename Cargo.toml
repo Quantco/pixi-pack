@@ -25,6 +25,9 @@ rustls = [
   "rattler_networking/rustls",
   "rattler_package_streaming/rustls",
 ]
+# Create application bundles (`pixi-pack --create-app`).
+# cargo-packager only uses TLS to download the create-dmg script, its `native-tls` feature does not build.
+app = ["dep:cargo-packager", "cargo-packager/rustls-tls", "dep:toml"]
 
 [dependencies]
 anyhow = "1.0.102"
@@ -81,6 +84,9 @@ uv-preview = "0.0.63"
 uv-python = "0.0.63"
 uv-types = "0.0.63"
 uv-workspace = "0.0.63"
+cargo-packager = { version = "0.11.8", default-features = false, optional = true }
+dirs = "6.0.0"
+toml = { version = "0.9.12", optional = true }
 
 [dev-dependencies]
 async-std = "1.13.2"
