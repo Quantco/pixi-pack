@@ -331,6 +331,8 @@ mod tests {
         }
     }
 
+    // Flatpaks are only built on Linux, elsewhere paths would be joined with `\`.
+    #[cfg(unix)]
     #[test]
     fn test_launch_script() {
         assert_eq!(
