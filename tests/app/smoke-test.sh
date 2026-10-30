@@ -5,8 +5,9 @@ set -euo pipefail
 
 pixi_pack="$1"
 pixi_launcher="$2"
-# Allow passing the same paths on Windows, where the executables end with `.exe`.
-[ -f "$pixi_launcher" ] || pixi_launcher="$pixi_launcher.exe"
+# Allow passing the same paths on Windows, where the executables end with `.exe`. Git Bash
+# finds `foo.exe` for `-f foo`, but pixi-pack does not.
+if [ -f "$pixi_launcher.exe" ]; then pixi_launcher="$pixi_launcher.exe"; fi
 work="$(mktemp -d)"
 marker="$work/marker.txt"
 identifier="org.example.pixi-pack-smoke-test"
