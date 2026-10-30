@@ -958,7 +958,7 @@ fn open_output_file(target: &Path, ext: Option<&str>) -> Result<CountingWriter> 
     }
 }
 
-fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
+pub(crate) fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
     let mut outfile = open_output_file(archive_target, None).map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",

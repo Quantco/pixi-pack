@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # Create an application from examples/app and check that it starts the entry point.
-# Usage: tests/app/smoke-test.sh <path to pixi-pack> <path to pixi-launcher>
+# Usage: tests/app/smoke-test.sh <path to pixi-pack> <path to pixi-launcher> <path to pixi-unpack>
 set -euo pipefail
 
 pixi_pack="$1"
 pixi_launcher="$2"
+pixi_unpack="$3"
 # Allow passing the same paths on Windows, where the executables end with `.exe`. Git Bash
 # finds `foo.exe` for `-f foo`, but pixi-pack does not.
 if [ -f "$pixi_launcher.exe" ]; then pixi_launcher="$pixi_launcher.exe"; fi
-work="$(mktemp -d)"
+if [ -f "$pixi_unpack.exe" ]; then pixi_unpack="$pixi_unpack.exe"; fi
+if [ "$(uname -s)" = Linux ]; then
+  # The Flatpak sandbox has its own /tmp, but can write to the home directory.
+  work="$(mktemp -d -p "$HOME")"
+else
+  work="$(mktemp -d)"
+fi
 marker="$work/marker.txt"
 identifier="org.example.pixi-pack-smoke-test"
 
@@ -20,11 +27,13 @@ sed -e "s/^identifier = .*/identifier = \"$identifier\"/" \
 cleanup() {
   rm -f examples/app/smoke-test.toml
   if [ -n "${mount:-}" ]; then hdiutil detach "$mount" >/dev/null || true; fi
+  if [ -n "${flatpak:-}" ]; then flatpak uninstall --user --noninteractive "$identifier" || true; fi
+  if [ "$(uname -s)" = Linux ]; then rm -rf "$work"; fi
 }
 trap cleanup EXIT
 
 "$pixi_pack" --create-app examples/app/smoke-test.toml --pixi-launcher-source "$pixi_launcher" \
-  -o "$work/out" examples/app/pixi.toml
+  --pixi-unpack-source "$pixi_unpack" -o "$work/out" examples/app/pixi.toml
 ls -l "$work/out"
 
 # Dialogs would block forever in CI.
@@ -39,14 +48,11 @@ Darwin)
   run() { "$mount/IDLE Demo.app/Contents/MacOS/IDLE Demo" "$marker"; }
   ;;
 Linux)
-  data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/$identifier"
-  # Test the AppImage first, then the Debian package, extracted instead of installed.
-  appimage=("$work"/out/*.AppImage)
-  chmod +x "${appimage[0]}"
-  APPIMAGE_EXTRACT_AND_RUN=1 "${appimage[0]}" "$marker"
-  deb=("$work"/out/*.deb)
-  dpkg-deb -x "${deb[0]}" "$work/deb"
-  run() { "$work/deb/usr/bin/idle-demo" "$marker"; }
+  # The environment is unpacked while building the Flatpak, there is no launcher.
+  data_dir=""
+  flatpak=("$work"/out/*.flatpak)
+  flatpak install --user --noninteractive "${flatpak[0]}"
+  run() { flatpak run "$identifier" "$marker"; }
   ;;
 MINGW* | MSYS* | CYGWIN*)
   data_dir="$LOCALAPPDATA/$identifier"
@@ -66,16 +72,13 @@ check() {
   done
   if [ ! -s "$marker" ]; then
     echo "entry point did not run, launcher log:"
-    cat "$data_dir/launcher.log" || true
+    if [ -n "$data_dir" ]; then cat "$data_dir/launcher.log" || true; fi
     exit 1
   fi
   echo "entry point ran in the activated environment $(cat "$marker")"
   rm "$marker"
 }
 
-if [ -n "${appimage:-}" ]; then
-  check
-fi
 # First launch unpacks, second launch reuses the environment.
 run
 check

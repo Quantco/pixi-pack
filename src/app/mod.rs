@@ -1,8 +1,11 @@
-//! Creating applications (macOS `.app`/`.dmg`, Windows installers, Linux AppImages and
-//! Debian packages) from a pack.
+//! Creating applications (macOS `.app`/`.dmg`, Windows installers, Linux Flatpaks) from a pack.
 //!
-//! The application contains the `pixi-launcher` executable as its main binary, the pack and a
-//! [`LauncherConfig`]. Unpacking happens on first launch, see [`crate::launch`].
+//! On macOS and Windows, the application contains the `pixi-launcher` executable as its main
+//! binary, the pack and a [`LauncherConfig`]. Unpacking happens on first launch, see
+//! [`crate::launch`]. Flatpaks are unpacked at build time, see [`flatpak`].
+
+mod flatpak;
+mod menu;
 
 use std::path::{Path, PathBuf};
 
@@ -16,8 +19,10 @@ use rattler_digest::{Sha256, compute_file_digest};
 use rattler_lock::UrlOrPath;
 use serde::Deserialize;
 
+pub use self::flatpak::AppFlatpakConfig;
 use crate::{
-    LAUNCHER_CONFIG_FILE_NAME, LauncherConfig, PackOptions, pack::download_release_executable,
+    LAUNCHER_CONFIG_FILE_NAME, LauncherConfig, PackOptions,
+    pack::{create_tarball, download_release_executable},
     resolve_platform,
 };
 
@@ -25,30 +30,73 @@ const PACK_FILE_NAME: &str = "pack.tar";
 const AD_HOC_SIGNING_IDENTITY: &str = "-";
 
 /// Application settings, read from a TOML file passed to `--create-app`.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+///
+/// The application is either described by the menuinst shortcut (`Menu/*.json`) of a package in
+/// the environment (`menu`), or by `name`, `identifier`, `version` and `entry-point`. Settings
+/// given here override the ones of the shortcut.
+#[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AppConfig {
+    /// Package whose menuinst shortcut describes the application, e.g. `napari`.
+    pub menu: Option<String>,
+    /// Name of the shortcut to use, if the package has several.
+    pub menu_item: Option<String>,
     /// Human readable name, e.g. `Ocean Viewer`.
-    pub name: String,
-    /// Reverse-DNS identifier, e.g. `org.example.ocean-viewer`.
-    pub identifier: String,
-    pub version: String,
-    /// Executable in the environment to start, e.g. `napari`.
-    pub entry_point: String,
+    pub name: Option<String>,
+    /// Reverse-DNS identifier, e.g. `org.example.ocean-viewer`. Defaults to the macOS
+    /// `CFBundleIdentifier` of the shortcut.
+    pub identifier: Option<String>,
+    /// Defaults to the version of the `menu` package.
+    pub version: Option<String>,
+    pub description: Option<String>,
+    /// Executable in the environment to start, e.g. `napari`, instead of the shortcut's command.
+    pub entry_point: Option<String>,
     /// Arguments always passed to the entry point.
     #[serde(default)]
     pub args: Vec<String>,
-    /// Icon files (`.png`, `.icns` or `.ico`), relative to the config file.
+    /// Icon files (`.png`, `.icns` or `.ico`), relative to the config file. The shortcut's icon
+    /// is used if none matches the platform.
     #[serde(default)]
     pub icons: Vec<PathBuf>,
     /// Which formats to create. Only the formats for the packed platform are created, the
-    /// default is `dmg` on macOS, `nsis` on Windows and `appimage` on Linux.
+    /// default is `dmg` on macOS, `nsis` on Windows and `flatpak` on Linux.
     #[serde(default)]
     pub formats: Vec<AppFormat>,
     #[serde(default)]
     pub macos: AppMacOsConfig,
     #[serde(default)]
     pub windows: AppWindowsConfig,
+    #[serde(default)]
+    pub flatpak: AppFlatpakConfig,
+}
+
+/// The application to create, from the [`AppConfig`] and the shortcut it refers to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct App {
+    name: String,
+    identifier: String,
+    version: String,
+    description: Option<String>,
+    /// See [`LauncherConfig::command`].
+    command: Vec<String>,
+    icons: Vec<PathBuf>,
+    /// Linux desktop entry `Categories`.
+    categories: Vec<String>,
+    /// Linux desktop entry `StartupWMClass`.
+    startup_wm_class: Option<String>,
+    /// Linux desktop entry `MimeType`.
+    mime_types: Vec<String>,
+    /// Linux desktop entry field code like `%F`, for the files to open.
+    field_code: Option<String>,
+}
+
+impl App {
+    fn icon_png(&self) -> Option<&Path> {
+        self.icons
+            .iter()
+            .find(|i| i.extension().is_some_and(|e| e == "png"))
+            .map(PathBuf::as_path)
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,11 +108,8 @@ pub enum AppFormat {
     Dmg,
     /// Windows installer.
     Nsis,
-    /// Linux AppImage.
-    #[serde(rename = "appimage")]
-    AppImage,
-    /// Debian package.
-    Deb,
+    /// Linux Flatpak bundle.
+    Flatpak,
 }
 
 impl AppFormat {
@@ -72,7 +117,7 @@ impl AppFormat {
         match self {
             AppFormat::App | AppFormat::Dmg => platform.is_osx(),
             AppFormat::Nsis => platform.is_windows(),
-            AppFormat::AppImage | AppFormat::Deb => platform.is_linux(),
+            AppFormat::Flatpak => platform.is_linux(),
         }
     }
 
@@ -82,7 +127,7 @@ impl AppFormat {
         } else if platform.is_windows() {
             Ok(AppFormat::Nsis)
         } else if platform.is_linux() {
-            Ok(AppFormat::AppImage)
+            Ok(AppFormat::Flatpak)
         } else {
             bail!("creating applications is not supported for {}", platform)
         }
@@ -90,23 +135,16 @@ impl AppFormat {
 
     /// Check that the format can be created on the current host.
     fn check_host(self) -> Result<()> {
-        let supported = match self {
-            AppFormat::App | AppFormat::Dmg => cfg!(target_os = "macos"),
-            // Downloaded automatically on Windows, elsewhere it has to be installed.
-            AppFormat::Nsis => cfg!(windows) || which("makensis"),
-            AppFormat::AppImage | AppFormat::Deb => cfg!(target_os = "linux"),
-        };
-        if supported {
-            return Ok(());
-        }
         match self {
-            AppFormat::App | AppFormat::Dmg => bail!("{:?} can only be created on macOS", self),
-            AppFormat::Nsis => bail!(
+            AppFormat::App | AppFormat::Dmg if !cfg!(target_os = "macos") => {
+                bail!("{:?} can only be created on macOS", self)
+            }
+            // Downloaded automatically on Windows, elsewhere it has to be installed.
+            AppFormat::Nsis if !cfg!(windows) && !which("makensis") => bail!(
                 "creating Windows installers on this platform requires `makensis` on the PATH, e.g. from the conda-forge `nsis` package"
             ),
-            AppFormat::AppImage | AppFormat::Deb => {
-                bail!("{:?} can only be created on Linux", self)
-            }
+            AppFormat::Flatpak => flatpak::check_host(),
+            _ => Ok(()),
         }
     }
 
@@ -115,8 +153,7 @@ impl AppFormat {
             AppFormat::App => PackageFormat::App,
             AppFormat::Dmg => PackageFormat::Dmg,
             AppFormat::Nsis => PackageFormat::Nsis,
-            AppFormat::AppImage => PackageFormat::AppImage,
-            AppFormat::Deb => PackageFormat::Deb,
+            AppFormat::Flatpak => unreachable!("Flatpaks are not created with cargo-packager"),
         }
     }
 }
@@ -189,15 +226,88 @@ impl AppConfig {
         }
         Ok(formats)
     }
+
+    /// Combine the config with the shortcut of the `menu` package, if any.
+    fn resolve(&self, pack_dir: &Path, platform: Platform, extract_dir: &Path) -> Result<App> {
+        let menu = self
+            .menu
+            .as_deref()
+            .map(|package| {
+                menu::load(
+                    pack_dir,
+                    platform,
+                    package,
+                    self.menu_item.as_deref(),
+                    extract_dir,
+                )
+            })
+            .transpose()?;
+        let missing = |field: &str| {
+            anyhow!(
+                "the app config needs `{field}`, or `menu` with a package that has a menuinst shortcut"
+            )
+        };
+        let menu_field = |f: fn(&menu::MenuApp) -> Option<String>| menu.as_ref().and_then(f);
+
+        let command = match (&self.entry_point, &menu) {
+            (Some(entry_point), _) => std::iter::once(entry_point.clone())
+                .chain(self.args.iter().cloned())
+                .collect(),
+            (None, Some(menu)) if self.args.is_empty() => menu.command.clone(),
+            (None, Some(_)) => bail!("`args` can only be used with `entry-point`"),
+            (None, None) => return Err(missing("entry-point")),
+        };
+        let mut icons = self.icons.clone();
+        if let Some(icon) = menu.as_ref().and_then(|m| m.icon.clone()) {
+            let ext = icon.extension();
+            if !icons.iter().any(|i| i.extension() == ext) {
+                icons.push(icon);
+            }
+        }
+        Ok(App {
+            name: self
+                .name
+                .clone()
+                .or_else(|| menu_field(|m| Some(m.name.clone())))
+                .ok_or_else(|| missing("name"))?,
+            identifier: self
+                .identifier
+                .clone()
+                .or_else(|| menu_field(|m| m.identifier.clone()))
+                .ok_or_else(|| missing("identifier"))?,
+            version: self
+                .version
+                .clone()
+                .or_else(|| menu_field(|m| Some(m.version.clone())))
+                .ok_or_else(|| missing("version"))?,
+            description: self
+                .description
+                .clone()
+                .or_else(|| menu_field(|m| Some(m.description.clone()))),
+            command,
+            icons,
+            categories: menu
+                .as_ref()
+                .map(|m| m.categories.clone())
+                .unwrap_or_default(),
+            startup_wm_class: menu.as_ref().and_then(|m| m.startup_wm_class.clone()),
+            mime_types: menu
+                .as_ref()
+                .map(|m| m.mime_types.clone())
+                .unwrap_or_default(),
+            field_code: menu.as_ref().and_then(|m| m.field_code.clone()),
+        })
+    }
 }
 
 /// Pack the environment and bundle it as an application in `out_dir`.
 /// `launcher_source` is a path or URL to the `pixi-launcher` executable, by default it is
-/// downloaded from the pixi-pack release.
+/// downloaded from the pixi-pack release. Flatpaks use `pixi-unpack` instead, from
+/// `pack_options.pixi_unpack_source`.
 /// Returns the paths of the created files.
 pub async fn create_app(
     pack_options: PackOptions,
-    app: AppConfig,
+    config: AppConfig,
     launcher_source: Option<UrlOrPath>,
     out_dir: &Path,
 ) -> Result<Vec<PathBuf>> {
@@ -206,32 +316,84 @@ pub async fn create_app(
         &pack_options.environment,
         &pack_options.platform,
     )?;
-    let formats = app.formats_for(platform)?;
+    let formats = config.formats_for(platform)?;
     for format in &formats {
         format.check_host()?;
-    }
-    if formats.contains(&AppFormat::AppImage)
-        && !app
-            .icons
-            .iter()
-            .any(|i| i.extension().is_some_and(|e| e == "png"))
-    {
-        bail!("an AppImage requires a `.png` icon");
     }
 
     let staging = tempfile::tempdir().context("could not create temporary directory")?;
     let staging = staging.path();
 
-    let pack_file = staging.join(PACK_FILE_NAME);
+    let pack_dir = staging.join("pack");
+    let pixi_unpack_source = pack_options.pixi_unpack_source.clone();
     crate::pack(PackOptions {
-        output_file: pack_file.clone(),
-        output_mode: crate::OutputMode::Archive,
+        output_file: pack_dir.clone(),
+        output_mode: crate::OutputMode::DirectoryOnly,
         ..pack_options
     })
     .await?;
+    let app = config.resolve(&pack_dir, platform, &staging.join("menu-package"))?;
 
+    eprintln!("📦 Creating application for {}", app.name);
+    let paths = if formats.contains(&AppFormat::Flatpak) {
+        let pixi_unpack =
+            download_release_executable("pixi-unpack", pixi_unpack_source, platform).await?;
+        let flatpak = tokio::task::spawn_blocking({
+            let (app, pack_dir, staging, out_dir) = (
+                app.clone(),
+                pack_dir.clone(),
+                staging.to_path_buf(),
+                out_dir.to_path_buf(),
+            );
+            move || {
+                flatpak::create(
+                    &app,
+                    &config.flatpak,
+                    &pack_dir,
+                    &pixi_unpack,
+                    platform,
+                    &staging,
+                    &out_dir,
+                )
+            }
+        })
+        .await??;
+        vec![flatpak]
+    } else {
+        let pack_file = staging.join(PACK_FILE_NAME);
+        create_tarball(&pack_dir, &pack_file)?;
+        create_packaged_app(
+            &app,
+            &config,
+            &formats,
+            platform,
+            &pack_file,
+            launcher_source,
+            staging,
+            out_dir,
+        )
+        .await?
+    };
+    for path in &paths {
+        eprintln!("📦 Created {}", path.display());
+    }
+    Ok(paths)
+}
+
+/// Create the macOS and Windows formats with cargo-packager.
+#[allow(clippy::too_many_arguments)]
+async fn create_packaged_app(
+    app: &App,
+    config: &AppConfig,
+    formats: &[AppFormat],
+    platform: Platform,
+    pack_file: &Path,
+    launcher_source: Option<UrlOrPath>,
+    staging: &Path,
+    out_dir: &Path,
+) -> Result<Vec<PathBuf>> {
     let launcher_config_file = staging.join(LAUNCHER_CONFIG_FILE_NAME);
-    write_launcher_config(&app, &pack_file, &launcher_config_file)?;
+    write_launcher_config(app, pack_file, &launcher_config_file)?;
 
     let executable_name = executable_name(&app.name, platform);
     let executable =
@@ -254,37 +416,38 @@ pub async fn create_app(
     // launcher is signed by the linker but the bundle is not. An ad-hoc signature (`-`) lets
     // users open it anyway in the system settings.
     let mut macos = MacOsConfig::new().signing_identity(
-        app.macos
+        config
+            .macos
             .signing_identity
             .as_deref()
             .unwrap_or(AD_HOC_SIGNING_IDENTITY),
     );
-    if let Some(version) = &app.macos.minimum_system_version {
+    if let Some(version) = &config.macos.minimum_system_version {
         macos = macos.minimum_system_version(version);
     }
     // Lets the uninstaller remove the unpacked environment, see `LauncherConfig::app_data_dir`.
     let mut nsis = NsisConfig::new().appdata_paths(["$LOCALAPPDATA\\$IDENTIFIER"]);
     if platform.is_windows() {
         let icon = windows_icon(&app.icons, staging)?;
-        brand_windows_executable(&main_binary_file, &app, icon.as_deref())?;
+        brand_windows_executable(&main_binary_file, app, icon.as_deref())?;
         if let Some(icon) = icon {
             nsis = nsis.installer_icon(icon);
         }
     }
-    let windows = windows_config(&app.windows);
+    let windows = windows_config(&config.windows);
 
     let resource = |src: &Path, target: &str| Resource::Mapped {
         src: src.to_string_lossy().into_owned(),
         target: PathBuf::from(target),
     };
-    let config = ConfigBuilder::new()
+    let mut packager_config = ConfigBuilder::new()
         .product_name(&app.name)
         .identifier(&app.identifier)
         .version(&app.version)
         .target_triple(target_triple(platform)?)
         .binaries([Binary::new(&main_binary).main(true)])
         .resources([
-            resource(&pack_file, PACK_FILE_NAME),
+            resource(pack_file, PACK_FILE_NAME),
             resource(&launcher_config_file, LAUNCHER_CONFIG_FILE_NAME),
         ])
         .icons(app.icons.iter().map(|i| i.to_string_lossy().into_owned()))
@@ -292,12 +455,13 @@ pub async fn create_app(
         .out_dir(out_dir)
         .macos(macos)
         .windows(windows)
-        .nsis(nsis)
-        .config()
-        .clone();
+        .nsis(nsis);
+    if let Some(description) = &app.description {
+        packager_config = packager_config.description(description);
+    }
+    let packager_config = packager_config.config().clone();
 
-    eprintln!("📦 Creating application for {}", app.name);
-    let outputs = tokio::task::spawn_blocking(move || cargo_packager::package(&config))
+    let outputs = tokio::task::spawn_blocking(move || cargo_packager::package(&packager_config))
         .await?
         .map_err(|e| anyhow!("could not create application: {}", e))?;
 
@@ -314,13 +478,10 @@ pub async fn create_app(
             paths.extend(output.paths);
         }
     }
-    for path in &paths {
-        eprintln!("📦 Created {}", path.display());
-    }
     Ok(paths)
 }
 
-fn write_launcher_config(app: &AppConfig, pack_file: &Path, destination: &Path) -> Result<()> {
+fn write_launcher_config(app: &App, pack_file: &Path, destination: &Path) -> Result<()> {
     let pack_sha256 = compute_file_digest::<Sha256>(pack_file)?
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -329,8 +490,7 @@ fn write_launcher_config(app: &AppConfig, pack_file: &Path, destination: &Path) 
         name: app.name.clone(),
         identifier: app.identifier.clone(),
         version: app.version.clone(),
-        entry_point: app.entry_point.clone(),
-        args: app.args.clone(),
+        command: app.command.clone(),
         pack_file: PathBuf::from(PACK_FILE_NAME),
         pack_sha256,
     };
@@ -380,7 +540,7 @@ fn windows_icon(icons: &[PathBuf], staging: &Path) -> Result<Option<PathBuf>> {
 
 /// Give the launcher the application's icon, used for its shortcuts, and version info, shown e.g.
 /// in the Task Manager and the file properties.
-fn brand_windows_executable(executable: &Path, app: &AppConfig, icon: Option<&Path>) -> Result<()> {
+fn brand_windows_executable(executable: &Path, app: &App, icon: Option<&Path>) -> Result<()> {
     use editpe::{Image, VersionInfo, VersionStringTable, types::VersionU16};
 
     let contents = std::fs::read(executable)?;
@@ -444,8 +604,8 @@ fn target_triple(platform: Platform) -> Result<&'static str> {
 }
 
 /// A file name for the main executable, which shows up e.g. in Activity Monitor or the Task
-/// Manager. cargo-packager strips everything after a `.`. On Linux, it is also the name of the
-/// command and of the Debian package, so it is lowercase without spaces.
+/// Manager. cargo-packager strips everything after a `.`. On Linux, it is the name of the
+/// command in the Flatpak, so it is lowercase without spaces.
 fn executable_name(app_name: &str, platform: Platform) -> String {
     let name: String = app_name
         .chars()
@@ -504,7 +664,7 @@ mod tests {
         );
         assert_eq!(
             config.formats_for(Platform::Linux64).unwrap(),
-            vec![AppFormat::AppImage]
+            vec![AppFormat::Flatpak]
         );
     }
 
@@ -516,7 +676,7 @@ mod tests {
             identifier = "x"
             version = "1"
             entry-point = "x"
-            formats = ["app", "dmg", "nsis", "deb"]
+            formats = ["app", "dmg", "nsis", "flatpak"]
             "#,
         );
         let config = config.unwrap();
@@ -526,7 +686,7 @@ mod tests {
         );
         assert_eq!(
             config.formats_for(Platform::LinuxAarch64).unwrap(),
-            vec![AppFormat::Deb]
+            vec![AppFormat::Flatpak]
         );
         let (_dir, config) = write_config(
             r#"
@@ -538,6 +698,38 @@ mod tests {
             "#,
         );
         assert!(config.unwrap().formats_for(Platform::Win64).is_err());
+    }
+
+    #[test]
+    fn test_resolve_without_menu() {
+        let (_dir, config) = write_config(
+            r#"
+            name = "Ocean Viewer"
+            identifier = "org.example.ocean-viewer"
+            version = "1.0.0"
+            entry-point = "python"
+            args = ["-m", "idlelib"]
+            "#,
+        );
+        let app = config
+            .unwrap()
+            .resolve(Path::new("pack"), Platform::Linux64, Path::new("menu"))
+            .unwrap();
+        assert_eq!(app.command, vec!["python", "-m", "idlelib"]);
+        assert_eq!(app.description, None);
+
+        let (_dir, config) = write_config(
+            r#"
+            name = "Ocean Viewer"
+            version = "1.0.0"
+            entry-point = "python"
+            "#,
+        );
+        let err = config
+            .unwrap()
+            .resolve(Path::new("pack"), Platform::Linux64, Path::new("menu"))
+            .unwrap_err();
+        assert!(err.to_string().contains("`identifier`"));
     }
 
     #[test]

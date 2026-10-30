@@ -4873,6 +4873,7 @@ dependencies = [
  "rattler_digest",
  "rattler_index",
  "rattler_lock",
+ "rattler_menuinst",
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_shell",

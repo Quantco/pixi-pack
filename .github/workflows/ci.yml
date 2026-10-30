@@ -92,8 +92,15 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: create-app
+      - name: Install Flatpak
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          # Ubuntu restricts the user namespaces the Flatpak sandbox (bubblewrap) needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Build
         run: cargo build --release --features app --bins --color always
       - name: Create and launch application
         shell: bash
-        run: tests/app/smoke-test.sh target/release/pixi-pack target/release/pixi-launcher
+        run: tests/app/smoke-test.sh target/release/pixi-pack target/release/pixi-launcher target/release/pixi-unpack

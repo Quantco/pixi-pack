@@ -5,7 +5,7 @@ entry-point = "python"
 args = ["-m", "idlelib"]
 icons = ["icon.png"]
 # Only the formats for the packed platform are created.
-formats = ["dmg", "nsis", "appimage", "deb"]
+formats = ["dmg", "nsis", "flatpak"]
 
 [macos]
 minimum-system-version = "11.0"

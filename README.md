@@ -205,20 +205,33 @@ With the `app` cargo feature, `pixi-pack` can turn an environment into an applic
 | -------- | ------------------------------------- | -------------------------------------------------- |
 | macOS    | `dmg` (default), `app`                | macOS                                              |
 | Windows  | `nsis` (default): an `.exe` installer | Windows, or any host with `makensis` on the `PATH` |
-| Linux    | `appimage` (default), `deb`           | Linux                                              |
+| Linux    | `flatpak` (default)                   | Linux with `flatpak` and `flatpak-builder`         |
 
-Describe the application in a TOML file:
+Describe the application in a TOML file.
+If a package in the environment defines a [menuinst](https://conda.github.io/menuinst/) shortcut (`Menu/*.json`), like `napari` or `spyder`, the application can be based on it.
+Its name, description, command, icon and version, the macOS `CFBundleIdentifier` and the Linux `Categories` are used, unless set in the TOML file:
+
+```toml
+# app.toml
+menu = "napari"
+# only needed if the shortcut has no CFBundleIdentifier
+identifier = "org.napari.napari"
+```
+
+Otherwise, describe the application fully:
 
 ```toml
 # app.toml
 name = "Ocean Viewer"
 identifier = "org.example.ocean-viewer"
 version = "1.0.0"
-# executable in the environment to start
-entry-point = "napari"
+description = "Look at ocean data"
+# executable in the environment to start, and its arguments
+entry-point = "python"
+args = ["-m", "ocean_viewer"]
 icons = ["icon.png"]
 # only the formats for the packed platform are created
-formats = ["dmg", "nsis", "appimage"]
+formats = ["dmg", "nsis", "flatpak"]
 
 [macos]
 minimum-system-version = "11.0"
@@ -231,14 +244,20 @@ timestamp-url = "http://timestamp.digicert.com"
 tsp = true
 # ... or with any command, `%1` is replaced by the file to sign
 # sign-command = "C:/signing/sign.bat %1"
+
+[flatpak]
+# the defaults
+runtime = "org.freedesktop.Platform"
+runtime-version = "25.08"
+finish-args = ["--share=ipc", "--share=network", "--socket=x11", "--socket=wayland", "--device=dri", "--filesystem=home"]
 ```
 
 ```bash
 pixi-pack --create-app app.toml --platform osx-arm64
 ```
 
-The application contains `pixi-launcher`, the pack and a small launcher config.
-On first launch, the environment is unpacked into the user's data directory (`~/Library/Application Support/<identifier>`, `%LOCALAPPDATA%\<identifier>` or `~/.local/share/<identifier>`); later launches start the entry point right away.
+On macOS and Windows, the application contains `pixi-launcher`, the pack and a small launcher config.
+On first launch, the environment is unpacked into the user's data directory (`~/Library/Application Support/<identifier>` or `%LOCALAPPDATA%\<identifier>`); later launches start the entry point right away.
 When a new version of the application is opened, its environment replaces the old one.
 The Windows uninstaller offers to remove the unpacked environment.
 
@@ -249,9 +268,16 @@ On Windows, the launcher gets the application's icon (an `.ico`, or one created 
 The launcher, the installer and the uninstaller are signed if `certificate-thumbprint` (with `signtool`, only on Windows) or `sign-command` (on any platform, e.g. with `osslsigncode` or a cloud signing service) is set.
 The sign command is split on spaces, use a script for commands with spaces in paths.
 
-`pixi-launcher` is downloaded from the pixi-pack release, use `--pixi-launcher-source` to provide a different one.
+On Linux, `flatpak-builder` unpacks the environment into the Flatpak with `pixi-unpack`, as Flatpaks are always installed at the same path.
+The Flatpak runs on the [Freedesktop runtime](https://flathub.org/apps/org.freedesktop.Platform), which `pixi-pack` installs from [Flathub](https://flathub.org) for the build, and users install along with the application.
+The sandbox permissions (`finish-args`) let the application open windows, use the GPU and the network, and read and write files in the home directory.
+Users install the `.flatpak` by opening it in their software center, or with `flatpak install --user app.flatpak`.
+Flatpak is preinstalled on e.g. Fedora and Linux Mint, other distributions [need to install it](https://flathub.org/setup) once.
+
+`pixi-launcher` and `pixi-unpack` are downloaded from the pixi-pack release, use `--pixi-launcher-source` and `--pixi-unpack-source` to provide different ones.
 Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, the log of the last launch is in the data directory as `launcher.log`.
-Bundling is done with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager).
+Bundling for macOS and Windows is done with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager).
+Of a menuinst shortcut, `precommand`, `working_dir` and `terminal` are not supported.
 See [`examples/app`](examples/app) for a complete example.
 
 #### Applications without signing

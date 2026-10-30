@@ -6,7 +6,6 @@
 
 use std::{
     collections::HashMap,
-    ffi::{OsStr, OsString},
     fs::File,
     path::{Path, PathBuf},
     process::Command,
@@ -38,11 +37,10 @@ pub struct LauncherConfig {
     pub identifier: String,
     /// Version of the application.
     pub version: String,
-    /// Name of the executable in the environment to start, e.g. `napari`.
-    pub entry_point: String,
-    /// Arguments always passed to the entry point, before any user arguments.
-    #[serde(default)]
-    pub args: Vec<String>,
+    /// Command to start, followed by any user arguments. The program is either the name of an
+    /// executable in the environment, e.g. `napari`, or a path with menuinst placeholders like
+    /// `{{ PYTHON }}`, see [`menu_placeholders`].
+    pub command: Vec<String>,
     /// Path to the pack, relative to the launcher config.
     pub pack_file: PathBuf,
     /// SHA256 of the pack, used to detect whether the installed environment is up to date.
@@ -75,18 +73,12 @@ impl LauncherConfig {
 /// Look for a launcher config bundled with the running executable.
 ///
 /// - macOS: the executable is in `Foo.app/Contents/MacOS`, resources in `Foo.app/Contents/Resources`
-/// - Linux (AppImage, `.deb`): the executable is `usr/bin/foo`, resources are in `usr/lib/foo`
 /// - Windows: resources are next to the executable
 pub fn find_bundled_launcher_config() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_dir = exe.parent()?;
-    let exe_name = exe.file_stem()?;
     [
         exe_dir.join("../Resources").join(LAUNCHER_CONFIG_FILE_NAME),
-        exe_dir
-            .join("../lib")
-            .join(exe_name)
-            .join(LAUNCHER_CONFIG_FILE_NAME),
         exe_dir.join(LAUNCHER_CONFIG_FILE_NAME),
     ]
     .into_iter()
@@ -113,20 +105,14 @@ async fn launch_impl(config_path: &Path, config: &LauncherConfig, args: Vec<Stri
     ensure_installed(config_path, config, &install_dir).await?;
 
     let prefix = install_dir.join(ENV_NAME);
-    let entry_point = find_entry_point(&prefix, &config.entry_point)?;
-    let base_env = base_env(std::env::vars_os(), std::env::var_os("APPDIR").as_deref());
-    let env = activation_env(&prefix, &base_env)?;
+    let (program, program_args) = resolve_command(&prefix, &config.command, Platform::current())?;
+    let env = activation_env(&prefix)?;
 
     #[cfg(target_os = "macos")]
-    let mut command = macos::bundled_command(&install_dir, &prefix, &entry_point)?;
+    let mut command = macos::bundled_command(&install_dir, &prefix, &program)?;
     #[cfg(not(target_os = "macos"))]
-    let mut command = Command::new(&entry_point);
-    command
-        .args(&config.args)
-        .args(args)
-        .env_clear()
-        .envs(base_env)
-        .envs(env);
+    let mut command = Command::new(&program);
+    command.args(program_args).args(args).envs(env);
     tracing::info!(
         "Starting {:?} {:?}",
         command.get_program(),
@@ -216,33 +202,90 @@ fn find_entry_point(prefix: &Path, name: &str) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("entry point `{}` not found in {}", name, prefix.display()))
 }
 
-/// The environment to start the application with, before activation.
-///
-/// The AppImage runtime points variables like `PYTHONHOME`, `PATH` or `LD_LIBRARY_PATH` into the
-/// mounted AppImage (`APPDIR`), which is meant for the launcher only. They are removed, as e.g.
-/// the environment's python would look for its standard library there.
-fn base_env(
-    vars: impl Iterator<Item = (OsString, OsString)>,
-    appdir: Option<&OsStr>,
-) -> HashMap<OsString, OsString> {
-    let Some(appdir) = appdir.map(Path::new) else {
-        return vars.collect();
+/// Values for the placeholders menuinst supports in commands, like `{{ PYTHON }}`, for an
+/// environment at `prefix`.
+/// <https://conda.github.io/menuinst/defining-shortcuts/#placeholders>
+pub fn menu_placeholders(prefix: &Path, platform: Platform) -> HashMap<String, String> {
+    let mut vars = vec![
+        ("PREFIX", prefix.to_path_buf()),
+        ("BASE_PREFIX", prefix.to_path_buf()),
+        ("MENU_DIR", prefix.join("Menu")),
+        ("HOME", dirs::home_dir().unwrap_or_default()),
+    ];
+    if platform.is_windows() {
+        vars.extend([
+            ("PYTHON", prefix.join("python.exe")),
+            ("BASE_PYTHON", prefix.join("python.exe")),
+            ("PYTHONW", prefix.join("pythonw.exe")),
+            ("BASE_PYTHONW", prefix.join("pythonw.exe")),
+            ("BIN_DIR", prefix.join("Library").join("bin")),
+            ("SCRIPTS_DIR", prefix.join("Scripts")),
+        ]);
+    } else {
+        vars.extend([
+            ("PYTHON", prefix.join("bin/python")),
+            ("BASE_PYTHON", prefix.join("bin/python")),
+            ("BIN_DIR", prefix.join("bin")),
+        ]);
+    }
+    if platform.is_osx() {
+        vars.push(("PYTHONAPP", prefix.join("python.app/Contents/MacOS/python")));
+    }
+    let icon_ext = if platform.is_windows() {
+        "ico"
+    } else if platform.is_osx() {
+        "icns"
+    } else {
+        "png"
     };
-    vars.filter_map(|(key, value)| {
-        let paths: Vec<PathBuf> = std::env::split_paths(&value).collect();
-        if !paths.iter().any(|p| p.starts_with(appdir)) {
-            return Some((key, value));
+    let env_name = prefix
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    vars.into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string_lossy().into_owned()))
+        .chain([
+            ("ICON_EXT".to_string(), icon_ext.to_string()),
+            ("ENV_NAME".to_string(), env_name.clone()),
+            ("DISTRIBUTION_NAME".to_string(), env_name),
+        ])
+        .collect()
+}
+
+/// Replace placeholders like `{{ PREFIX }}` in `text`.
+pub fn replace_placeholders(text: &str, placeholders: &HashMap<String, String>) -> String {
+    placeholders
+        .iter()
+        .fold(text.to_string(), |text, (key, value)| {
+            text.replace(&format!("{{{{ {key} }}}}"), value)
+                .replace(&format!("{{{{{key}}}}}"), value)
+        })
+}
+
+/// The program and arguments of `command` for the environment at `prefix`.
+fn resolve_command(
+    prefix: &Path,
+    command: &[String],
+    platform: Platform,
+) -> Result<(PathBuf, Vec<String>)> {
+    let (program, args) = command
+        .split_first()
+        .ok_or_else(|| anyhow!("the command to start is empty"))?;
+    let placeholders = menu_placeholders(prefix, platform);
+    let args = args
+        .iter()
+        .map(|a| replace_placeholders(a, &placeholders))
+        .collect();
+    let program = if program.contains("{{") {
+        let program = PathBuf::from(replace_placeholders(program, &placeholders));
+        if !program.is_file() {
+            anyhow::bail!("{} not found", program.display());
         }
-        let remaining: Vec<PathBuf> = paths
-            .into_iter()
-            .filter(|p| !p.starts_with(appdir) && !p.as_os_str().is_empty())
-            .collect();
-        if remaining.is_empty() {
-            return None;
-        }
-        Some((key, std::env::join_paths(remaining).ok()?))
-    })
-    .collect()
+        program
+    } else {
+        find_entry_point(prefix, program)?
+    };
+    Ok((program, args))
 }
 
 fn activation_variables() -> ActivationVariables {
@@ -256,16 +299,9 @@ fn activation_variables() -> ActivationVariables {
 
 /// Environment variables of the activated prefix.
 #[cfg(unix)]
-fn activation_env(
-    prefix: &Path,
-    base_env: &HashMap<OsString, OsString>,
-) -> Result<HashMap<String, String>> {
+fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
     let activator = Activator::from_path(prefix, shell::Bash::default(), Platform::current())?;
-    let environment = base_env
-        .iter()
-        .map(|(k, v)| (k.as_os_str(), v.as_os_str()))
-        .collect();
-    Ok(activator.run_activation(activation_variables(), Some(environment))?)
+    Ok(activator.run_activation(activation_variables(), None)?)
 }
 
 /// Environment variables of the activated prefix.
@@ -273,10 +309,7 @@ fn activation_env(
 /// `Activator::run_activation` would open a console window, as the launcher has none, so the
 /// activation script is run here with `CREATE_NO_WINDOW`.
 #[cfg(windows)]
-fn activation_env(
-    prefix: &Path,
-    base_env: &HashMap<OsString, OsString>,
-) -> Result<HashMap<String, String>> {
+fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
     use std::os::windows::process::CommandExt;
 
     const MARKER: &str = "___PIXI_LAUNCHER_ENV___";
@@ -294,8 +327,6 @@ fn activation_env(
     let output = Command::new("cmd.exe")
         .args(["/D", "/U", "/C"])
         .arg(&script_path)
-        .env_clear()
-        .envs(base_env)
         .creation_flags(windows::CREATE_NO_WINDOW)
         .output()
         .context("could not run activation script")?;
@@ -693,8 +724,7 @@ mod tests {
             name: "Ocean Viewer".to_string(),
             identifier: "org.example.ocean-viewer".to_string(),
             version: "1.0.0".to_string(),
-            entry_point: "napari".to_string(),
-            args: vec![],
+            command: vec!["napari".to_string()],
             pack_file: PathBuf::from("pack.tar"),
             pack_sha256: "0123456789abcdef0123456789abcdef".to_string(),
         }
@@ -704,7 +734,7 @@ mod tests {
     fn test_launcher_config_roundtrip() {
         let config = config();
         let json = serde_json::to_string(&config).unwrap();
-        assert!(json.contains("\"entry-point\":\"napari\""));
+        assert!(json.contains("\"command\":[\"napari\"]"));
         assert_eq!(
             serde_json::from_str::<LauncherConfig>(&json).unwrap(),
             config
@@ -721,24 +751,42 @@ mod tests {
         assert_eq!(env["EQ"], "a=b");
     }
 
-    // AppImages only exist on Linux, and the paths are joined with `:` as there.
-    #[cfg(unix)]
     #[test]
-    fn test_base_env_removes_appimage_paths() {
-        let vars = [
-            ("PYTHONHOME", "/tmp/.mount_x/usr/"),
-            ("PATH", "/tmp/.mount_x/usr/bin:/usr/bin:/bin"),
-            ("HOME", "/home/user"),
-            ("EMPTY", ""),
-        ]
-        .map(|(k, v)| (OsString::from(k), OsString::from(v)));
-        let env = base_env(vars.clone().into_iter(), Some(OsStr::new("/tmp/.mount_x")));
-        assert!(!env.contains_key(OsStr::new("PYTHONHOME")));
-        assert_eq!(env[OsStr::new("PATH")], "/usr/bin:/bin");
-        assert_eq!(env[OsStr::new("HOME")], "/home/user");
-        assert_eq!(env[OsStr::new("EMPTY")], "");
-        // Outside of an AppImage, the environment is used as is.
-        assert_eq!(base_env(vars.into_iter(), None).len(), 4);
+    fn test_replace_placeholders() {
+        let placeholders = menu_placeholders(Path::new("/opt/env"), Platform::Linux64);
+        assert_eq!(
+            replace_placeholders(
+                "{{ PYTHON }} -m x {{MENU_DIR}}/x.{{ ICON_EXT }}",
+                &placeholders
+            ),
+            "/opt/env/bin/python -m x /opt/env/Menu/x.png"
+        );
+        let placeholders = menu_placeholders(Path::new("C:\\env"), Platform::Win64);
+        assert!(placeholders["PYTHONW"].ends_with("pythonw.exe"));
+        assert_eq!(placeholders["ICON_EXT"], "ico");
+    }
+
+    #[test]
+    fn test_resolve_command() {
+        let prefix = tempfile::tempdir().unwrap();
+        let platform = Platform::current();
+        let python = menu_placeholders(prefix.path(), platform)["PYTHON"].clone();
+        let command = ["{{ PYTHON }}", "-m", "napari", "{{ PREFIX }}"].map(String::from);
+        assert!(resolve_command(prefix.path(), &command, platform).is_err());
+
+        std::fs::create_dir_all(Path::new(&python).parent().unwrap()).unwrap();
+        std::fs::write(&python, "").unwrap();
+        let (program, args) = resolve_command(prefix.path(), &command, platform).unwrap();
+        assert_eq!(program, PathBuf::from(&python));
+        assert_eq!(
+            args,
+            vec![
+                "-m".to_string(),
+                "napari".to_string(),
+                prefix.path().to_string_lossy().into_owned()
+            ]
+        );
+        assert!(resolve_command(prefix.path(), &[], platform).is_err());
     }
 
     #[test]

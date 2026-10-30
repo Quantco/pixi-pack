@@ -19,6 +19,14 @@ fn cwd() -> PathBuf {
 /// The pixi-pack CLI.
 #[derive(Parser)]
 #[command(name = "pixi-pack", version, about = "A command line tool to pack conda environments for easy sharing", long_about = None)]
+#[cfg_attr(
+    feature = "app",
+    command(group(
+        clap::ArgGroup::new("uses_pixi_unpack")
+            .args(["create_executable", "create_app"])
+            .multiple(true)
+    ))
+)]
 struct Cli {
     /// Environment to pack
     #[arg(short, long, default_value = "default")]
@@ -62,13 +70,15 @@ struct Cli {
     #[arg(long, default_value = "false", conflicts_with = "create_executable")]
     directory_only: bool,
 
-    /// Optional path or URL to a pixi-unpack executable.
+    /// Optional path or URL to a pixi-unpack executable, for `--create-executable` and Flatpaks
+    /// created with `--create-app`.
     // Ex. /path/to/pixi-unpack/pixi-unpack.exe
     // Ex. https://example.com/pixi-unpack.exe
-    #[arg(long, requires = "create_executable")]
+    #[cfg_attr(not(feature = "app"), arg(long, requires = "create_executable"))]
+    #[cfg_attr(feature = "app", arg(long, requires = "uses_pixi_unpack"))]
     pixi_unpack_source: Option<UrlOrPath>,
 
-    /// Create an application (macOS `.app`/`.dmg`, Windows installer, Linux AppImage/`.deb`)
+    /// Create an application (macOS `.app`/`.dmg`, Windows installer, Linux Flatpak)
     /// described by the given TOML file.
     /// `--output-file` is the directory the application is written to.
     #[cfg(feature = "app")]
