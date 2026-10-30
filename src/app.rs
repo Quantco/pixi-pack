@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use cargo_packager::{
     PackageFormat,
-    config::{Binary, ConfigBuilder, MacOsConfig, NsisConfig, Resource},
+    config::{Binary, ConfigBuilder, MacOsConfig, NsisConfig, Resource, WindowsConfig},
 };
 use rattler_conda_types::Platform;
 use rattler_digest::{Sha256, compute_file_digest};
@@ -46,6 +46,8 @@ pub struct AppConfig {
     pub formats: Vec<AppFormat>,
     #[serde(default)]
     pub macos: AppMacOsConfig,
+    #[serde(default)]
+    pub windows: AppWindowsConfig,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,6 +133,24 @@ pub struct AppMacOsConfig {
     /// (or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH`) are set.
     pub signing_identity: Option<String>,
     pub minimum_system_version: Option<String>,
+}
+
+/// Code signing of the launcher, the installer and the uninstaller on Windows.
+#[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct AppWindowsConfig {
+    /// SHA1 thumbprint of a certificate in the Windows certificate store, used with `signtool`.
+    /// Only works on Windows.
+    pub certificate_thumbprint: Option<String>,
+    /// Timestamp server for `signtool`, e.g. `http://timestamp.digicert.com`.
+    pub timestamp_url: Option<String>,
+    /// Whether the timestamp server uses RFC 3161 (`/tr`) instead of Authenticode (`/t`).
+    #[serde(default)]
+    pub tsp: bool,
+    /// A command to sign a file instead of `signtool`, which also works on other platforms,
+    /// e.g. with `osslsigncode` or a script. `%1` is replaced by the path of the file to sign.
+    /// The command is split on spaces.
+    pub sign_command: Option<String>,
 }
 
 impl AppConfig {
@@ -236,7 +256,15 @@ pub async fn create_app(
         macos = macos.minimum_system_version(version);
     }
     // Lets the uninstaller remove the unpacked environment, see `LauncherConfig::app_data_dir`.
-    let nsis = NsisConfig::new().appdata_paths(["$LOCALAPPDATA\\$IDENTIFIER"]);
+    let mut nsis = NsisConfig::new().appdata_paths(["$LOCALAPPDATA\\$IDENTIFIER"]);
+    if platform.is_windows() {
+        let icon = windows_icon(&app.icons, staging)?;
+        brand_windows_executable(&main_binary_file, &app, icon.as_deref())?;
+        if let Some(icon) = icon {
+            nsis = nsis.installer_icon(icon);
+        }
+    }
+    let windows = windows_config(&app.windows);
 
     let resource = |src: &Path, target: &str| Resource::Mapped {
         src: src.to_string_lossy().into_owned(),
@@ -256,6 +284,7 @@ pub async fn create_app(
         .formats(formats.iter().map(|f| f.package_format()))
         .out_dir(out_dir)
         .macos(macos)
+        .windows(windows)
         .nsis(nsis)
         .config()
         .clone();
@@ -299,6 +328,98 @@ fn write_launcher_config(app: &AppConfig, pack_file: &Path, destination: &Path) 
         pack_sha256,
     };
     std::fs::write(destination, serde_json::to_string_pretty(&launcher_config)?)?;
+    Ok(())
+}
+
+fn windows_config(config: &AppWindowsConfig) -> WindowsConfig {
+    let mut windows = WindowsConfig::new().tsp(config.tsp);
+    if let Some(thumbprint) = &config.certificate_thumbprint {
+        windows = windows.certificate_thumbprint(thumbprint);
+    }
+    if let Some(url) = &config.timestamp_url {
+        windows = windows.timestamp_url(url);
+    }
+    windows.sign_command = config.sign_command.clone();
+    windows
+}
+
+/// The `.ico` for Windows: a configured `.ico`, or one created from the largest `.png`.
+fn windows_icon(icons: &[PathBuf], staging: &Path) -> Result<Option<PathBuf>> {
+    let has_extension = |path: &&PathBuf, ext: &str| path.extension().is_some_and(|e| e == ext);
+    if let Some(ico) = icons.iter().find(|i| has_extension(i, "ico")) {
+        return Ok(Some(ico.clone()));
+    }
+    let mut largest: Option<image::DynamicImage> = None;
+    for png in icons.iter().filter(|i| has_extension(i, "png")) {
+        let image =
+            image::open(png).with_context(|| format!("could not read icon {}", png.display()))?;
+        if largest.as_ref().is_none_or(|l| image.width() > l.width()) {
+            largest = Some(image);
+        }
+    }
+    let Some(mut image) = largest else {
+        return Ok(None);
+    };
+    // The largest size an `.ico` supports.
+    if image.width() > 256 || image.height() > 256 {
+        image = image.resize(256, 256, image::imageops::FilterType::Lanczos3);
+    }
+    let ico = staging.join("icon.ico");
+    image
+        .save_with_format(&ico, image::ImageFormat::Ico)
+        .context("could not create .ico icon")?;
+    Ok(Some(ico))
+}
+
+/// Give the launcher the application's icon, used for its shortcuts, and version info, shown e.g.
+/// in the Task Manager and the file properties.
+fn brand_windows_executable(executable: &Path, app: &AppConfig, icon: Option<&Path>) -> Result<()> {
+    use editpe::{Image, VersionInfo, VersionStringTable, types::VersionU16};
+
+    let contents = std::fs::read(executable)?;
+    let mut image =
+        Image::parse(contents.as_slice()).context("could not parse pixi-launcher.exe")?;
+    let mut resources = image.resource_directory().cloned().unwrap_or_default();
+    if let Some(icon) = icon {
+        resources
+            .set_main_icon_file(&icon.to_string_lossy())
+            .context("could not set the icon of pixi-launcher.exe")?;
+    }
+
+    let file_name = format!("{}.exe", executable_name(&app.name, Platform::Win64));
+    let strings = [
+        ("FileDescription", app.name.as_str()),
+        ("ProductName", app.name.as_str()),
+        ("ProductVersion", app.version.as_str()),
+        ("FileVersion", app.version.as_str()),
+        ("OriginalFilename", file_name.as_str()),
+        ("InternalName", file_name.as_str()),
+    ];
+    let version_info = VersionInfo {
+        // U.S. English, Unicode.
+        strings: vec![VersionStringTable {
+            key: "040904B0".to_string(),
+            strings: strings
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        }],
+        vars: vec![VersionU16 {
+            major: 0x0409,
+            minor: 0x04B0,
+        }],
+        ..Default::default()
+    };
+    resources
+        .set_version_info(&version_info)
+        .context("could not set the version info of pixi-launcher.exe")?;
+
+    image
+        .set_resource_directory(resources)
+        .context("could not update the resources of pixi-launcher.exe")?;
+    image
+        .write_file(executable)
+        .context("could not write pixi-launcher.exe")?;
     Ok(())
 }
 
@@ -426,6 +547,53 @@ mod tests {
             executable_name("Ocean Viewer 2.0", Platform::Linux64),
             "ocean-viewer-2-0"
         );
+    }
+
+    #[test]
+    fn test_windows_icon_from_png() {
+        let dir = tempfile::tempdir().unwrap();
+        let small = dir.path().join("small.png");
+        let large = dir.path().join("large.png");
+        image::RgbaImage::new(32, 32).save(&small).unwrap();
+        image::RgbaImage::new(512, 512).save(&large).unwrap();
+        let ico = windows_icon(&[small.clone(), large], dir.path())
+            .unwrap()
+            .unwrap();
+        let icon = image::open(&ico).unwrap();
+        assert_eq!((icon.width(), icon.height()), (256, 256));
+
+        // An `.ico` is used as is.
+        let configured = dir.path().join("app.ico");
+        assert_eq!(
+            windows_icon(&[small, configured.clone()], dir.path()).unwrap(),
+            Some(configured)
+        );
+        assert_eq!(windows_icon(&[], dir.path()).unwrap(), None);
+    }
+
+    #[test]
+    fn test_windows_signing_config() {
+        let (_dir, config) = write_config(
+            r#"
+            name = "x"
+            identifier = "x"
+            version = "1"
+            entry-point = "x"
+
+            [windows]
+            certificate-thumbprint = "ABC"
+            timestamp-url = "http://timestamp.digicert.com"
+            sign-command = "sign.sh %1"
+            "#,
+        );
+        let windows = windows_config(&config.unwrap().windows);
+        assert_eq!(windows.certificate_thumbprint.as_deref(), Some("ABC"));
+        assert_eq!(
+            windows.timestamp_url.as_deref(),
+            Some("http://timestamp.digicert.com")
+        );
+        assert_eq!(windows.sign_command.as_deref(), Some("sign.sh %1"));
+        assert!(!windows.tsp);
     }
 
     #[test]
