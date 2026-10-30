@@ -607,21 +607,24 @@ fn target_triple(platform: Platform) -> Result<&'static str> {
 /// Manager. cargo-packager strips everything after a `.`. On Linux, it is the name of the
 /// command in the Flatpak, so it is lowercase without spaces.
 fn executable_name(app_name: &str, platform: Platform) -> String {
-    let name: String = app_name
+    if platform.is_linux() {
+        return app_name
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+    }
+    app_name
         .chars()
         .map(|c| {
-            if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_') {
+            if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '(' | ')') {
                 c
             } else {
                 '_'
             }
         })
-        .collect();
-    if platform.is_linux() {
-        name.to_lowercase().replace([' ', '_'], "-")
-    } else {
-        name
-    }
+        .collect()
 }
 
 /* --------------------------------------------------------------------------------------------- */
@@ -745,6 +748,10 @@ mod tests {
         assert_eq!(
             executable_name("Ocean Viewer 2.0", Platform::Linux64),
             "ocean-viewer-2-0"
+        );
+        assert_eq!(
+            executable_name("napari (0.9.2)", Platform::Linux64),
+            "napari-0-9-2"
         );
     }
 
