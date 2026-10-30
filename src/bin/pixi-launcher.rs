@@ -39,7 +39,12 @@ fn init_logging(config_path: &std::path::Path) {
         .ok()
         .and_then(|dir| {
             std::fs::create_dir_all(&dir).ok()?;
-            std::fs::File::create(dir.join("launcher.log")).ok()
+            // Appended, so instances started at the same time don't overwrite each other's logs.
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("launcher.log"))
+                .ok()
         });
     let builder = tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(tracing::Level::INFO)

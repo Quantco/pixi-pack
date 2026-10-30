@@ -98,6 +98,7 @@ pub(super) fn create(
     out_dir: &Path,
 ) -> Result<PathBuf> {
     let arch = arch(platform)?;
+    let id = flatpak_id(&app.identifier)?;
     let command_name = super::executable_name(&app.name, Platform::Linux64);
 
     let files = staging.join("flatpak-files");
@@ -106,28 +107,24 @@ pub(super) fn create(
     std::fs::write(files.join("launch.sh"), launch_script(&app.command))?;
     std::fs::write(
         files.join("app.desktop"),
-        desktop_entry(app, &command_name, app.icon_png().is_some()),
+        desktop_entry(app, &id, &command_name, app.icon_png().is_some()),
     )?;
 
     let mut build_commands = vec![
         "chmod +x pixi-unpack".to_string(),
         "./pixi-unpack --output-directory /app --env-name env pack".to_string(),
         format!("install -Dm755 launch.sh /app/bin/{command_name}"),
-        format!(
-            "install -Dm644 app.desktop /app/share/applications/{}.desktop",
-            app.identifier
-        ),
+        format!("install -Dm644 app.desktop /app/share/applications/{id}.desktop"),
     ];
     if let Some(icon) = app.icon_png() {
         let size = prepare_icon(icon, &files.join("icon.png"))?;
         build_commands.push(format!(
-            "install -Dm644 icon.png /app/share/icons/hicolor/{size}x{size}/apps/{}.png",
-            app.identifier
+            "install -Dm644 icon.png /app/share/icons/hicolor/{size}x{size}/apps/{id}.png"
         ));
     }
 
     let manifest = json!({
-        "id": app.identifier,
+        "id": id,
         "runtime": config.runtime,
         "runtime-version": config.runtime_version,
         // Nothing is compiled, the runtime has everything the build commands need.
@@ -146,7 +143,7 @@ pub(super) fn create(
             ],
         }],
     });
-    let manifest_path = staging.join(format!("{}.json", app.identifier));
+    let manifest_path = staging.join(format!("{id}.json"));
     std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
 
     // Lets `flatpak-builder` install the runtime. Does nothing if Flathub was already added.
@@ -183,7 +180,7 @@ pub(super) fn create(
         .arg(format!("--runtime-repo={FLATHUB_REPO}"))
         .arg(&repo)
         .arg(&bundle)
-        .arg(&app.identifier)
+        .arg(&id)
         .arg(BRANCH))?;
     Ok(bundle)
 }
@@ -197,6 +194,37 @@ fn run(command: &mut Command) -> Result<()> {
         bail!("{:?} failed with {}", command.get_program(), status);
     }
     Ok(())
+}
+
+/// The Flatpak application id for a reverse-DNS identifier, which is already checked to consist
+/// of letters, digits, `-` and `_`. Flatpak only allows `-` in the last part and needs at least
+/// three parts, see <https://docs.flatpak.org/en/latest/conventions.html#application-ids>.
+fn flatpak_id(identifier: &str) -> Result<String> {
+    let parts: Vec<&str> = identifier.split('.').collect();
+    if parts.len() < 3 {
+        bail!(
+            "a Flatpak needs an identifier with at least three parts like `org.example.app`, not `{identifier}`"
+        );
+    }
+    if parts
+        .iter()
+        .any(|p| p.starts_with(|c: char| c.is_ascii_digit()))
+    {
+        bail!("the parts of a Flatpak identifier must not start with a digit: `{identifier}`");
+    }
+    let last = parts.len() - 1;
+    Ok(parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if i < last {
+                p.replace('-', "_")
+            } else {
+                p.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("."))
 }
 
 fn arch(platform: Platform) -> Result<&'static str> {
@@ -223,10 +251,16 @@ fn shell_quote(s: &str) -> String {
 }
 
 /// <https://specifications.freedesktop.org/desktop-entry-spec/latest/>
-fn desktop_entry(app: &App, command_name: &str, has_icon: bool) -> String {
-    // Newlines would end the value early.
-    let escape = |s: &str| s.replace('\\', r"\\").replace('\n', r"\n");
-    let exec = match &app.field_code {
+fn desktop_entry(app: &App, id: &str, command_name: &str, has_icon: bool) -> String {
+    // Line breaks would end the value early.
+    let escape = |s: &str| {
+        s.replace('\\', r"\\")
+            .replace('\n', r"\n")
+            .replace('\r', r"\r")
+            .replace('\t', r"\t")
+    };
+    let linux = &app.linux;
+    let exec = match &linux.field_code {
         Some(code) => format!("{command_name} {code}"),
         None => command_name.to_string(),
     };
@@ -238,16 +272,16 @@ fn desktop_entry(app: &App, command_name: &str, has_icon: bool) -> String {
         entry.push_str(&format!("Comment={}\n", escape(description)));
     }
     if has_icon {
-        entry.push_str(&format!("Icon={}\n", app.identifier));
+        entry.push_str(&format!("Icon={id}\n"));
     }
-    if !app.categories.is_empty() {
-        entry.push_str(&format!("Categories={};\n", app.categories.join(";")));
+    if !linux.categories.is_empty() {
+        entry.push_str(&format!("Categories={};\n", linux.categories.join(";")));
     }
-    if !app.mime_types.is_empty() {
-        entry.push_str(&format!("MimeType={};\n", app.mime_types.join(";")));
+    if !linux.mime_types.is_empty() {
+        entry.push_str(&format!("MimeType={};\n", linux.mime_types.join(";")));
     }
-    if let Some(class) = &app.startup_wm_class {
-        entry.push_str(&format!("StartupWMClass={class}\n"));
+    if let Some(class) = &linux.startup_wm_class {
+        entry.push_str(&format!("StartupWMClass={}\n", escape(class)));
     }
     entry
 }
@@ -289,10 +323,11 @@ mod tests {
             description: Some("Look at\nthe ocean".to_string()),
             command: vec!["{{ PYTHON }}".into(), "-m".into(), "it's".into()],
             icons: vec![],
-            categories: vec!["Science".to_string(), "Graphics".to_string()],
-            startup_wm_class: None,
-            mime_types: vec![],
-            field_code: Some("%F".to_string()),
+            linux: super::super::menu::LinuxDesktop {
+                categories: vec!["Science".to_string(), "Graphics".to_string()],
+                field_code: Some("%F".to_string()),
+                ..Default::default()
+            },
         }
     }
 
@@ -307,10 +342,20 @@ mod tests {
     #[test]
     fn test_desktop_entry() {
         assert_eq!(
-            desktop_entry(&app(), "ocean-viewer", true),
+            desktop_entry(&app(), "org.example.ocean-viewer", "ocean-viewer", true),
             "[Desktop Entry]\nType=Application\nName=Ocean Viewer\nExec=ocean-viewer %F\nTerminal=false\n\
              Comment=Look at\\nthe ocean\nIcon=org.example.ocean-viewer\nCategories=Science;Graphics;\n"
         );
+    }
+
+    #[test]
+    fn test_flatpak_id() {
+        assert_eq!(
+            flatpak_id("org.spyder-ide.Spyder-ide").unwrap(),
+            "org.spyder_ide.Spyder-ide"
+        );
+        assert!(flatpak_id("org.example").is_err());
+        assert!(flatpak_id("org.2d.viewer").is_err());
     }
 
     #[test]

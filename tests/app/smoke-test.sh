@@ -28,6 +28,8 @@ cleanup() {
   rm -f examples/app/smoke-test.toml
   if [ -n "${mount:-}" ]; then hdiutil detach "$mount" >/dev/null || true; fi
   if [ -n "${flatpak:-}" ]; then flatpak uninstall --user --noninteractive "$identifier" || true; fi
+  if [ -n "${uninstaller:-}" ]; then MSYS2_ARG_CONV_EXCL='*' "$uninstaller" /S || true; fi
+  if [ -n "${data_dir:-}" ]; then rm -rf "$data_dir"; fi
   if [ "$(uname -s)" = Linux ]; then rm -rf "$work"; fi
 }
 trap cleanup EXIT
@@ -61,6 +63,7 @@ MINGW* | MSYS* | CYGWIN*)
   # Git Bash would turn `/S` into a path.
   MSYS2_ARG_CONV_EXCL='*' "${installer[0]}" /S
   run() { "$LOCALAPPDATA/IDLE Demo/IDLE Demo.exe" "$marker"; }
+  uninstaller="$LOCALAPPDATA/IDLE Demo/uninstall.exe"
   ;;
 esac
 

@@ -96,11 +96,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
           # Ubuntu restricts the user namespaces the Flatpak sandbox (bubblewrap) needs.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Run unit tests
+        run: cargo test --locked --features app --lib --color always
       - name: Build
-        run: cargo build --release --features app --bins --color always
+        run: cargo build --locked --features app --bins --color always
       - name: Create and launch application
         shell: bash
-        run: tests/app/smoke-test.sh target/release/pixi-pack target/release/pixi-launcher target/release/pixi-unpack
+        run: tests/app/smoke-test.sh target/debug/pixi-pack target/debug/pixi-launcher target/debug/pixi-unpack

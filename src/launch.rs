@@ -175,11 +175,25 @@ fn remove_old_installs(app_data_dir: &Path, current: &Path) {
         return;
     };
     for path in entries.flatten().map(|e| e.path()) {
-        if path.is_dir() && path != current {
-            tracing::info!("Removing old install at {}", path.display());
-            if let Err(e) = std::fs::remove_dir_all(&path) {
-                tracing::warn!("Could not remove {}: {}", path.display(), e);
-            }
+        if !path.is_dir() || path == current {
+            continue;
+        }
+        // Renaming first fails on Windows while the old version is still running, which keeps
+        // its install intact instead of half-deleting it. It is removed on a later launch.
+        let removing = path.with_extension("removing");
+        if path.extension().is_none_or(|e| e != "removing")
+            && let Err(e) = std::fs::rename(&path, &removing)
+        {
+            tracing::warn!(
+                "Could not remove {}, it may be in use: {}",
+                path.display(),
+                e
+            );
+            continue;
+        }
+        tracing::info!("Removing old install at {}", path.display());
+        if let Err(e) = std::fs::remove_dir_all(&removing) {
+            tracing::warn!("Could not remove {}: {}", removing.display(), e);
         }
     }
 }
@@ -205,7 +219,9 @@ fn find_entry_point(prefix: &Path, name: &str) -> Result<PathBuf> {
 /// Values for the placeholders menuinst supports in commands, like `{{ PYTHON }}`, for an
 /// environment at `prefix`.
 /// <https://conda.github.io/menuinst/defining-shortcuts/#placeholders>
-pub fn menu_placeholders(prefix: &Path, platform: Platform) -> HashMap<String, String> {
+///
+/// Mirrors the private `rattler_menuinst::render::BaseMenuItemPlaceholders`.
+pub(crate) fn menu_placeholders(prefix: &Path, platform: Platform) -> HashMap<String, String> {
     let mut vars = vec![
         ("PREFIX", prefix.to_path_buf()),
         ("BASE_PREFIX", prefix.to_path_buf()),
@@ -253,7 +269,7 @@ pub fn menu_placeholders(prefix: &Path, platform: Platform) -> HashMap<String, S
 }
 
 /// Replace placeholders like `{{ PREFIX }}` in `text`.
-pub fn replace_placeholders(text: &str, placeholders: &HashMap<String, String>) -> String {
+pub(crate) fn replace_placeholders(text: &str, placeholders: &HashMap<String, String>) -> String {
     placeholders
         .iter()
         .fold(text.to_string(), |text, (key, value)| {
@@ -312,42 +328,46 @@ fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
 fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
     use std::os::windows::process::CommandExt;
 
-    const MARKER: &str = "___PIXI_LAUNCHER_ENV___";
     let activator = Activator::from_path(prefix, shell::CmdExe, Platform::current())?;
     let mut script = activator
         .activation(activation_variables())?
         .script
         .contents()?;
-    script.push_str(&format!("\r\n@echo {MARKER}\r\n@set\r\n"));
     let script_dir = tempfile::tempdir()?;
     let script_path = script_dir.path().join("activate.bat");
+    let env_path = script_dir.path().join("env.txt");
+    // Written to a file, as programs run by activation scripts can print anything to stdout.
+    script.push_str(&format!("\r\n@set > \"{}\"\r\n", env_path.display()));
     std::fs::write(&script_path, script)?;
 
     // `/U` makes cmd write UTF-16 instead of the OEM code page, so non-ASCII paths survive.
-    let output = Command::new("cmd.exe")
+    let status = Command::new("cmd.exe")
         .args(["/D", "/U", "/C"])
         .arg(&script_path)
+        .stdout(std::process::Stdio::null())
         .creation_flags(windows::CREATE_NO_WINDOW)
-        .output()
+        .status()
         .context("could not run activation script")?;
-    if !output.status.success() {
-        anyhow::bail!("activation script failed with {}", output.status);
+    if !status.success() {
+        anyhow::bail!("activation script failed with {}", status);
     }
-    let utf16: Vec<u16> = output
-        .stdout
+    let bytes = std::fs::read(&env_path).context("activation script printed no environment")?;
+    let utf16: Vec<u16> = bytes
         .chunks_exact(2)
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect();
-    Ok(parse_set_output(&String::from_utf16_lossy(&utf16), MARKER))
+    let env = parse_set_output(&String::from_utf16_lossy(&utf16));
+    if !env.contains_key("CONDA_PREFIX") {
+        anyhow::bail!("activation script did not set CONDA_PREFIX");
+    }
+    Ok(env)
 }
 
-/// Parse the output of cmd's `set` printed after `marker`.
+/// Parse the output of cmd's `set`.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn parse_set_output(output: &str, marker: &str) -> HashMap<String, String> {
+fn parse_set_output(output: &str) -> HashMap<String, String> {
     output
         .lines()
-        .skip_while(|line| line.trim() != marker)
-        .skip(1)
         .filter_map(|line| line.split_once('='))
         // cmd keeps per-drive working directories in variables like `=C:`.
         .filter(|(key, _)| !key.is_empty())
@@ -622,6 +642,7 @@ mod ui {
 
         fn message_box(title: &str, text: &str, style: u32) {
             let (title, text) = (wide(title), wide(text));
+            // SAFETY: both strings are NUL-terminated UTF-16 and outlive the call.
             unsafe {
                 MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), style);
             }
@@ -646,8 +667,10 @@ mod ui {
                     let title = wide(&title);
                     let class = wide("#32770");
                     while !thread.is_finished() {
+                        // SAFETY: both strings are NUL-terminated UTF-16 and outlive the call.
                         let hwnd: HWND = unsafe { FindWindowW(class.as_ptr(), title.as_ptr()) };
                         if !hwnd.is_null() {
+                            // SAFETY: posting to a stale window handle fails harmlessly.
                             unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
                         }
                         std::thread::sleep(Duration::from_millis(50));
@@ -743,8 +766,9 @@ mod tests {
 
     #[test]
     fn test_parse_set_output() {
-        let output = "noise from activate.d\r\n___MARKER___\r\n=C:=C:\\Users\r\nCONDA_PREFIX=C:\\env\r\nPATH=C:\\env;C:\\Windows\r\nEQ=a=b\r\n";
-        let env = parse_set_output(output, "___MARKER___");
+        let output =
+            "=C:=C:\\Users\r\nCONDA_PREFIX=C:\\env\r\nPATH=C:\\env;C:\\Windows\r\nEQ=a=b\r\n";
+        let env = parse_set_output(output);
         assert_eq!(env.len(), 3);
         assert_eq!(env["CONDA_PREFIX"], "C:\\env");
         assert_eq!(env["PATH"], "C:\\env;C:\\Windows");

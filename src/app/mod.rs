@@ -19,7 +19,7 @@ use rattler_digest::{Sha256, compute_file_digest};
 use rattler_lock::UrlOrPath;
 use serde::Deserialize;
 
-pub use self::flatpak::AppFlatpakConfig;
+use self::flatpak::AppFlatpakConfig;
 use crate::{
     LAUNCHER_CONFIG_FILE_NAME, LauncherConfig, PackOptions,
     pack::{create_tarball, download_release_executable},
@@ -80,14 +80,7 @@ struct App {
     /// See [`LauncherConfig::command`].
     command: Vec<String>,
     icons: Vec<PathBuf>,
-    /// Linux desktop entry `Categories`.
-    categories: Vec<String>,
-    /// Linux desktop entry `StartupWMClass`.
-    startup_wm_class: Option<String>,
-    /// Linux desktop entry `MimeType`.
-    mime_types: Vec<String>,
-    /// Linux desktop entry field code like `%F`, for the files to open.
-    field_code: Option<String>,
+    linux: menu::LinuxDesktop,
 }
 
 impl App {
@@ -264,17 +257,19 @@ impl AppConfig {
                 icons.push(icon);
             }
         }
+        let identifier = self
+            .identifier
+            .clone()
+            .or_else(|| menu_field(|m| m.identifier.clone()))
+            .ok_or_else(|| missing("identifier"))?;
+        validate_identifier(&identifier)?;
         Ok(App {
             name: self
                 .name
                 .clone()
                 .or_else(|| menu_field(|m| Some(m.name.clone())))
                 .ok_or_else(|| missing("name"))?,
-            identifier: self
-                .identifier
-                .clone()
-                .or_else(|| menu_field(|m| m.identifier.clone()))
-                .ok_or_else(|| missing("identifier"))?,
+            identifier,
             version: self
                 .version
                 .clone()
@@ -286,18 +281,41 @@ impl AppConfig {
                 .or_else(|| menu_field(|m| Some(m.description.clone()))),
             command,
             icons,
-            categories: menu
-                .as_ref()
-                .map(|m| m.categories.clone())
-                .unwrap_or_default(),
-            startup_wm_class: menu.as_ref().and_then(|m| m.startup_wm_class.clone()),
-            mime_types: menu
-                .as_ref()
-                .map(|m| m.mime_types.clone())
-                .unwrap_or_default(),
-            field_code: menu.as_ref().and_then(|m| m.field_code.clone()),
+            linux: menu.map(|m| m.linux).unwrap_or_default(),
         })
     }
+}
+
+/// The identifier names the data directory and the Flatpak, so it has to be reverse-DNS.
+fn validate_identifier(identifier: &str) -> Result<()> {
+    let segments: Vec<&str> = identifier.split('.').collect();
+    let valid_segment = |s: &&str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    };
+    if segments.len() < 2 || !segments.iter().all(valid_segment) {
+        bail!(
+            "the identifier `{identifier}` has to be in reverse-DNS notation like `org.example.app`, using letters, digits, `-` and `_`"
+        );
+    }
+    Ok(())
+}
+
+/// A version cargo-packager accepts: the installers require `MAJOR.MINOR.PATCH`, while conda
+/// versions are often like `2024.05`, `1.2.3.post1` or `6.0.0a1`.
+fn numeric_version(version: &str) -> String {
+    let mut parts: Vec<u64> = version
+        .split('.')
+        .map_while(|part| part.parse().ok())
+        .take(3)
+        .collect();
+    parts.resize(3, 0);
+    parts
+        .iter()
+        .map(u64::to_string)
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 /// Pack the environment and bundle it as an application in `out_dir`.
@@ -319,6 +337,10 @@ pub async fn create_app(
     let formats = config.formats_for(platform)?;
     for format in &formats {
         format.check_host()?;
+    }
+    // Fail before packing, which takes a while. A shortcut's identifier is checked later.
+    if let Some(identifier) = &config.identifier {
+        validate_identifier(identifier)?;
     }
 
     let staging = tempfile::tempdir().context("could not create temporary directory")?;
@@ -443,7 +465,7 @@ async fn create_packaged_app(
     let mut packager_config = ConfigBuilder::new()
         .product_name(&app.name)
         .identifier(&app.identifier)
-        .version(&app.version)
+        .version(numeric_version(&app.version))
         .target_triple(target_triple(platform)?)
         .binaries([Binary::new(&main_binary).main(true)])
         .resources([
@@ -733,6 +755,23 @@ mod tests {
             .resolve(Path::new("pack"), Platform::Linux64, Path::new("menu"))
             .unwrap_err();
         assert!(err.to_string().contains("`identifier`"));
+    }
+
+    #[test]
+    fn test_numeric_version() {
+        assert_eq!(numeric_version("1.0.0"), "1.0.0");
+        assert_eq!(numeric_version("1.2"), "1.2.0");
+        assert_eq!(numeric_version("2024.05.1"), "2024.5.1");
+        assert_eq!(numeric_version("6.0.0a1"), "6.0.0");
+        assert_eq!(numeric_version("1.2.3.post1"), "1.2.3");
+    }
+
+    #[test]
+    fn test_validate_identifier() {
+        assert!(validate_identifier("org.example.ocean-viewer").is_ok());
+        assert!(validate_identifier("x").is_err());
+        assert!(validate_identifier("org.example/../x").is_err());
+        assert!(validate_identifier("org..x").is_err());
     }
 
     #[test]

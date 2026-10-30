@@ -11,8 +11,18 @@ use crate::{CHANNEL_DIRECTORY_NAME, menu_placeholders, replace_placeholders};
 
 /// Desktop entry field codes for the files or URLs to open.
 const FIELD_CODES: [&str; 4] = ["%F", "%f", "%U", "%u"];
-/// Shortcuts pass their arguments on with these, the launcher does so itself.
-const ARGUMENT_PLACEHOLDERS: [&str; 5] = ["%*", "%F", "%f", "%U", "%u"];
+/// Windows shortcuts pass their arguments on with this, the launcher does so itself.
+const CMD_ARGUMENTS: &str = "%*";
+
+/// Settings of the Linux desktop entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(super) struct LinuxDesktop {
+    pub categories: Vec<String>,
+    pub startup_wm_class: Option<String>,
+    pub mime_types: Vec<String>,
+    /// Field code like `%F` of the command, for the files to open.
+    pub field_code: Option<String>,
+}
 
 /// A menu item of a package.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,14 +35,7 @@ pub(super) struct MenuApp {
     /// `CFBundleIdentifier` of the macOS shortcut.
     pub identifier: Option<String>,
     pub version: String,
-    /// `Categories` of the Linux shortcut.
-    pub categories: Vec<String>,
-    /// `StartupWMClass` of the Linux shortcut.
-    pub startup_wm_class: Option<String>,
-    /// `MimeType` of the Linux shortcut.
-    pub mime_types: Vec<String>,
-    /// Field code like `%F` of the Linux shortcut's command, for the files to open.
-    pub field_code: Option<String>,
+    pub linux: LinuxDesktop,
 }
 
 /// Read the menu item of `package` for `platform` from the pack in `pack_dir`.
@@ -156,7 +159,7 @@ fn menu_app(
         .command
         .iter()
         .map(|c| c.0.clone())
-        .filter(|c| !ARGUMENT_PLACEHOLDERS.contains(&c.as_str()))
+        .filter(|c| c != CMD_ARGUMENTS && !FIELD_CODES.contains(&c.as_str()))
         .collect();
     // macOS shortcuts start e.g. python from a link inside the shortcut's bundle, so the Dock
     // shows the shortcut. The launcher starts it from the environment and takes care of that.
@@ -170,31 +173,48 @@ fn menu_app(
         }
     }
 
+    warn_unsupported(&command);
+    let icon = command.icon.as_ref().map(|i| PathBuf::from(resolve(&i.0)));
+    if let Some(icon) = icon.as_ref().filter(|i| !i.is_file()) {
+        tracing::warn!("The shortcut's icon {} does not exist", icon.display());
+    }
+
     MenuApp {
         name,
         description: command.description.0.clone(),
         command: command_args,
-        icon: command
-            .icon
-            .as_ref()
-            .map(|i| PathBuf::from(resolve(&i.0)))
-            .filter(|i| i.is_file()),
+        icon: icon.filter(|i| i.is_file()),
         identifier: osx
             .and_then(|o| o.cf_bundle_identifier.as_ref())
             .map(|i| i.0.clone()),
         version: version.to_string(),
-        categories: linux
-            .and_then(|l| l.categories.as_ref())
-            .map(|c| c.iter().map(|c| c.0.clone()).collect())
-            .unwrap_or_default(),
-        startup_wm_class: linux
-            .and_then(|l| l.startup_wm_class.as_ref())
-            .map(|c| c.0.clone()),
-        mime_types: linux
-            .and_then(|l| l.mime_type.as_ref())
-            .map(|m| m.iter().map(|m| m.0.clone()).collect())
-            .unwrap_or_default(),
-        field_code,
+        linux: LinuxDesktop {
+            categories: linux
+                .and_then(|l| l.categories.as_ref())
+                .map(|c| c.iter().map(|c| c.0.clone()).collect())
+                .unwrap_or_default(),
+            startup_wm_class: linux
+                .and_then(|l| l.startup_wm_class.as_ref())
+                .map(|c| c.0.clone()),
+            mime_types: linux
+                .and_then(|l| l.mime_type.as_ref())
+                .map(|m| m.iter().map(|m| m.0.clone()).collect())
+                .unwrap_or_default(),
+            field_code,
+        },
+    }
+}
+
+/// Warn about shortcut settings the launcher ignores.
+fn warn_unsupported(command: &MenuItemCommand) {
+    let ignored = [
+        ("precommand", command.precommand.is_some()),
+        ("working_dir", command.working_dir.is_some()),
+        ("terminal", command.terminal == Some(true)),
+        ("activate", command.activate == Some(false)),
+    ];
+    for (field, _) in ignored.iter().filter(|(_, set)| *set) {
+        tracing::warn!("The shortcut's `{field}` is not supported and ignored");
     }
 }
 
@@ -271,16 +291,18 @@ mod tests {
                 icon: Some(dir.path().join("Menu/napari.png")),
                 identifier: Some("org.napari.napari".to_string()),
                 version: "0.5.6".to_string(),
-                categories: vec!["Graphics".to_string(), "Science".to_string()],
-                startup_wm_class: Some("napari".to_string()),
-                mime_types: vec!["image/png".to_string()],
-                field_code: Some("%F".to_string()),
+                linux: LinuxDesktop {
+                    categories: vec!["Graphics".to_string(), "Science".to_string()],
+                    startup_wm_class: Some("napari".to_string()),
+                    mime_types: vec!["image/png".to_string()],
+                    field_code: Some("%F".to_string()),
+                },
             }
         );
 
         let windows = menu_app(napari_item(), Platform::Win64, dir.path(), "0.5.6");
         assert_eq!(windows.command, vec!["{{ PYTHONW }}", "-m", "napari"]);
-        assert_eq!(windows.field_code, None);
+        assert_eq!(windows.linux.field_code, None);
         // There is no `.ico` in the package.
         assert_eq!(windows.icon, None);
 

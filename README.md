@@ -199,7 +199,7 @@ pixi-pack --create-executable --pixi-unpack-source ./pixi-unpack-x86_64-unknown-
 
 ### Applications (experimental)
 
-With the `app` cargo feature, `pixi-pack` can turn an environment into an application that users install like any other:
+With the `app` cargo feature (`cargo install --features app`, it is not part of the released binaries), `pixi-pack` can turn an environment into an application that users install like any other:
 
 | Platform | Formats                               | Build host                                         |
 | -------- | ------------------------------------- | -------------------------------------------------- |
@@ -269,13 +269,15 @@ The launcher, the installer and the uninstaller are signed if `certificate-thumb
 The sign command is split on spaces, use a script for commands with spaces in paths.
 
 On Linux, `flatpak-builder` unpacks the environment into the Flatpak with `pixi-unpack`, as Flatpaks are always installed at the same path.
-The Flatpak runs on the [Freedesktop runtime](https://flathub.org/apps/org.freedesktop.Platform), which `pixi-pack` installs from [Flathub](https://flathub.org) for the build, and users install along with the application.
-The sandbox permissions (`finish-args`) let the application open windows, use the GPU and the network, and read and write files in the home directory.
+The Flatpak runs on the [Freedesktop runtime](https://flathub.org/apps/org.freedesktop.Platform), which users install along with the application.
+For the build, `pixi-pack` adds [Flathub](https://flathub.org) as a remote of the user's Flatpak installation if missing, and installs the runtime from it.
+The sandbox permissions (`finish-args`) let the application open windows, use the GPU and the network, and read and write files in the home directory, as conda GUI toolkits often don't use the file chooser portal.
+The identifier becomes the Flatpak application id, with `-` replaced by `_` in all but its last part.
 Users install the `.flatpak` by opening it in their software center, or with `flatpak install --user app.flatpak`.
 Flatpak is preinstalled on e.g. Fedora and Linux Mint, other distributions [need to install it](https://flathub.org/setup) once.
 
 `pixi-launcher` and `pixi-unpack` are downloaded from the pixi-pack release, use `--pixi-launcher-source` and `--pixi-unpack-source` to provide different ones.
-Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, the log of the last launch is in the data directory as `launcher.log`.
+Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, launches are logged to `launcher.log` in the data directory.
 Bundling for macOS and Windows is done with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager).
 Of a menuinst shortcut, `precommand`, `working_dir` and `terminal` are not supported.
 See [`examples/app`](examples/app) for a complete example.

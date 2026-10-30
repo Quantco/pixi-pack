@@ -7,11 +7,10 @@ mod unpack;
 mod util;
 
 #[cfg(feature = "app")]
-pub use app::{AppConfig, AppFlatpakConfig, AppFormat, AppMacOsConfig, create_app};
-pub use launch::{
-    LAUNCHER_CONFIG_FILE_NAME, LauncherConfig, find_bundled_launcher_config, launch,
-    menu_placeholders, replace_placeholders,
-};
+pub use app::{AppConfig, create_app};
+#[cfg(feature = "app")]
+pub(crate) use launch::{LAUNCHER_CONFIG_FILE_NAME, menu_placeholders, replace_placeholders};
+pub use launch::{LauncherConfig, find_bundled_launcher_config, launch};
 pub use pack::{OutputMode, PackOptions, pack, resolve_platform};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
