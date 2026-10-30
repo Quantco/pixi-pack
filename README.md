@@ -223,6 +223,14 @@ formats = ["dmg", "nsis", "appimage"]
 [macos]
 minimum-system-version = "11.0"
 signing-identity = "Developer ID Application: Jane Doe (TEAMID)"
+
+[windows]
+# sign with signtool and a certificate from the Windows certificate store ...
+certificate-thumbprint = "4E6FE4938621C659B9EA8D5F0CF7E96ACD7BE8A0"
+timestamp-url = "http://timestamp.digicert.com"
+tsp = true
+# ... or with any command, `%1` is replaced by the file to sign
+# sign-command = "C:/signing/sign.bat %1"
 ```
 
 ```bash
@@ -236,6 +244,10 @@ The Windows uninstaller offers to remove the unpacked environment.
 
 On macOS, the application is signed with `codesign` if `signing-identity` is set.
 It is notarized if `APPLE_KEYCHAIN_PROFILE`, or `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`, or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH` are set.
+
+On Windows, the launcher gets the application's icon (an `.ico`, or one created from the largest `.png`) and version info, so the shortcuts and the Task Manager show the application.
+The launcher, the installer and the uninstaller are signed if `certificate-thumbprint` (with `signtool`, only on Windows) or `sign-command` (on any platform, e.g. with `osslsigncode` or a cloud signing service) is set.
+The sign command is split on spaces, use a script for commands with spaces in paths.
 
 `pixi-launcher` is downloaded from the pixi-pack release, use `--pixi-launcher-source` to provide a different one.
 Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, the log of the last launch is in the data directory as `launcher.log`.
