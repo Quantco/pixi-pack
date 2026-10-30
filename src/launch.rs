@@ -721,6 +721,8 @@ mod tests {
         assert_eq!(env["EQ"], "a=b");
     }
 
+    // AppImages only exist on Linux, and the paths are joined with `:` as there.
+    #[cfg(unix)]
     #[test]
     fn test_base_env_removes_appimage_paths() {
         let vars = [
