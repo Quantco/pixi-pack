@@ -197,10 +197,17 @@ pixi-pack --create-executable --pixi-unpack-source ./pixi-unpack-x86_64-unknown-
 > [!TIP]
 > The produced executable is a simple shell script that contains both the `pixi-unpack` binary as well as the packed environment.
 
-### macOS applications (experimental)
+### Applications (experimental)
 
-With the `app` cargo feature, `pixi-pack` can turn an environment into a macOS application (`.app`) and disk image (`.dmg`) that users install by drag and drop.
-This requires a macOS host. Describe the application in a TOML file:
+With the `app` cargo feature, `pixi-pack` can turn an environment into an application that users install like any other:
+
+| Platform | Formats                               | Build host                                         |
+| -------- | ------------------------------------- | -------------------------------------------------- |
+| macOS    | `dmg` (default), `app`                | macOS                                              |
+| Windows  | `nsis` (default): an `.exe` installer | Windows, or any host with `makensis` on the `PATH` |
+| Linux    | `appimage` (default), `deb`           | Linux                                              |
+
+Describe the application in a TOML file:
 
 ```toml
 # app.toml
@@ -210,7 +217,8 @@ version = "1.0.0"
 # executable in the environment to start
 entry-point = "napari"
 icons = ["icon.png"]
-formats = ["dmg"] # "app" and/or "dmg"
+# only the formats for the packed platform are created
+formats = ["dmg", "nsis", "appimage"]
 
 [macos]
 minimum-system-version = "11.0"
@@ -221,14 +229,18 @@ signing-identity = "Developer ID Application: Jane Doe (TEAMID)"
 pixi-pack --create-app app.toml --platform osx-arm64
 ```
 
-The application contains `pixi-unpack`, the pack and a small launcher config.
-On first launch, the environment is unpacked into `~/Library/Application Support/<identifier>`; later launches start the entry point right away.
+The application contains `pixi-launcher`, the pack and a small launcher config.
+On first launch, the environment is unpacked into the user's data directory (`~/Library/Application Support/<identifier>`, `%LOCALAPPDATA%\<identifier>` or `~/.local/share/<identifier>`); later launches start the entry point right away.
 When a new version of the application is opened, its environment replaces the old one.
+The Windows uninstaller offers to remove the unpacked environment.
 
-If `signing-identity` is set, the application is signed with `codesign`.
+On macOS, the application is signed with `codesign` if `signing-identity` is set.
 It is notarized if `APPLE_KEYCHAIN_PROFILE`, or `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`, or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH` are set.
+
+`pixi-launcher` is downloaded from the pixi-pack release, use `--pixi-launcher-source` to provide a different one.
+Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, the log of the last launch is in the data directory as `launcher.log`.
 Bundling is done with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager).
-See [`examples/macos-app`](examples/macos-app) for a complete example.
+See [`examples/app`](examples/app) for a complete example.
 
 ### Inject additional packages
 

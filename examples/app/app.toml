@@ -1,8 +1,11 @@
 name = "IDLE Demo"
 identifier = "org.example.idle-demo"
 version = "1.0.0"
-entry-point = "idle3"
-formats = ["app", "dmg"]
+entry-point = "python"
+args = ["-m", "idlelib"]
+icons = ["icon.png"]
+# Only the formats for the packed platform are created.
+formats = ["dmg", "nsis", "appimage", "deb"]
 
 [macos]
 minimum-system-version = "11.0"

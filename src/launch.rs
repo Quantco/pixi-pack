@@ -70,15 +70,21 @@ impl LauncherConfig {
     }
 }
 
-/// Look for a launcher config bundled next to the running executable.
+/// Look for a launcher config bundled with the running executable.
 ///
-/// On macOS the executable lives in `Foo.app/Contents/MacOS` and resources in
-/// `Foo.app/Contents/Resources`, elsewhere the config is expected next to the executable.
+/// - macOS: the executable is in `Foo.app/Contents/MacOS`, resources in `Foo.app/Contents/Resources`
+/// - Linux (AppImage, `.deb`): the executable is `usr/bin/foo`, resources are in `usr/lib/foo`
+/// - Windows: resources are next to the executable
 pub fn find_bundled_launcher_config() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_dir = exe.parent()?;
+    let exe_name = exe.file_stem()?;
     [
         exe_dir.join("../Resources").join(LAUNCHER_CONFIG_FILE_NAME),
+        exe_dir
+            .join("../lib")
+            .join(exe_name)
+            .join(LAUNCHER_CONFIG_FILE_NAME),
         exe_dir.join(LAUNCHER_CONFIG_FILE_NAME),
     ]
     .into_iter()
@@ -202,22 +208,71 @@ fn find_entry_point(prefix: &Path, name: &str) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("entry point `{}` not found in {}", name, prefix.display()))
 }
 
-/// Environment variables of the activated prefix.
-fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
-    let variables = ActivationVariables {
+fn activation_variables() -> ActivationVariables {
+    ActivationVariables {
         conda_prefix: None,
         path: None,
         path_modification_behavior: PathModificationBehavior::Prepend,
         current_env: HashMap::new(),
-    };
-    let env = if Platform::current().is_windows() {
-        Activator::from_path(prefix, shell::CmdExe, Platform::current())?
-            .run_activation(variables, None)?
-    } else {
-        Activator::from_path(prefix, shell::Bash::default(), Platform::current())?
-            .run_activation(variables, None)?
-    };
-    Ok(env)
+    }
+}
+
+/// Environment variables of the activated prefix.
+#[cfg(unix)]
+fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
+    let activator = Activator::from_path(prefix, shell::Bash::default(), Platform::current())?;
+    Ok(activator.run_activation(activation_variables(), None)?)
+}
+
+/// Environment variables of the activated prefix.
+///
+/// `Activator::run_activation` would open a console window, as the launcher has none, so the
+/// activation script is run here with `CREATE_NO_WINDOW`.
+#[cfg(windows)]
+fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
+    use std::os::windows::process::CommandExt;
+
+    const MARKER: &str = "___PIXI_LAUNCHER_ENV___";
+    let activator = Activator::from_path(prefix, shell::CmdExe, Platform::current())?;
+    let mut script = activator
+        .activation(activation_variables())?
+        .script
+        .contents()?;
+    script.push_str(&format!("\r\n@echo {MARKER}\r\n@set\r\n"));
+    let script_dir = tempfile::tempdir()?;
+    let script_path = script_dir.path().join("activate.bat");
+    std::fs::write(&script_path, script)?;
+
+    // `/U` makes cmd write UTF-16 instead of the OEM code page, so non-ASCII paths survive.
+    let output = Command::new("cmd.exe")
+        .args(["/D", "/U", "/C"])
+        .arg(&script_path)
+        .creation_flags(windows::CREATE_NO_WINDOW)
+        .output()
+        .context("could not run activation script")?;
+    if !output.status.success() {
+        anyhow::bail!("activation script failed with {}", output.status);
+    }
+    let utf16: Vec<u16> = output
+        .stdout
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    Ok(parse_set_output(&String::from_utf16_lossy(&utf16), MARKER))
+}
+
+/// Parse the output of cmd's `set` printed after `marker`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_set_output(output: &str, marker: &str) -> HashMap<String, String> {
+    output
+        .lines()
+        .skip_while(|line| line.trim() != marker)
+        .skip(1)
+        .filter_map(|line| line.split_once('='))
+        // cmd keeps per-drive working directories in variables like `=C:`.
+        .filter(|(key, _)| !key.is_empty())
+        .map(|(key, value)| (key.to_string(), value.trim_end_matches('\r').to_string()))
+        .collect()
 }
 
 #[cfg(unix)]
@@ -232,12 +287,23 @@ fn exec(mut command: Command) -> Result<()> {
     ))
 }
 
-#[cfg(not(unix))]
+/// Start the application and exit. Console entry points, like most conda entry points on
+/// Windows, would otherwise open a console window next to the application.
+#[cfg(windows)]
 fn exec(mut command: Command) -> Result<()> {
-    let status = command
-        .status()
+    use std::os::windows::process::CommandExt;
+
+    command
+        .creation_flags(windows::CREATE_NO_WINDOW)
+        .spawn()
         .map_err(|e| anyhow!("could not start {:?}: {}", command.get_program(), e))?;
-    std::process::exit(status.code().unwrap_or(1));
+    std::process::exit(0);
+}
+
+#[cfg(windows)]
+mod windows {
+    /// <https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags>
+    pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 }
 
 /// macOS shows a running program in the Dock as the application bundle its executable lives in.
@@ -400,16 +466,23 @@ mod macos {
 
 /// Minimal native feedback, as a launched GUI application has no terminal.
 mod ui {
-    use std::process::Child;
-
     /// Feedback shown while unpacking, hidden again when dropped.
-    pub struct Progress(Option<Child>);
+    pub struct Progress(Option<Box<dyn FnOnce()>>);
+
+    impl Progress {
+        fn none() -> Self {
+            Self(None)
+        }
+
+        fn hide_with(hide: impl FnOnce() + 'static) -> Self {
+            Self(Some(Box::new(hide)))
+        }
+    }
 
     impl Drop for Progress {
         fn drop(&mut self) {
-            if let Some(child) = &mut self.0 {
-                let _ = child.kill();
-                let _ = child.wait();
+            if let Some(hide) = self.0.take() {
+                hide();
             }
         }
     }
@@ -420,22 +493,94 @@ mod ui {
         fn error(&self, name: &str, message: &str);
     }
 
+    /// Set to log to stderr instead of showing dialogs, e.g. in CI where a dialog would block.
+    const NO_UI_ENV: &str = "PIXI_LAUNCHER_NO_UI";
+
     pub fn platform_ui() -> Box<dyn LaunchUi> {
+        if std::env::var_os(NO_UI_ENV).is_some() {
+            return Box::new(LogUi);
+        }
         #[cfg(target_os = "macos")]
         return Box::new(macos::MacUi);
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(windows)]
+        return Box::new(windows::WindowsUi);
+        #[cfg(not(any(target_os = "macos", windows)))]
         return Box::new(LogUi);
     }
 
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
     struct LogUi;
     impl LaunchUi for LogUi {
         fn installing(&self, name: &str) -> Progress {
             eprintln!("⏳ Setting up {name} for first use...");
-            Progress(None)
+            Progress::none()
         }
         fn error(&self, name: &str, message: &str) {
             eprintln!("❌ {name} could not be started: {message}");
+        }
+    }
+
+    #[cfg(windows)]
+    mod windows {
+        use std::time::Duration;
+
+        use windows_sys::Win32::{
+            Foundation::HWND,
+            UI::WindowsAndMessaging::{
+                FindWindowW, MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND,
+                MessageBoxW, PostMessageW, WM_CLOSE,
+            },
+        };
+
+        use super::{LaunchUi, Progress};
+
+        pub struct WindowsUi;
+
+        fn wide(s: &str) -> Vec<u16> {
+            s.encode_utf16().chain(std::iter::once(0)).collect()
+        }
+
+        fn message_box(title: &str, text: &str, style: u32) {
+            let (title, text) = (wide(title), wide(text));
+            unsafe {
+                MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), style);
+            }
+        }
+
+        impl LaunchUi for WindowsUi {
+            fn installing(&self, name: &str) -> Progress {
+                let title = format!("{name} setup");
+                let text = format!(
+                    "Setting up {name} for first use.\n\nThis can take a minute, {name} will open automatically."
+                );
+                let dialog_title = title.clone();
+                let thread = std::thread::spawn(move || {
+                    message_box(
+                        &dialog_title,
+                        &text,
+                        MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND,
+                    );
+                });
+                Progress::hide_with(move || {
+                    // The dialog may not exist yet or may already be closed by the user.
+                    let title = wide(&title);
+                    let class = wide("#32770");
+                    while !thread.is_finished() {
+                        let hwnd: HWND = unsafe { FindWindowW(class.as_ptr(), title.as_ptr()) };
+                        if !hwnd.is_null() {
+                            unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                })
+            }
+
+            fn error(&self, name: &str, message: &str) {
+                message_box(
+                    &format!("{name} could not be started"),
+                    message,
+                    MB_OK | MB_ICONERROR,
+                );
+            }
         }
     }
 
@@ -462,10 +607,13 @@ mod ui {
                     quote(name),
                 );
                 match Command::new("osascript").args(["-e", &script]).spawn() {
-                    Ok(child) => Progress(Some(child)),
+                    Ok(mut child) => Progress::hide_with(move || {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }),
                     Err(e) => {
                         tracing::warn!("could not show progress dialog: {e}");
-                        Progress(None)
+                        Progress::none()
                     }
                 }
             }
@@ -511,6 +659,16 @@ mod tests {
             serde_json::from_str::<LauncherConfig>(&json).unwrap(),
             config
         );
+    }
+
+    #[test]
+    fn test_parse_set_output() {
+        let output = "noise from activate.d\r\n___MARKER___\r\n=C:=C:\\Users\r\nCONDA_PREFIX=C:\\env\r\nPATH=C:\\env;C:\\Windows\r\nEQ=a=b\r\n";
+        let env = parse_set_output(output, "___MARKER___");
+        assert_eq!(env.len(), 3);
+        assert_eq!(env["CONDA_PREFIX"], "C:\\env");
+        assert_eq!(env["PATH"], "C:\\env;C:\\Windows");
+        assert_eq!(env["EQ"], "a=b");
     }
 
     #[test]

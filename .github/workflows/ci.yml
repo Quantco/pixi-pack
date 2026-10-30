@@ -70,3 +70,30 @@ jobs:
           key: tests
       - name: Run test
         run: pixi run test --color always${{ startsWith(matrix.os, 'ubuntu') && ' --no-default-features --features rustls' || '' }}
+
+  create-app:
+    name: create-app
+    timeout-minutes: 45
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
+        with:
+          activate-environment: true
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: create-app
+      - name: Build
+        run: cargo build --release --features app --bins --color always
+      - name: Create and launch application
+        shell: bash
+        run: tests/app/smoke-test.sh target/release/pixi-pack target/release/pixi-launcher

@@ -6,7 +6,7 @@ use clap_complete::{Shell, generate};
 use clap_verbosity_flag::Verbosity;
 
 use anyhow::Result;
-use pixi_pack::{UnpackOptions, find_bundled_launcher_config, launch, unpack};
+use pixi_pack::{UnpackOptions, unpack};
 use rattler_shell::shell::ShellEnum;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
@@ -54,30 +54,6 @@ enum Commands {
         #[arg(short, long, value_enum)]
         shell: Shell,
     },
-    /// Unpack the environment on first use and start an application from it.
-    /// This is what application bundles created with `pixi-pack --create-app` run.
-    Launch {
-        /// Path to the launcher config (`pixi-launcher.json`)
-        #[arg(long)]
-        config: PathBuf,
-        /// Arguments passed on to the application
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-}
-
-/// A launched application has no terminal, so log to a file instead.
-fn init_launch_logging() {
-    let log_file = dirs::cache_dir()
-        .map(|dir| dir.join("pixi-unpack-launch.log"))
-        .and_then(|path| std::fs::File::create(path).ok());
-    let builder = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO)
-        .with_ansi(false);
-    match log_file {
-        Some(file) => builder.with_writer(std::sync::Mutex::new(file)).init(),
-        None => builder.with_writer(std::io::stderr).init(),
-    }
 }
 
 /* -------------------------------------------- MAIN ------------------------------------------- */
@@ -85,13 +61,6 @@ fn init_launch_logging() {
 /// The main entrypoint for the pixi-unpack CLI.
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Inside an application bundle, all arguments belong to the application.
-    if let Some(config) = find_bundled_launcher_config() {
-        init_launch_logging();
-        let args = std::env::args().skip(1).collect();
-        return launch(&config, args).await;
-    }
-
     let cli = Cli::parse();
 
     tracing_subscriber::FmtSubscriber::builder()
@@ -114,9 +83,6 @@ async fn main() -> Result<()> {
         Some(Commands::Completion { shell }) => {
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "pixi-unpack", &mut io::stdout());
-        }
-        Some(Commands::Launch { config, args }) => {
-            launch(&config, args).await?;
         }
         None => {
             let options = UnpackOptions {

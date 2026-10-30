@@ -62,17 +62,23 @@ struct Cli {
     #[arg(long, default_value = "false", conflicts_with = "create_executable")]
     directory_only: bool,
 
-    /// Create an application bundle (`.app`/`.dmg`) described by the given TOML file.
-    /// `--output-file` is the directory the bundles are written to.
+    /// Optional path or URL to a pixi-unpack executable.
+    // Ex. /path/to/pixi-unpack/pixi-unpack.exe
+    // Ex. https://example.com/pixi-unpack.exe
+    #[arg(long, requires = "create_executable")]
+    pixi_unpack_source: Option<UrlOrPath>,
+
+    /// Create an application (macOS `.app`/`.dmg`, Windows installer, Linux AppImage/`.deb`)
+    /// described by the given TOML file.
+    /// `--output-file` is the directory the application is written to.
     #[cfg(feature = "app")]
     #[arg(long, conflicts_with_all = ["create_executable", "directory_only"])]
     create_app: Option<PathBuf>,
 
-    /// Optional path or URL to a pixi-unpack executable.
-    // Ex. /path/to/pixi-unpack/pixi-unpack.exe
-    // Ex. https://example.com/pixi-unpack.exe
-    #[arg(long)]
-    pixi_unpack_source: Option<UrlOrPath>,
+    /// Optional path or URL to a pixi-launcher executable to use for `--create-app`.
+    #[cfg(feature = "app")]
+    #[arg(long, requires = "create_app")]
+    pixi_launcher_source: Option<UrlOrPath>,
 
     /// Rattler config for mirror or S3 configuration.
     #[arg(long, short)]
@@ -135,18 +141,10 @@ async fn main() -> Result<()> {
         command,
         #[cfg(feature = "app")]
         create_app,
+        #[cfg(feature = "app")]
+        pixi_launcher_source,
         ..
     } = cli;
-
-    if pixi_unpack_source.is_some() && !create_executable {
-        #[cfg(feature = "app")]
-        let has_app = create_app.is_some();
-        #[cfg(not(feature = "app"))]
-        let has_app = false;
-        if !has_app {
-            anyhow::bail!("--pixi-unpack-source requires --create-executable or --create-app");
-        }
-    }
 
     match command {
         Some(Commands::Completion { shell }) => {
@@ -203,7 +201,8 @@ async fn main() -> Result<()> {
             if let Some(app_config) = create_app {
                 let app_config = pixi_pack::AppConfig::from_file(&app_config)?;
                 tracing::debug!("Running create-app with options: {:?}", options);
-                pixi_pack::create_app(options, app_config, &app_out_dir).await?;
+                pixi_pack::create_app(options, app_config, pixi_launcher_source, &app_out_dir)
+                    .await?;
                 return Ok(());
             }
             tracing::debug!("Running pack command with options: {:?}", options);

@@ -4884,6 +4884,7 @@ dependencies = [
  "uv-types",
  "uv-workspace",
  "walkdir",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

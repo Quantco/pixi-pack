@@ -94,3 +94,9 @@ rstest = "0.27.0"
 sha2 = "0.11.0"
 insta = "1.47.2"
 serial_test = "4.0.1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60.2", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+] }
