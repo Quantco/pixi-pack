@@ -51,7 +51,8 @@ MINGW* | MSYS* | CYGWIN*)
   data_dir="$LOCALAPPDATA/$identifier"
   # NSIS installs silently with /S, for the current user into %LOCALAPPDATA%\<product name>.
   installer=("$work"/out/*-setup.exe)
-  "${installer[0]}" /S
+  # Git Bash would turn `/S` into a path.
+  MSYS2_ARG_CONV_EXCL='*' "${installer[0]}" /S
   run() { "$LOCALAPPDATA/IDLE Demo/IDLE Demo.exe" "$marker"; }
   ;;
 esac
