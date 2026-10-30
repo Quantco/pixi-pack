@@ -22,6 +22,7 @@ use crate::{
 };
 
 const PACK_FILE_NAME: &str = "pack.tar";
+const AD_HOC_SIGNING_IDENTITY: &str = "-";
 
 /// Application settings, read from a TOML file passed to `--create-app`.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -131,6 +132,7 @@ pub struct AppMacOsConfig {
     /// Codesigning identity, e.g. `Developer ID Application: Jane Doe (TEAMID)`.
     /// Notarization runs when `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`
     /// (or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH`) are set.
+    /// Without it, the application is signed ad-hoc.
     pub signing_identity: Option<String>,
     pub minimum_system_version: Option<String>,
 }
@@ -248,10 +250,15 @@ pub async fn create_app(
         std::fs::set_permissions(&main_binary_file, std::fs::Permissions::from_mode(0o755))?;
     }
 
-    let mut macos = MacOsConfig::new();
-    if let Some(identity) = &app.macos.signing_identity {
-        macos = macos.signing_identity(identity);
-    }
+    // Without a signing identity, macOS considers a downloaded application "damaged", as the
+    // launcher is signed by the linker but the bundle is not. An ad-hoc signature (`-`) lets
+    // users open it anyway in the system settings.
+    let mut macos = MacOsConfig::new().signing_identity(
+        app.macos
+            .signing_identity
+            .as_deref()
+            .unwrap_or(AD_HOC_SIGNING_IDENTITY),
+    );
     if let Some(version) = &app.macos.minimum_system_version {
         macos = macos.minimum_system_version(version);
     }
