@@ -53,7 +53,8 @@ impl LauncherConfig {
     pub fn from_file(path: &Path) -> Result<Self> {
         let contents = std::fs::read_to_string(path)
             .with_context(|| format!("could not read launcher config {}", path.display()))?;
-        serde_json::from_str(&contents)
+        // Editors on Windows like to add a byte order mark.
+        serde_json::from_str(contents.trim_start_matches('\u{feff}'))
             .with_context(|| format!("could not parse launcher config {}", path.display()))
     }
 
@@ -736,6 +737,15 @@ mod tests {
         assert_eq!(env[OsStr::new("EMPTY")], "");
         // Outside of an AppImage, the environment is used as is.
         assert_eq!(base_env(vars.into_iter(), None).len(), 4);
+    }
+
+    #[test]
+    fn test_launcher_config_with_byte_order_mark() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(LAUNCHER_CONFIG_FILE_NAME);
+        let json = serde_json::to_string(&config()).unwrap();
+        std::fs::write(&path, format!("\u{feff}{json}")).unwrap();
+        assert_eq!(LauncherConfig::from_file(&path).unwrap(), config());
     }
 
     #[test]
