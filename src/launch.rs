@@ -474,6 +474,7 @@ mod ui {
             Self(None)
         }
 
+        #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
         fn hide_with(hide: impl FnOnce() + 'static) -> Self {
             Self(Some(Box::new(hide)))
         }

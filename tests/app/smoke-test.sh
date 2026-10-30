@@ -38,12 +38,13 @@ Darwin)
   ;;
 Linux)
   data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/$identifier"
-  sudo dpkg -i "$work"/out/*.deb
-  # Test the AppImage first, then the Debian package.
+  # Test the AppImage first, then the Debian package, extracted instead of installed.
   appimage=("$work"/out/*.AppImage)
   chmod +x "${appimage[0]}"
   APPIMAGE_EXTRACT_AND_RUN=1 "${appimage[0]}" "$marker"
-  run() { idle-demo "$marker"; }
+  deb=("$work"/out/*.deb)
+  dpkg-deb -x "${deb[0]}" "$work/deb"
+  run() { "$work/deb/usr/bin/idle-demo" "$marker"; }
   ;;
 MINGW* | MSYS* | CYGWIN*)
   data_dir="$LOCALAPPDATA/$identifier"
