@@ -13,8 +13,9 @@ marker="$work/marker.txt"
 identifier="org.example.pixi-pack-smoke-test"
 
 # Same app as the example, but the entry point writes a marker file instead of opening a window.
+# `CONDA_PREFIX` is only set if the environment was activated.
 sed -e "s/^identifier = .*/identifier = \"$identifier\"/" \
-  -e 's/^args = .*/args = ["-c", "import sys, tkinter; open(sys.argv[1], \\"w\\").write(sys.prefix)"]/' \
+  -e 's/^args = .*/args = ["-c", "import os, sys, tkinter; open(sys.argv[1], \\"w\\").write(os.environ[\\"CONDA_PREFIX\\"])"]/' \
   examples/app/app.toml >examples/app/smoke-test.toml
 cleanup() {
   rm -f examples/app/smoke-test.toml
@@ -68,7 +69,7 @@ check() {
     cat "$data_dir/launcher.log" || true
     exit 1
   fi
-  echo "entry point ran in $(cat "$marker")"
+  echo "entry point ran in the activated environment $(cat "$marker")"
   rm "$marker"
 }
 
