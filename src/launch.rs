@@ -753,13 +753,19 @@ mod tests {
 
     #[test]
     fn test_replace_placeholders() {
-        let placeholders = menu_placeholders(Path::new("/opt/env"), Platform::Linux64);
+        let prefix = Path::new("/opt/env");
+        let placeholders = menu_placeholders(prefix, Platform::Linux64);
+        // Paths are joined with the separator of the host.
         assert_eq!(
             replace_placeholders(
                 "{{ PYTHON }} -m x {{MENU_DIR}}/x.{{ ICON_EXT }}",
                 &placeholders
             ),
-            "/opt/env/bin/python -m x /opt/env/Menu/x.png"
+            format!(
+                "{} -m x {}/x.png",
+                prefix.join("bin/python").display(),
+                prefix.join("Menu").display()
+            )
         );
         let placeholders = menu_placeholders(Path::new("C:\\env"), Platform::Win64);
         assert!(placeholders["PYTHONW"].ends_with("pythonw.exe"));
