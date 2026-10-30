@@ -1,11 +1,12 @@
 //! Launching a GUI application from a bundled pack.
 //!
-//! An application bundle (e.g. a macOS `.app`) contains the `pixi-unpack` executable, a pack and a
+//! An application bundle (e.g. a macOS `.app`) contains the `pixi-launcher` executable, a pack and a
 //! [`LauncherConfig`]. On first launch the pack is unpacked into a per-user data directory, on
 //! every launch the environment is activated and the entry point is started.
 
 use std::{
     collections::HashMap,
+    ffi::{OsStr, OsString},
     fs::File,
     path::{Path, PathBuf},
     process::Command,
@@ -112,13 +113,19 @@ async fn launch_impl(config_path: &Path, config: &LauncherConfig, args: Vec<Stri
 
     let prefix = install_dir.join(ENV_NAME);
     let entry_point = find_entry_point(&prefix, &config.entry_point)?;
-    let env = activation_env(&prefix)?;
+    let base_env = base_env(std::env::vars_os(), std::env::var_os("APPDIR").as_deref());
+    let env = activation_env(&prefix, &base_env)?;
 
     #[cfg(target_os = "macos")]
     let mut command = macos::bundled_command(&install_dir, &prefix, &entry_point)?;
     #[cfg(not(target_os = "macos"))]
     let mut command = Command::new(&entry_point);
-    command.args(&config.args).args(args).envs(env);
+    command
+        .args(&config.args)
+        .args(args)
+        .env_clear()
+        .envs(base_env)
+        .envs(env);
     tracing::info!(
         "Starting {:?} {:?}",
         command.get_program(),
@@ -208,6 +215,35 @@ fn find_entry_point(prefix: &Path, name: &str) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("entry point `{}` not found in {}", name, prefix.display()))
 }
 
+/// The environment to start the application with, before activation.
+///
+/// The AppImage runtime points variables like `PYTHONHOME`, `PATH` or `LD_LIBRARY_PATH` into the
+/// mounted AppImage (`APPDIR`), which is meant for the launcher only. They are removed, as e.g.
+/// the environment's python would look for its standard library there.
+fn base_env(
+    vars: impl Iterator<Item = (OsString, OsString)>,
+    appdir: Option<&OsStr>,
+) -> HashMap<OsString, OsString> {
+    let Some(appdir) = appdir.map(Path::new) else {
+        return vars.collect();
+    };
+    vars.filter_map(|(key, value)| {
+        let paths: Vec<PathBuf> = std::env::split_paths(&value).collect();
+        if !paths.iter().any(|p| p.starts_with(appdir)) {
+            return Some((key, value));
+        }
+        let remaining: Vec<PathBuf> = paths
+            .into_iter()
+            .filter(|p| !p.starts_with(appdir) && !p.as_os_str().is_empty())
+            .collect();
+        if remaining.is_empty() {
+            return None;
+        }
+        Some((key, std::env::join_paths(remaining).ok()?))
+    })
+    .collect()
+}
+
 fn activation_variables() -> ActivationVariables {
     ActivationVariables {
         conda_prefix: None,
@@ -219,9 +255,16 @@ fn activation_variables() -> ActivationVariables {
 
 /// Environment variables of the activated prefix.
 #[cfg(unix)]
-fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
+fn activation_env(
+    prefix: &Path,
+    base_env: &HashMap<OsString, OsString>,
+) -> Result<HashMap<String, String>> {
     let activator = Activator::from_path(prefix, shell::Bash::default(), Platform::current())?;
-    Ok(activator.run_activation(activation_variables(), None)?)
+    let environment = base_env
+        .iter()
+        .map(|(k, v)| (k.as_os_str(), v.as_os_str()))
+        .collect();
+    Ok(activator.run_activation(activation_variables(), Some(environment))?)
 }
 
 /// Environment variables of the activated prefix.
@@ -229,7 +272,10 @@ fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
 /// `Activator::run_activation` would open a console window, as the launcher has none, so the
 /// activation script is run here with `CREATE_NO_WINDOW`.
 #[cfg(windows)]
-fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
+fn activation_env(
+    prefix: &Path,
+    base_env: &HashMap<OsString, OsString>,
+) -> Result<HashMap<String, String>> {
     use std::os::windows::process::CommandExt;
 
     const MARKER: &str = "___PIXI_LAUNCHER_ENV___";
@@ -247,6 +293,8 @@ fn activation_env(prefix: &Path) -> Result<HashMap<String, String>> {
     let output = Command::new("cmd.exe")
         .args(["/D", "/U", "/C"])
         .arg(&script_path)
+        .env_clear()
+        .envs(base_env)
         .creation_flags(windows::CREATE_NO_WINDOW)
         .output()
         .context("could not run activation script")?;
@@ -670,6 +718,24 @@ mod tests {
         assert_eq!(env["CONDA_PREFIX"], "C:\\env");
         assert_eq!(env["PATH"], "C:\\env;C:\\Windows");
         assert_eq!(env["EQ"], "a=b");
+    }
+
+    #[test]
+    fn test_base_env_removes_appimage_paths() {
+        let vars = [
+            ("PYTHONHOME", "/tmp/.mount_x/usr/"),
+            ("PATH", "/tmp/.mount_x/usr/bin:/usr/bin:/bin"),
+            ("HOME", "/home/user"),
+            ("EMPTY", ""),
+        ]
+        .map(|(k, v)| (OsString::from(k), OsString::from(v)));
+        let env = base_env(vars.clone().into_iter(), Some(OsStr::new("/tmp/.mount_x")));
+        assert!(!env.contains_key(OsStr::new("PYTHONHOME")));
+        assert_eq!(env[OsStr::new("PATH")], "/usr/bin:/bin");
+        assert_eq!(env[OsStr::new("HOME")], "/home/user");
+        assert_eq!(env[OsStr::new("EMPTY")], "");
+        // Outside of an AppImage, the environment is used as is.
+        assert_eq!(base_env(vars.into_iter(), None).len(), 4);
     }
 
     #[test]
