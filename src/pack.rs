@@ -491,6 +491,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         CondaArchiveIdentifier::try_from_filename(&filename)
             .ok_or(anyhow!("could not parse package filename: {}", filename))?;
 
+        // The subdir may not exist yet, e.g. when all other packages are downloaded when unpacking.
+        create_dir_all(channel_dir.join(subdir)).await?;
         fs::copy(&path, channel_dir.join(subdir).join(&filename))
             .await
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;

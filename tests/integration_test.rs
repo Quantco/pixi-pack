@@ -284,13 +284,16 @@ async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
 }
 
 #[rstest]
-#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true)]
-#[case("my-webserver-0.1.0-pyh4616a5c_0.tar.bz2", true)]
-#[case("my_webserver-0.1.0-py3-none-any.whl", false)]
+#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true, false)]
+#[case("my-webserver-0.1.0-pyh4616a5c_0.tar.bz2", true, false)]
+#[case("my_webserver-0.1.0-py3-none-any.whl", false, false)]
+// the injected package is the only one in the pack
+#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true, true)]
 #[tokio::test]
 async fn test_inject(
     #[case] package_file: &str,
     #[case] is_conda: bool,
+    #[case] download_packages: bool,
     options: Options,
     mut required_fs_objects: Vec<&'static str>,
 ) {
@@ -303,6 +306,7 @@ async fn test_inject(
         .push(PathBuf::from(format!("examples/webserver/{package_file}")));
 
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
+    pack_options.download_packages = download_packages;
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);
