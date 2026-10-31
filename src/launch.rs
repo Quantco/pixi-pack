@@ -9,6 +9,7 @@ use std::{
     fs::File,
     path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
 };
 
 use anyhow::{Context, Result, anyhow};
@@ -19,7 +20,7 @@ use rattler_shell::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{UnpackOptions, unpack};
+use crate::{UnpackOptions, UnpackProgress, unpack};
 
 /// File name of the launcher config inside an application bundle.
 pub const LAUNCHER_CONFIG_FILE_NAME: &str = "pixi-launcher.json";
@@ -155,12 +156,14 @@ async fn ensure_installed(
         .parent()
         .unwrap_or(Path::new("."))
         .join(&config.pack_file);
-    let _progress = ui::platform_ui().installing(&config.name);
+    let progress = Arc::new(UnpackProgress::default());
+    let _progress = ui::platform_ui().installing(&config.name, progress.clone());
     unpack(UnpackOptions {
         pack_file,
         output_directory: install_dir.to_path_buf(),
         env_name: ENV_NAME.to_string(),
         shell: None,
+        progress: Some(progress),
     })
     .await?;
     std::fs::write(&marker, &config.version)?;
@@ -566,6 +569,12 @@ mod macos {
 
 /// Minimal native feedback, as a launched GUI application has no terminal.
 mod ui {
+    use std::sync::Arc;
+
+    use indicatif::HumanBytes;
+
+    use crate::UnpackProgress;
+
     /// Feedback shown while unpacking, hidden again when dropped.
     pub struct Progress(Option<Box<dyn FnOnce()>>);
 
@@ -589,13 +598,35 @@ mod ui {
     }
 
     pub trait LaunchUi {
-        /// Show that the first-launch setup is running.
-        fn installing(&self, name: &str) -> Progress;
+        /// Show the progress of the first-launch setup.
+        fn installing(&self, name: &str, progress: Arc<UnpackProgress>) -> Progress;
         fn error(&self, name: &str, message: &str);
     }
 
     /// Set to log to stderr instead of showing dialogs, e.g. in CI where a dialog would block.
     const NO_UI_ENV: &str = "PIXI_LAUNCHER_NO_UI";
+
+    /// How often a progress window is updated.
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+    const UPDATE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
+
+    fn setup_text(name: &str) -> String {
+        format!("Setting up {name} for first use. {name} will open automatically.")
+    }
+
+    /// The fraction done and a status line, `None` while the total is not known yet.
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+    fn status(progress: &UnpackProgress) -> Option<(f64, String)> {
+        let (done, total) = progress.get();
+        if total == 0 {
+            None
+        } else if done >= total {
+            Some((1.0, "Installing...".to_string()))
+        } else {
+            let status = format!("{} of {}", HumanBytes(done), HumanBytes(total));
+            Some((done as f64 / total as f64, status))
+        }
+    }
 
     pub fn platform_ui() -> Box<dyn LaunchUi> {
         if std::env::var_os(NO_UI_ENV).is_some() {
@@ -611,7 +642,7 @@ mod ui {
 
     struct LogUi;
     impl LaunchUi for LogUi {
-        fn installing(&self, name: &str) -> Progress {
+        fn installing(&self, name: &str, _progress: Arc<UnpackProgress>) -> Progress {
             eprintln!("⏳ Setting up {name} for first use...");
             Progress::none()
         }
@@ -620,19 +651,50 @@ mod ui {
         }
     }
 
+    /// Creates a window with `show` on a new thread and runs `update` on it every
+    /// [`UPDATE_INTERVAL`] until the returned [`Progress`] is dropped, then runs `hide`.
+    #[cfg(any(target_os = "macos", windows))]
+    fn poll<W>(
+        show: impl FnOnce() -> W + Send + 'static,
+        mut update: impl FnMut(&mut W) + Send + 'static,
+        hide: impl FnOnce(W) + Send + 'static,
+    ) -> Progress {
+        let (stop, stopped) = std::sync::mpsc::channel::<()>();
+        let thread = std::thread::spawn(move || {
+            let mut window = show();
+            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                stopped.recv_timeout(UPDATE_INTERVAL)
+            {
+                update(&mut window);
+            }
+            hide(window);
+        });
+        Progress::hide_with(move || {
+            drop(stop);
+            let _ = thread.join();
+        })
+    }
+
     #[cfg(windows)]
     mod windows {
-        use std::time::Duration;
+        use std::sync::Arc;
 
-        use windows_sys::Win32::{
-            Foundation::HWND,
-            UI::WindowsAndMessaging::{
-                FindWindowW, MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND,
-                MessageBoxW, PostMessageW, WM_CLOSE,
+        use windows::{
+            Win32::{
+                System::Com::{
+                    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance,
+                    CoInitializeEx,
+                },
+                UI::Shell::{
+                    CLSID_ProgressDialog, IProgressDialog, PROGDLG_NOCANCEL, PROGDLG_NOMINIMIZE,
+                },
             },
+            core::HSTRING,
         };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
 
-        use super::{LaunchUi, Progress};
+        use super::{LaunchUi, Progress, poll, setup_text, status};
+        use crate::UnpackProgress;
 
         pub struct WindowsUi;
 
@@ -640,61 +702,84 @@ mod ui {
             s.encode_utf16().chain(std::iter::once(0)).collect()
         }
 
-        fn message_box(title: &str, text: &str, style: u32) {
-            let (title, text) = (wide(title), wide(text));
-            // SAFETY: both strings are NUL-terminated UTF-16 and outlive the call.
+        /// Show the shell's progress dialog, which runs its own window thread.
+        fn progress_dialog(title: &str, text: &str) -> windows::core::Result<IProgressDialog> {
+            // SAFETY: COM is initialized for the calling thread before creating the dialog, which
+            // is only used from that thread. No reserved arguments are passed.
             unsafe {
-                MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), style);
+                CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
+                let dialog: IProgressDialog =
+                    CoCreateInstance(&CLSID_ProgressDialog, None, CLSCTX_INPROC_SERVER)?;
+                dialog.SetTitle(&HSTRING::from(title))?;
+                dialog.SetLine(1, &HSTRING::from(text), false, None)?;
+                dialog.StartProgressDialog(
+                    None,
+                    None,
+                    PROGDLG_NOCANCEL | PROGDLG_NOMINIMIZE,
+                    None,
+                )?;
+                Ok(dialog)
             }
         }
 
         impl LaunchUi for WindowsUi {
-            fn installing(&self, name: &str) -> Progress {
-                let title = format!("{name} setup");
-                let text = format!(
-                    "Setting up {name} for first use.\n\nThis can take a minute, {name} will open automatically."
-                );
-                let dialog_title = title.clone();
-                let thread = std::thread::spawn(move || {
-                    message_box(
-                        &dialog_title,
-                        &text,
-                        MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND,
-                    );
-                });
-                Progress::hide_with(move || {
-                    // The dialog may not exist yet or may already be closed by the user.
-                    let title = wide(&title);
-                    let class = wide("#32770");
-                    while !thread.is_finished() {
-                        // SAFETY: both strings are NUL-terminated UTF-16 and outlive the call.
-                        let hwnd: HWND = unsafe { FindWindowW(class.as_ptr(), title.as_ptr()) };
-                        if !hwnd.is_null() {
-                            // SAFETY: posting to a stale window handle fails harmlessly.
-                            unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
+            fn installing(&self, name: &str, progress: Arc<UnpackProgress>) -> Progress {
+                let (title, text) = (format!("{name} setup"), setup_text(name));
+                // The dialog is created on the polling thread, as COM objects belong to the
+                // thread that created them.
+                poll(
+                    move || {
+                        progress_dialog(&title, &text)
+                            .inspect_err(|e| tracing::warn!("could not show progress: {e}"))
+                            .ok()
+                    },
+                    move |dialog| {
+                        if let (Some(dialog), Some((fraction, line))) =
+                            (dialog.as_ref(), status(&progress))
+                        {
+                            // SAFETY: the dialog was created on this thread.
+                            unsafe {
+                                let _ = dialog.SetProgress64((fraction * 1000.0) as u64, 1000);
+                                let _ = dialog.SetLine(2, &HSTRING::from(line), false, None);
+                            }
                         }
-                        std::thread::sleep(Duration::from_millis(50));
-                    }
-                })
+                    },
+                    |dialog| {
+                        if let Some(dialog) = dialog {
+                            // SAFETY: the dialog was created on this thread.
+                            let _ = unsafe { dialog.StopProgressDialog() };
+                        }
+                    },
+                )
             }
 
             fn error(&self, name: &str, message: &str) {
-                message_box(
-                    &format!("{name} could not be started"),
-                    message,
-                    MB_OK | MB_ICONERROR,
-                );
+                let (title, text) = (wide(&format!("{name} could not be started")), wide(message));
+                // SAFETY: both strings are NUL-terminated UTF-16 and outlive the call.
+                unsafe {
+                    MessageBoxW(
+                        std::ptr::null_mut(),
+                        text.as_ptr(),
+                        title.as_ptr(),
+                        MB_OK | MB_ICONERROR,
+                    );
+                }
             }
         }
     }
 
     #[cfg(target_os = "macos")]
     mod macos {
-        use std::process::Command;
+        use std::{process::Command, sync::Arc};
 
-        use super::{LaunchUi, Progress};
+        use super::{LaunchUi, Progress, poll, setup_text, status};
+        use crate::UnpackProgress;
 
         pub struct MacUi;
+
+        /// A window with a progress bar, run with `osascript` to avoid linking AppKit. It reads the
+        /// fraction done and a status line from the file passed as third argument.
+        const PROGRESS_WINDOW: &str = include_str!("launch/progress-window.js");
 
         /// Quote a string for use in AppleScript.
         fn quote(s: &str) -> String {
@@ -702,24 +787,48 @@ mod ui {
         }
 
         impl LaunchUi for MacUi {
-            fn installing(&self, name: &str) -> Progress {
-                let script = format!(
-                    "display dialog {} with title {} buttons {{\"OK\"}} default button 1 with icon note",
-                    quote(&format!(
-                        "Setting up {name} for first use.\n\nThis can take a minute, {name} will open automatically."
-                    )),
-                    quote(name),
-                );
-                match Command::new("osascript").args(["-e", &script]).spawn() {
-                    Ok(mut child) => Progress::hide_with(move || {
+            fn installing(&self, name: &str, progress: Arc<UnpackProgress>) -> Progress {
+                let status_file = match tempfile::NamedTempFile::new() {
+                    Ok(file) => file,
+                    Err(e) => {
+                        tracing::warn!("could not show progress: {e}");
+                        return Progress::none();
+                    }
+                };
+                let child = Command::new("osascript")
+                    .args([
+                        "-l",
+                        "JavaScript",
+                        "-e",
+                        PROGRESS_WINDOW,
+                        name,
+                        &setup_text(name),
+                    ])
+                    .arg(status_file.path())
+                    .spawn();
+                let child = match child {
+                    Ok(child) => child,
+                    Err(e) => {
+                        tracing::warn!("could not show progress: {e}");
+                        return Progress::none();
+                    }
+                };
+                poll(
+                    move || child,
+                    move |_| {
+                        if let Some((fraction, line)) = status(&progress) {
+                            // Written whole and renamed, so the window never reads a partial file.
+                            let path = status_file.path().with_extension("new");
+                            if std::fs::write(&path, format!("{fraction}\n{line}")).is_ok() {
+                                let _ = std::fs::rename(&path, status_file.path());
+                            }
+                        }
+                    },
+                    |mut child| {
                         let _ = child.kill();
                         let _ = child.wait();
-                    }),
-                    Err(e) => {
-                        tracing::warn!("could not show progress dialog: {e}");
-                        Progress::none()
-                    }
-                }
+                    },
+                )
             }
 
             fn error(&self, name: &str, message: &str) {

@@ -62,6 +62,11 @@ pub struct AppConfig {
     /// default is `dmg` on macOS, `nsis` on Windows and `flatpak` on Linux.
     #[serde(default)]
     pub formats: Vec<AppFormat>,
+    /// Download conda packages from their channels on first launch instead of including them,
+    /// which keeps the installer small. Packages from local or private channels are still
+    /// included. Not used for Flatpaks, which are unpacked at build time.
+    #[serde(default)]
+    pub download_packages: bool,
     #[serde(default)]
     pub macos: AppMacOsConfig,
     #[serde(default)]
@@ -351,6 +356,7 @@ pub async fn create_app(
     crate::pack(PackOptions {
         output_file: pack_dir.clone(),
         output_mode: crate::OutputMode::DirectoryOnly,
+        download_packages: config.download_packages && !formats.contains(&AppFormat::Flatpak),
         ..pack_options
     })
     .await?;

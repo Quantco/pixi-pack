@@ -206,6 +206,7 @@ async fn main() -> Result<()> {
                 pixi_unpack_source,
                 cache_dir: use_cache,
                 config,
+                download_packages: false,
             };
             #[cfg(feature = "app")]
             if let Some(app_config) = create_app {

@@ -232,6 +232,8 @@ args = ["-m", "ocean_viewer"]
 icons = ["icon.png"]
 # only the formats for the packed platform are created
 formats = ["dmg", "nsis", "flatpak"]
+# download the packages on first launch instead of including them (macOS and Windows)
+download-packages = true
 
 [macos]
 minimum-system-version = "11.0"
@@ -260,6 +262,12 @@ On macOS and Windows, the application contains `pixi-launcher`, the pack and a s
 On first launch, the environment is unpacked into the user's data directory (`~/Library/Application Support/<identifier>` or `%LOCALAPPDATA%\<identifier>`); later launches start the entry point right away.
 When a new version of the application is opened, its environment replaces the old one.
 The Windows uninstaller offers to remove the unpacked environment.
+A window shows the progress of the first launch.
+
+With `download-packages = true`, the application only contains the packages' metadata, and the first launch downloads them from their channels, checking their SHA256.
+This keeps the application small, e.g. for environments with CUDA, whose Windows installers would exceed the 2 GB limit of NSIS.
+The first launch then needs internet access, and the channels must be public and still serve the packages.
+Packages without an `http(s)` URL, e.g. from a local channel, are still included.
 
 On macOS, the application is signed with `codesign` with `signing-identity`, or ad-hoc without it (see [below](#applications-without-signing)).
 It is notarized if `APPLE_KEYCHAIN_PROFILE`, or `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`, or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH` are set.
@@ -275,6 +283,7 @@ The sandbox permissions (`finish-args`) let the application open windows, use th
 The identifier becomes the Flatpak application id, with `-` replaced by `_` in all but its last part.
 Users install the `.flatpak` by opening it in their software center, or with `flatpak install --user app.flatpak`.
 Flatpak is preinstalled on e.g. Fedora and Linux Mint, other distributions [need to install it](https://flathub.org/setup) once.
+Building needs about three times the size of the unpacked environment as free space in the temporary directory (`TMPDIR`), on GitHub-hosted runners large environments need [more free space](https://github.com/actions/runner-images/issues/2840) or `TMPDIR` on `/mnt`.
 
 `pixi-launcher` and `pixi-unpack` are downloaded from the pixi-pack release, use `--pixi-launcher-source` and `--pixi-unpack-source` to provide different ones.
 Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, launches are logged to `launcher.log` in the data directory.

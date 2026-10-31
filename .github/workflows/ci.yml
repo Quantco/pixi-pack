@@ -106,3 +106,9 @@ jobs:
       - name: Create and launch application
         shell: bash
         run: tests/app/smoke-test.sh target/debug/pixi-pack target/debug/pixi-launcher target/debug/pixi-unpack
+      - name: Create and launch application downloading its packages
+        if: runner.os != 'Linux'
+        shell: bash
+        env:
+          DOWNLOAD_PACKAGES: 1
+        run: tests/app/smoke-test.sh target/debug/pixi-pack target/debug/pixi-launcher target/debug/pixi-unpack

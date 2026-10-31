@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Create an application from examples/app and check that it starts the entry point.
 # Usage: tests/app/smoke-test.sh <path to pixi-pack> <path to pixi-launcher> <path to pixi-unpack>
+# With DOWNLOAD_PACKAGES=1, the packages are downloaded on first launch instead of included.
 set -euo pipefail
 
 pixi_pack="$1"
@@ -24,6 +25,10 @@ identifier="org.example.pixi-pack-smoke-test"
 sed -e "s/^identifier = .*/identifier = \"$identifier\"/" \
   -e 's/^args = .*/args = ["-c", "import os, sys, tkinter; open(sys.argv[1], \\"w\\").write(os.environ[\\"CONDA_PREFIX\\"])"]/' \
   examples/app/app.toml >examples/app/smoke-test.toml
+if [ "${DOWNLOAD_PACKAGES:-}" = 1 ]; then
+  { echo "download-packages = true"; cat examples/app/smoke-test.toml; } >"$work/smoke-test.toml"
+  mv "$work/smoke-test.toml" examples/app/smoke-test.toml
+fi
 cleanup() {
   rm -f examples/app/smoke-test.toml
   if [ -n "${mount:-}" ]; then hdiutil detach "$mount" >/dev/null || true; fi

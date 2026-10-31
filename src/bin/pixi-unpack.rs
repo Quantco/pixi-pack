@@ -90,6 +90,7 @@ async fn main() -> Result<()> {
                 output_directory,
                 env_name,
                 shell,
+                progress: None,
             };
             tracing::debug!("Running unpack command with options: {:?}", options);
             unpack(options).await?;

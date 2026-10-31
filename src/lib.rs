@@ -14,12 +14,15 @@ pub use launch::{LauncherConfig, find_bundled_launcher_config, launch};
 pub use pack::{OutputMode, PackOptions, pack, resolve_platform};
 use rattler_conda_types::Platform;
 use serde::{Deserialize, Serialize};
-pub use unpack::{UnpackOptions, unarchive, unpack};
+pub use unpack::{UnpackOptions, UnpackProgress, unarchive, unpack};
 pub use util::ProgressReporter;
 
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const PYPI_DIRECTORY_NAME: &str = "pypi";
 pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";
+/// Maps `<subdir>/<file name>` of conda packages left out of a pack to the URL they are
+/// downloaded from when unpacking, see [`PackOptions::download_packages`].
+pub const REMOTE_PACKAGES_PATH: &str = "remote-packages.json";
 pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
 pub const PIXI_PACK_VERSION: &str = env!("CARGO_PKG_VERSION");
 
