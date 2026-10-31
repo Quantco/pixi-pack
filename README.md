@@ -197,6 +197,119 @@ pixi-pack --create-executable --pixi-unpack-source ./pixi-unpack-x86_64-unknown-
 > [!TIP]
 > The produced executable is a simple shell script that contains both the `pixi-unpack` binary as well as the packed environment.
 
+### Applications (experimental)
+
+With the `app` cargo feature (`cargo install --features app`, it is not part of the released binaries), `pixi-pack` can turn an environment into an application that users install like any other:
+
+| Platform | Formats                               | Build host                                         |
+| -------- | ------------------------------------- | -------------------------------------------------- |
+| macOS    | `dmg` (default), `app`                | macOS                                              |
+| Windows  | `nsis` (default): an `.exe` installer | Windows, or any host with `makensis` on the `PATH` |
+| Linux    | `flatpak` (default)                   | Linux with `flatpak` and `flatpak-builder`         |
+
+Describe the application in a TOML file.
+If a package in the environment defines a [menuinst](https://conda.github.io/menuinst/) shortcut (`Menu/*.json`), like `napari` or `spyder`, the application can be based on it.
+Its name, description, command, icon and version, the macOS `CFBundleIdentifier` and the Linux `Categories` are used, unless set in the TOML file:
+
+```toml
+# app.toml
+menu = "napari"
+# only needed if the shortcut has no CFBundleIdentifier
+identifier = "org.napari.napari"
+```
+
+Otherwise, describe the application fully:
+
+```toml
+# app.toml
+name = "Ocean Viewer"
+identifier = "org.example.ocean-viewer"
+version = "1.0.0"
+description = "Look at ocean data"
+# executable in the environment to start, and its arguments
+entry-point = "python"
+args = ["-m", "ocean_viewer"]
+icons = ["icon.png"]
+# only the formats for the packed platform are created
+formats = ["dmg", "nsis", "flatpak"]
+# download the packages when unpacking instead of including them
+download-packages = true
+
+[macos]
+minimum-system-version = "11.0"
+signing-identity = "Developer ID Application: Jane Doe (TEAMID)"
+
+[windows]
+# sign with signtool and a certificate from the Windows certificate store ...
+certificate-thumbprint = "4E6FE4938621C659B9EA8D5F0CF7E96ACD7BE8A0"
+timestamp-url = "http://timestamp.digicert.com"
+tsp = true
+# ... or with any command, `%1` is replaced by the file to sign
+# sign-command = "C:/signing/sign.bat %1"
+
+[flatpak]
+# the defaults
+runtime = "org.freedesktop.Platform"
+runtime-version = "25.08"
+finish-args = ["--share=ipc", "--share=network", "--socket=x11", "--socket=wayland", "--device=dri", "--filesystem=home"]
+```
+
+```bash
+pixi-pack --create-app app.toml --platform osx-arm64
+```
+
+On macOS and Windows, the application contains `pixi-launcher`, the pack and a small launcher config.
+On first launch, the environment is unpacked into the user's data directory (`~/Library/Application Support/<identifier>` or `%LOCALAPPDATA%\<identifier>`); later launches start the entry point right away.
+When a new version of the application is opened, its environment replaces the old one.
+The Windows uninstaller offers to remove the unpacked environment.
+A window shows the progress of the first launch.
+
+With `download-packages = true`, the application only contains the packages' metadata, and the first launch downloads them from their channels, checking their SHA256.
+This keeps the application small, e.g. for environments with CUDA, whose Windows installers would exceed the 2 GB limit of NSIS.
+The first launch then needs internet access, and the channels must be public and still serve the packages.
+Packages without an `http(s)` URL, e.g. from a local channel, are still included.
+For Flatpaks, the packages are downloaded while building instead, which needs less disk space.
+
+On macOS, the application is signed with `codesign` with `signing-identity`, or ad-hoc without it (see [below](#applications-without-signing)).
+It is notarized if `APPLE_KEYCHAIN_PROFILE`, or `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`, or `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_PATH` are set.
+
+On Windows, the launcher gets the application's icon (an `.ico`, or one created from the largest `.png`) and version info, so the shortcuts and the Task Manager show the application.
+The launcher, the installer and the uninstaller are signed if `certificate-thumbprint` (with `signtool`, only on Windows) or `sign-command` (on any platform, e.g. with `osslsigncode` or a cloud signing service) is set.
+The sign command is split on spaces, use a script for commands with spaces in paths.
+
+On Linux, `flatpak-builder` unpacks the environment into the Flatpak with `pixi-unpack`, as Flatpaks are always installed at the same path.
+The Flatpak runs on the [Freedesktop runtime](https://flathub.org/apps/org.freedesktop.Platform), which users install along with the application.
+For the build, `pixi-pack` adds [Flathub](https://flathub.org) as a remote of the user's Flatpak installation if missing, and installs the runtime from it.
+The sandbox permissions (`finish-args`) let the application open windows, use the GPU and the network, and read and write files in the home directory, as conda GUI toolkits often don't use the file chooser portal.
+The identifier becomes the Flatpak application id, with `-` replaced by `_` in all but its last part.
+Users install the `.flatpak` by opening it in their software center, or with `flatpak install --user app.flatpak`.
+Flatpak is preinstalled on e.g. Fedora and Linux Mint, other distributions [need to install it](https://flathub.org/setup) once.
+Building needs about twice the size of the unpacked environment as free space in the temporary directory (`TMPDIR`), plus the packages unless `download-packages` is set.
+On GitHub-hosted runners, large environments need [more free space](https://github.com/actions/runner-images/issues/2840).
+
+`pixi-launcher` and `pixi-unpack` are downloaded from the pixi-pack release, use `--pixi-launcher-source` and `--pixi-unpack-source` to provide different ones.
+Set `PIXI_LAUNCHER_NO_UI=1` to make it log to stderr instead of showing dialogs, launches are logged to `launcher.log` in the data directory.
+Bundling for macOS and Windows is done with [cargo-packager](https://github.com/crabnebula-dev/cargo-packager).
+Of a menuinst shortcut, `precommand`, `working_dir` and `terminal` are not supported.
+See [`examples/app`](examples/app) for a complete example.
+
+#### Applications without signing
+
+Signing a macOS application with a Developer ID and notarizing it requires a paid [Apple Developer Program](https://developer.apple.com/programs/) membership, signing a Windows installer with a trusted certificate also costs money.
+Without them, `pixi-pack` signs macOS applications ad-hoc, and the applications work, but the first launch of a downloaded application needs one extra step.
+Applications copied from a USB drive or a network share, or deployed with a device management system, open without it.
+
+On macOS:
+
+1. Open the `.dmg` and drag the application to the `Applications` folder.
+2. Open the application. macOS says that it could not verify the application, click **Done**.
+3. Open **System Settings** → **Privacy & Security**. Below **Security**, it says that the application was blocked. Click **Open Anyway** and confirm with your password or Touch ID.
+
+This is only needed once per version of the application.
+
+On Windows, Microsoft Defender SmartScreen shows "Windows protected your PC" when starting the installer.
+Click **More info**, then **Run anyway**.
+
 ### Inject additional packages
 
 You can inject additional packages into the environment that are not specified in `pixi.lock` by using the `--inject` flag:

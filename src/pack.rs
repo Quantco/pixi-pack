@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     io::Write,
     path::{Path, PathBuf},
     str::FromStr,
@@ -45,7 +45,7 @@ use walkdir::WalkDir;
 
 use crate::{
     CHANNEL_DIRECTORY_NAME, Config, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
-    ProgressReporter,
+    ProgressReporter, REMOTE_PACKAGES_PATH,
 };
 use anyhow::anyhow;
 
@@ -103,6 +103,10 @@ pub struct PackOptions {
     pub output_mode: OutputMode,
     pub pixi_unpack_source: Option<UrlOrPath>,
     pub config: Option<Config>,
+    /// Leave out conda packages that can be downloaded from their channel when unpacking:
+    /// those with an `http(s)` URL and a SHA256. Their URLs are written to
+    /// [`REMOTE_PACKAGES_PATH`](crate::REMOTE_PACKAGES_PATH).
+    pub download_packages: bool,
 }
 
 /// Find the requested platform in the locked environment.
@@ -420,17 +424,28 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         }
     }
 
+    let mut remote_packages = BTreeMap::new();
+    if options.download_packages {
+        for package in &conda_packages_from_lockfile {
+            let url = package.location.try_into_url()?;
+            if matches!(url.scheme(), "http" | "https") && package.package_record.sha256.is_some() {
+                let key = format!("{}/{}", package.package_record.subdir, package.file_name);
+                remote_packages.insert(key, url);
+            }
+        }
+    }
+    let bundled_packages: Vec<_> = conda_packages_from_lockfile
+        .iter()
+        .filter(|p| {
+            !remote_packages.contains_key(&format!("{}/{}", p.package_record.subdir, p.file_name))
+        })
+        .collect();
+
     // Download packages to temporary directory.
-    tracing::info!(
-        "Downloading {} packages...",
-        conda_packages_from_lockfile.len()
-    );
-    eprintln!(
-        "⏳ Downloading {} packages...",
-        conda_packages_from_lockfile.len()
-    );
-    let bar = ProgressReporter::new(conda_packages_from_lockfile.len() as u64);
-    stream::iter(conda_packages_from_lockfile.iter())
+    tracing::info!("Downloading {} packages...", bundled_packages.len());
+    eprintln!("⏳ Downloading {} packages...", bundled_packages.len());
+    let bar = ProgressReporter::new(bundled_packages.len() as u64);
+    stream::iter(bundled_packages)
         .map(Ok)
         .try_for_each_concurrent(max_parallel_downloads, |package| async {
             download_package(&client, package, &channel_dir, options.cache_dir.as_deref()).await?;
@@ -476,6 +491,8 @@ pub async fn pack(options: PackOptions) -> Result<()> {
         CondaArchiveIdentifier::try_from_filename(&filename)
             .ok_or(anyhow!("could not parse package filename: {}", filename))?;
 
+        // The subdir may not exist yet, e.g. when all other packages are downloaded when unpacking.
+        create_dir_all(channel_dir.join(subdir)).await?;
         fs::copy(&path, channel_dir.join(subdir).join(&filename))
             .await
             .map_err(|e| anyhow!("could not copy file to channel directory: {}", e))?;
@@ -578,6 +595,15 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Create `repodata.json` files.
     tracing::info!("Creating repodata.json files");
     create_repodata_files(conda_packages.iter(), &channel_dir).await?;
+
+    if !remote_packages.is_empty() {
+        tracing::info!(
+            "{} packages are downloaded when unpacking",
+            remote_packages.len()
+        );
+        let remote_packages = serde_json::to_string_pretty(&remote_packages)?;
+        fs::write(output_folder.join(REMOTE_PACKAGES_PATH), remote_packages).await?;
+    }
 
     // Add pixi-pack.json containing metadata.
     tracing::info!("Creating pixi-pack.json file");
@@ -958,7 +984,7 @@ fn open_output_file(target: &Path, ext: Option<&str>) -> Result<CountingWriter> 
     }
 }
 
-fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
+pub(crate) fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
     let mut outfile = open_output_file(archive_target, None).map_err(|e| {
         anyhow!(
             "could not create archive file at {}: {}",
@@ -979,6 +1005,16 @@ async fn download_pixi_unpack_executable(
     pixi_pack_source: Option<UrlOrPath>,
     platform: Platform,
 ) -> Result<Vec<u8>> {
+    download_release_executable("pixi-unpack", pixi_pack_source, platform).await
+}
+
+/// Download one of the executables released with pixi-pack (e.g. `pixi-unpack`) for `platform`,
+/// or read it from `source` if given.
+pub(crate) async fn download_release_executable(
+    name: &str,
+    source: Option<UrlOrPath>,
+    platform: Platform,
+) -> Result<Vec<u8>> {
     let (os, arch) = match platform {
         Platform::Linux64 => ("unknown-linux-musl", "x86_64"),
         Platform::LinuxAarch64 => ("unknown-linux-musl", "aarch64"),
@@ -988,12 +1024,12 @@ async fn download_pixi_unpack_executable(
         Platform::WinArm64 => ("pc-windows-msvc", "aarch64"),
         _ => return Err(anyhow!("Unsupported platform: {}", platform)),
     };
-    let executable_name = format!("pixi-unpack-{}-{}", arch, os);
+    let executable_name = format!("{}-{}-{}", name, arch, os);
     let extension = if platform.is_windows() { ".exe" } else { "" };
     let version = env!("CARGO_PKG_VERSION");
 
-    // Build pixi-unpack executable url
-    let url = pixi_pack_source.unwrap_or_else(|| {
+    // Build executable url
+    let url = source.unwrap_or_else(|| {
         let default_url = format!(
             "https://github.com/Quantco/pixi-pack/releases/download/v{}/{}{}",
             version, executable_name, extension
@@ -1001,18 +1037,19 @@ async fn download_pixi_unpack_executable(
         UrlOrPath::Url(default_url.parse().expect("could not parse url"))
     });
 
-    eprintln!("📥 Fetching pixi-unpack executable...");
+    eprintln!("📥 Fetching {name} executable...");
 
     let mut executable_bytes = Vec::new();
 
-    // Use reqwest to download the pixi-unpack executable from the URL
+    // Use reqwest to download the executable from the URL
     // or read it from a local file if the URL is a file path
     if let UrlOrPath::Url(_) = &url {
         let client = reqwest::Client::new();
         let response = client.get(url.to_string()).send().await?;
         if !response.status().is_success() {
             return Err(anyhow!(
-                "Failed to download pixi-unpack executable from {}. Status: {}",
+                "Failed to download {} executable from {}. Status: {}",
+                name,
                 url,
                 response.status()
             ));
@@ -1043,7 +1080,7 @@ async fn download_pixi_unpack_executable(
             .map_err(|e| anyhow!("Failed to read local file {}: {}", url, e))?;
     }
 
-    eprintln!("✅ pixi-unpack executable downloaded successfully");
+    eprintln!("✅ {name} executable downloaded successfully");
 
     Ok(executable_bytes)
 }
@@ -1184,6 +1221,8 @@ async fn create_repodata_files(
     }
 
     for (subdir, packages) in packages_per_subdir {
+        // The subdir has no package files if all its packages are downloaded when unpacking.
+        create_dir_all(channel_dir.join(subdir)).await?;
         let repodata_path = channel_dir.join(subdir).join("repodata.json");
 
         let conda_packages = packages

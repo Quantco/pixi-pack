@@ -1,0 +1,12 @@
+name = "IDLE Demo"
+identifier = "org.example.idle-demo"
+version = "1.0.0"
+entry-point = "python"
+args = ["-m", "idlelib"]
+icons = ["icon.png"]
+# Only the formats for the packed platform are created.
+formats = ["dmg", "nsis", "flatpak"]
+
+[macos]
+minimum-system-version = "11.0"
+# signing-identity = "Developer ID Application: Jane Doe (TEAMID)"
