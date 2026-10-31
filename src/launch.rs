@@ -643,7 +643,7 @@ mod ui {
     struct LogUi;
     impl LaunchUi for LogUi {
         fn installing(&self, name: &str, _progress: Arc<UnpackProgress>) -> Progress {
-            eprintln!("⏳ Setting up {name} for first use...");
+            eprintln!("⏳ {}", setup_text(name));
             Progress::none()
         }
         fn error(&self, name: &str, message: &str) {
