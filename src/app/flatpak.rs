@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::App;
-use crate::{menu_placeholders, replace_placeholders};
+use crate::{REMOTE_PACKAGES_PATH, menu_placeholders, replace_placeholders};
 
 const FLATHUB_REPO: &str = "https://dl.flathub.org/repo/flathub.flatpakrepo";
 const PREFIX: &str = "/app/env";
@@ -112,7 +112,11 @@ pub(super) fn create(
 
     let mut build_commands = vec![
         "chmod +x pixi-unpack".to_string(),
-        "./pixi-unpack --output-directory /app --env-name env pack".to_string(),
+        // Unpacking extracts the packages next to the pack, and /app is a separate mount. Moving
+        // the pack there lets the environment hardlink the extracted files instead of copying.
+        "mv pack /app/.pack".to_string(),
+        "./pixi-unpack --output-directory /app --env-name env /app/.pack".to_string(),
+        "rm -rf /app/.pack".to_string(),
         format!("install -Dm755 launch.sh /app/bin/{command_name}"),
         format!("install -Dm644 app.desktop /app/share/applications/{id}.desktop"),
     ];
@@ -121,6 +125,11 @@ pub(super) fn create(
         build_commands.push(format!(
             "install -Dm644 icon.png /app/share/icons/hicolor/{size}x{size}/apps/{id}.png"
         ));
+    }
+
+    let mut build_options = json!({ "strip": false, "no-debuginfo": true });
+    if pack_dir.join(REMOTE_PACKAGES_PATH).exists() {
+        build_options["build-args"] = json!(["--share=network"]);
     }
 
     let manifest = json!({
@@ -135,7 +144,8 @@ pub(super) fn create(
             "name": "environment",
             "buildsystem": "simple",
             // Stripping or splitting off debug info would modify the conda packages' binaries.
-            "build-options": { "strip": false, "no-debuginfo": true },
+            // Packages left out of the pack are downloaded while building.
+            "build-options": build_options,
             "build-commands": build_commands,
             "sources": [
                 { "type": "dir", "path": pack_dir, "dest": "pack" },
@@ -162,6 +172,8 @@ pub(super) fn create(
             "--force-clean",
             // Needs FUSE, which e.g. containers often lack, and only speeds up large builds.
             "--disable-rofiles-fuse",
+            // The cache would hold another copy of the environment, which can be many GB.
+            "--disable-cache",
         ])
         .arg(format!("--arch={arch}"))
         .arg(format!("--default-branch={BRANCH}"))
