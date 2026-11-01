@@ -221,7 +221,7 @@ async fn build_local_package(
         .arg("publish")
         .arg("--target-dir")
         .arg(output_dir)
-        .arg("--build-platform")
+        .arg("--target-platform")
         .arg(platform)
         .arg("--path")
         .arg(manifest_path);
@@ -230,7 +230,7 @@ async fn build_local_package(
 
     if is_verbose {
         eprintln!(
-            "🔧 Running: pixi publish --target-dir {} --build-platform {} (in {})",
+            "🔧 Running: pixi publish --target-dir {} --target-platform {} (in {})",
             output_dir.display(),
             platform,
             manifest_dir.display()
@@ -257,7 +257,7 @@ async fn build_local_package(
                 output.status.code()
             );
             eprintln!(
-                "Command: pixi publish --target-dir {} --build-platform {} (in {})",
+                "Command: pixi publish --target-dir {} --target-platform {} (in {})",
                 output_dir.display(),
                 platform,
                 manifest_dir.display()
