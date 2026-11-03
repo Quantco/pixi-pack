@@ -53,11 +53,6 @@ fn options(
         OutputMode::DirectoryOnly => output_dir.path().join("environment"),
         OutputMode::Archive => output_dir.path().join("environment.tar"),
     };
-    let metadata = PixiPackMetadata {
-        version: DEFAULT_PIXI_PACK_VERSION.to_string(),
-        pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-        platform,
-    };
 
     Options {
         pack_options: PackOptions {
@@ -66,7 +61,6 @@ fn options(
             auth_file,
             output_file: pack_file.clone(),
             manifest_path,
-            metadata,
             injected_packages: vec![],
             ignore_pypi_non_wheel,
             output_mode,
@@ -590,6 +584,11 @@ async fn test_named_platform_pack(
         serde_json::from_str(&fs::read_to_string(dir_path.join("pixi-pack.json")).unwrap())
             .unwrap();
     assert_eq!(metadata.platform, expected_subdir);
+    assert_eq!(metadata.version, DEFAULT_PIXI_PACK_VERSION);
+    assert_eq!(
+        metadata.pixi_pack_version.as_deref(),
+        Some(PIXI_PACK_VERSION)
+    );
 
     // And it contains the packages that belong to the named platform.
     let openssl_package = match expected_subdir {

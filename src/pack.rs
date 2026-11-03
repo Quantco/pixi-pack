@@ -44,8 +44,8 @@ use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
 
 use crate::{
-    CHANNEL_DIRECTORY_NAME, Config, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
-    ProgressReporter, init_uv_preview,
+    CHANNEL_DIRECTORY_NAME, Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+    PIXI_PACK_VERSION, PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, init_uv_preview,
 };
 use anyhow::anyhow;
 
@@ -94,9 +94,6 @@ pub struct PackOptions {
     pub auth_file: Option<PathBuf>,
     pub output_file: PathBuf,
     pub manifest_path: PathBuf,
-    /// Metadata to write into the pack. `pack` fills in the resolved platform
-    /// itself, so the `platform` field here is ignored.
-    pub metadata: PixiPackMetadata,
     pub cache_dir: Option<PathBuf>,
     pub injected_packages: Vec<PathBuf>,
     pub ignore_pypi_non_wheel: bool,
@@ -582,8 +579,9 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Always record the real conda subdir here, a platform name like `jetson`
     // means nothing on the machine that unpacks this.
     let metadata = PixiPackMetadata {
+        version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+        pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
         platform: subdir,
-        ..options.metadata
     };
     let metadata = serde_json::to_string_pretty(&metadata)?;
     fs::write(metadata_path, metadata.as_bytes()).await?;

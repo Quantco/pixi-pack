@@ -27,17 +27,6 @@ pub struct PixiPackMetadata {
     pub platform: Subdir,
 }
 
-impl Default for PixiPackMetadata {
-    fn default() -> Self {
-        Self {
-            version: DEFAULT_PIXI_PACK_VERSION.to_string(),
-            pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-            // Overwritten with the target subdir when packing.
-            platform: Subdir::current().unwrap_or(Subdir::NoArch),
-        }
-    }
-}
-
 /// The configuration type for pixi-pack - just extends rattler config and can load the same TOML files as pixi.
 pub type Config = rattler_config::config::ConfigBase<rattler_config::config::NoExtension>;
 

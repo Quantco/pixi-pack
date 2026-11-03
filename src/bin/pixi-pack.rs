@@ -7,7 +7,7 @@ use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Subdir;
 
 use anyhow::Result;
-use pixi_pack::{Config, OutputMode, PackOptions, PixiPackMetadata, pack};
+use pixi_pack::{Config, OutputMode, PackOptions, pack};
 use rattler_lock::UrlOrPath;
 
 /* -------------------------------------------- CLI -------------------------------------------- */
@@ -171,7 +171,6 @@ async fn main() -> Result<()> {
                 auth_file,
                 output_file,
                 manifest_path,
-                metadata: PixiPackMetadata::default(),
                 injected_packages: inject,
                 ignore_pypi_non_wheel,
                 output_mode,
