@@ -16,7 +16,7 @@ use rattler::{
     package_cache::{CacheKey, PackageCache},
 };
 use rattler_conda_types::{
-    PackageRecord, Platform, RepoData, RepoDataRecord, package::DistArchiveIdentifier,
+    PackageRecord, RepoData, RepoDataRecord, package::DistArchiveIdentifier,
 };
 use rattler_package_streaming::fs::extract;
 use rattler_shell::{
@@ -29,7 +29,7 @@ use tokio::fs;
 use tokio_stream::wrappers::ReadDirStream;
 use url::Url;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
-use uv_configuration::{BuildOptions, NoBinary, NoBuild, initialize_rayon_once};
+use uv_configuration::{BuildOptions, NoBinary, NoBuild};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_distribution_types::{Dist, Resolution};
@@ -37,11 +37,13 @@ use uv_installer::Preparer;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_threads::initialize_rayon_once;
 use uv_types::{HashStrategy, InFlight};
 
 use crate::{
-    CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
+    CHANNEL_DIRECTORY_NAME, PACK_FORMAT_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
     PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, build_context::PixiPackBuildContext,
+    current_subdir, init_uv_preview,
 };
 
 /// Options for unpacking a pixi environment.
@@ -55,6 +57,7 @@ pub struct UnpackOptions {
 
 /// Unpack a pixi environment.
 pub async fn unpack(options: UnpackOptions) -> Result<()> {
+    init_uv_preview();
     let tmp_dir = if !options.pack_file.is_dir() {
         Some(
             tempfile::tempdir()
@@ -164,10 +167,10 @@ async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
 
     let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
 
-    if metadata.version != DEFAULT_PIXI_PACK_VERSION {
-        anyhow::bail!("Unsupported pixi-pack version: {}", metadata.version);
+    if metadata.version != PACK_FORMAT_VERSION {
+        anyhow::bail!("Unsupported pack format version: {}", metadata.version);
     }
-    if metadata.platform != Platform::current() {
+    if metadata.platform != current_subdir()? {
         anyhow::bail!("The pack was created for a different platform");
     }
 
@@ -293,7 +296,9 @@ async fn create_prefix(
                         cache_key,
                         move |destination| {
                             let value = package_path.clone();
-                            async move { extract(&value, &destination).map(|_| ()) }
+                            async move {
+                                extract(&value, &destination).map(|result| Some(result.sha256))
+                            }
                         },
                         None,
                     )
@@ -342,7 +347,7 @@ async fn create_activation_script(
 ) -> Result<()> {
     let file_extension = shell.extension();
     let activate_path = destination.join(format!("activate.{}", file_extension));
-    let activator = Activator::from_path(prefix, shell, Platform::current())?;
+    let activator = Activator::from_path(prefix, shell, current_subdir()?)?;
 
     let result = activator.activation(ActivationVariables {
         conda_prefix: None,
@@ -375,7 +380,7 @@ async fn install_pypi_packages(
         .values()
         .find(|x| x.name.as_normalized() == "python");
     let python_record = python_record.ok_or_else(|| anyhow!("No python record found."))?;
-    let python_info = PythonInfo::from_python_record(python_record, Platform::current())?;
+    let python_info = PythonInfo::from_python_record(python_record, current_subdir()?)?;
     tracing::debug!("Current Python is: {:?}", python_info);
     let pypi_cache =
         uv_cache::Cache::temp().map_err(|e| anyhow!("Could not create cache folder: {}", e))?;
@@ -404,10 +409,11 @@ async fn install_pypi_packages(
     let downloads_semaphore = Arc::new(tokio::sync::Semaphore::new(1));
     let distribute_database = DistributionDatabase::new(&client, &context, downloads_semaphore);
     let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
+    let hash_strategy = HashStrategy::default();
     let preparer = Preparer::new(
         &pypi_cache,
         &tags,
-        &HashStrategy::None,
+        &hash_strategy,
         &build_options,
         distribute_database,
     );
@@ -460,22 +466,23 @@ mod tests {
     use crate::PIXI_PACK_VERSION;
 
     use super::*;
+    use rattler_conda_types::Subdir;
     use rstest::*;
     use serde_json::json;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    fn other_platform() -> Platform {
-        match Platform::current() {
-            Platform::Linux64 => Platform::Win64,
-            _ => Platform::Linux64,
+    fn other_platform() -> Subdir {
+        match Subdir::current().unwrap() {
+            Subdir::Linux64 => Subdir::Win64,
+            _ => Subdir::Linux64,
         }
     }
 
     #[fixture]
     fn metadata_file(
-        #[default(DEFAULT_PIXI_PACK_VERSION.to_string())] version: String,
-        #[default(Platform::current())] platform: Platform,
+        #[default(PACK_FORMAT_VERSION.to_string())] version: String,
+        #[default(Subdir::current().unwrap())] platform: Subdir,
     ) -> NamedTempFile {
         let mut metadata_file = NamedTempFile::new().unwrap();
         let metadata = PixiPackMetadata {
@@ -523,14 +530,13 @@ mod tests {
     ) {
         let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
         let error = result.unwrap_err();
-        assert_eq!(error.to_string(), "Unsupported pixi-pack version: v0");
+        assert_eq!(error.to_string(), "Unsupported pack format version: v0");
     }
 
     #[rstest]
     #[tokio::test]
     async fn test_metadata_file_wrong_platform(
-        #[with(DEFAULT_PIXI_PACK_VERSION.to_string(), other_platform())]
-        metadata_file: NamedTempFile,
+        #[with(PACK_FORMAT_VERSION.to_string(), other_platform())] metadata_file: NamedTempFile,
     ) {
         let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
         let error = result.unwrap_err();
