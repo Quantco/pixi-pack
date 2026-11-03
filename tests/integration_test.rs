@@ -1053,6 +1053,10 @@ async fn test_local_build_package(options: Options) {
         has_pkg("local-build-local-pkg-0.1.0-"),
         "local-pkg not found in conda-meta"
     );
+    assert!(
+        has_pkg("local-build-local-pkg-2-0.1.0-"),
+        "local-pkg-2 not found in conda-meta"
+    );
 
     assert!(
         env_dir.join("bin/hello-main").exists(),

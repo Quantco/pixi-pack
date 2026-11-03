@@ -25,8 +25,12 @@ cxx_compiler_version = ["22"]
 c_compiler_version = ["22"]
 cxx_compiler_version = ["22"]
 
+# `pixi publish` (which pixi-pack uses to build source packages) only builds
+# self-contained packages, so source packages must not depend on each other.
 [dependencies]
 local-build-main-pkg = { path = "." }
+local-build-local-pkg = { path = "./local-pkg" }
+local-build-local-pkg-2 = { path = "./local-pkg2" }
 
 [package]
 name = "local-build-main-pkg"
@@ -34,10 +38,7 @@ version = "0.1.0"
 
 [package.build]
 # xref: https://github.com/prefix-dev/pixi/issues/6524
-backend = { name = "pixi-build-cmake", version = "==0.4.3" }
-
-[package.run-dependencies]
-local-build-local-pkg = { path = "./local-pkg" }
+backend = { name = "pixi-build-cmake", version = "==0.4.7" }
 
 [tool.update]
 autoupdate-schedule = "never"
