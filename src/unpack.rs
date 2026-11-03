@@ -1,8 +1,11 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use anyhow::{Result, anyhow};
@@ -13,11 +16,12 @@ use futures::{
 use indexmap::IndexMap;
 use rattler::{
     install::{Installer, PythonInfo},
-    package_cache::{CacheKey, PackageCache},
+    package_cache::{CacheKey, CacheReporter, PackageCache},
 };
 use rattler_conda_types::{
     PackageRecord, Platform, RepoData, RepoDataRecord, package::DistArchiveIdentifier,
 };
+use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rattler_package_streaming::fs::extract;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
@@ -41,7 +45,8 @@ use uv_types::{HashStrategy, InFlight};
 
 use crate::{
     CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
-    PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, build_context::PixiPackBuildContext,
+    PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, REMOTE_PACKAGES_PATH,
+    build_context::PixiPackBuildContext,
 };
 
 /// Options for unpacking a pixi environment.
@@ -51,6 +56,51 @@ pub struct UnpackOptions {
     pub output_directory: PathBuf,
     pub env_name: String,
     pub shell: Option<ShellEnum>,
+    /// Updated while packages are downloaded and extracted, e.g. to show a progress bar.
+    pub progress: Option<Arc<UnpackProgress>>,
+}
+
+/// Bytes of conda packages downloaded or extracted so far while unpacking.
+#[derive(Debug, Default)]
+pub struct UnpackProgress {
+    done: AtomicU64,
+    total: AtomicU64,
+}
+
+impl UnpackProgress {
+    /// Bytes done and total bytes, the total is zero until it is known.
+    pub fn get(&self) -> (u64, u64) {
+        (
+            self.done.load(Ordering::Relaxed),
+            self.total.load(Ordering::Relaxed),
+        )
+    }
+}
+
+/// Adds the bytes of one package download to [`UnpackProgress`].
+struct DownloadReporter {
+    progress: Arc<UnpackProgress>,
+    reported: AtomicU64,
+}
+
+impl CacheReporter for DownloadReporter {
+    fn on_validate_start(&self) -> usize {
+        0
+    }
+    fn on_validate_complete(&self, _index: usize) {}
+    fn on_download_start(&self) -> usize {
+        // A retried download starts over.
+        let reported = self.reported.swap(0, Ordering::Relaxed);
+        self.progress.done.fetch_sub(reported, Ordering::Relaxed);
+        0
+    }
+    fn on_download_progress(&self, _index: usize, progress: u64, _total: Option<u64>) {
+        let reported = self.reported.swap(progress, Ordering::Relaxed);
+        self.progress
+            .done
+            .fetch_add(progress.saturating_sub(reported), Ordering::Relaxed);
+    }
+    fn on_download_completed(&self, _index: usize) {}
 }
 
 /// Unpack a pixi environment.
@@ -98,9 +148,17 @@ pub async fn unpack(options: UnpackOptions) -> Result<()> {
     tracing::info!("Creating prefix at {}", target_prefix.display());
     let channel_directory = unpack_dir.join(CHANNEL_DIRECTORY_NAME);
     let cache_dir = unpack_dir.join("cache");
-    let packages = create_prefix(&channel_directory, &target_prefix, &cache_dir)
-        .await
-        .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
+    let remote_packages = read_remote_packages(&unpack_dir.join(REMOTE_PACKAGES_PATH)).await?;
+    let progress = options.progress.unwrap_or_default();
+    let packages = create_prefix(
+        &channel_directory,
+        &remote_packages,
+        &target_prefix,
+        &cache_dir,
+        &progress,
+    )
+    .await
+    .map_err(|e| anyhow!("Could not create prefix: {}", e))?;
 
     install_pypi_packages(unpack_dir, &target_prefix, packages)
         .await
@@ -155,6 +213,18 @@ async fn collect_packages_in_subdir(
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect())
+}
+
+/// Read the URLs of packages that are downloaded instead of included in the pack, if any.
+async fn read_remote_packages(path: &Path) -> Result<BTreeMap<String, Url>> {
+    if !fs::try_exists(path).await? {
+        return Ok(BTreeMap::new());
+    }
+    let contents = fs::read_to_string(path)
+        .await
+        .map_err(|e| anyhow!("could not read {}: {}", path.display(), e))?;
+    serde_json::from_str(&contents)
+        .map_err(|e| anyhow!("could not parse {}: {}", path.display(), e))
 }
 
 async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
@@ -235,39 +305,59 @@ pub fn unarchive(archive_path: &Path, target_dir: &Path) -> Result<()> {
 
 async fn create_prefix(
     channel_dir: &Path,
+    remote_packages: &BTreeMap<String, Url>,
     target_prefix: &Path,
     cache_dir: &Path,
+    progress: &Arc<UnpackProgress>,
 ) -> Result<IndexMap<String, PackageRecord, ahash::RandomState>> {
     let packages = collect_packages(channel_dir)
         .await
         .map_err(|e| anyhow!("could not collect packages: {}", e))?;
+    let total = packages.values().filter_map(|p| p.size).sum();
+    progress.total.store(total, Ordering::Relaxed);
 
-    eprintln!(
-        "⏳ Extracting and installing {} packages to {}...",
-        packages.len(),
-        cache_dir.display()
-    );
+    if remote_packages.is_empty() {
+        eprintln!(
+            "⏳ Extracting and installing {} packages to {}...",
+            packages.len(),
+            cache_dir.display()
+        );
+    } else {
+        eprintln!(
+            "⏳ Downloading {} and extracting {} packages to {}...",
+            remote_packages.len(),
+            packages.len() - remote_packages.len(),
+            cache_dir.display()
+        );
+    }
     let reporter = ProgressReporter::new(packages.len() as u64);
 
     // extract packages to cache
     tracing::info!("Creating cache with {} packages", packages.len());
     let package_cache = PackageCache::new(cache_dir);
+    let client = LazyClient::from(reqwest::Client::new());
 
     let repodata_records: Vec<RepoDataRecord> = stream::iter(packages.clone())
         .map(|(file_name, package_record)| {
             let cache_key = CacheKey::from(&package_record);
-
+            let remote_url = remote_packages
+                .get(&format!("{}/{}", package_record.subdir, file_name))
+                .cloned();
             let package_path = channel_dir.join(&package_record.subdir).join(&file_name);
-            let normalized_path = package_path.canonicalize().unwrap();
-
-            let url = Url::from_file_path(&normalized_path)
-                .map_err(|_| {
-                    anyhow!(
-                        "could not convert path to URL: {}",
-                        normalized_path.display()
-                    )
-                })
-                .unwrap();
+            let url = match &remote_url {
+                Some(url) => url.clone(),
+                None => {
+                    let normalized_path = package_path.canonicalize().unwrap();
+                    Url::from_file_path(&normalized_path)
+                        .map_err(|_| {
+                            anyhow!(
+                                "could not convert path to URL: {}",
+                                normalized_path.display()
+                            )
+                        })
+                        .unwrap()
+                }
+            };
 
             tracing::debug!(
                 "Extracting package {} with URL {}",
@@ -284,28 +374,56 @@ async fn create_prefix(
                 channel: None,
             };
 
-            async {
+            let size = repodata_record.package_record.size.unwrap_or(0);
+            let client = client.clone();
+            let package_cache = &package_cache;
+            let reporter = &reporter;
+            async move {
                 // We have to prepare the package cache by inserting all packages into it.
                 // We can only do so by calling `get_or_fetch` on each package, which will
                 // use the provided closure to fetch the package and insert it into the cache.
-                package_cache
-                    .get_or_fetch(
-                        cache_key,
-                        move |destination| {
-                            let value = package_path.clone();
-                            async move { extract(&value, &destination).map(|_| ()) }
-                        },
-                        None,
+                // Downloaded packages are checked against the SHA256 of their record.
+                let is_remote = remote_url.is_some();
+                let result = match remote_url {
+                    Some(url) => {
+                        package_cache
+                            .get_or_fetch_from_url_with_retry(
+                                cache_key,
+                                url,
+                                client,
+                                default_retry_policy(),
+                                Some(Arc::new(DownloadReporter {
+                                    progress: progress.clone(),
+                                    reported: AtomicU64::new(0),
+                                })),
+                                None,
+                            )
+                            .await
+                    }
+                    None => {
+                        package_cache
+                            .get_or_fetch(
+                                cache_key,
+                                move |destination| {
+                                    let value = package_path.clone();
+                                    async move { extract(&value, &destination).map(|_| ()) }
+                                },
+                                None,
+                            )
+                            .await
+                    }
+                };
+                result.map_err(|e| {
+                    anyhow!(
+                        "could not extract \"{}\": {}",
+                        repodata_record.as_ref().name.as_source(),
+                        e
                     )
-                    .await
-                    .map_err(|e| {
-                        anyhow!(
-                            "could not extract \"{}\": {}",
-                            repodata_record.as_ref().name.as_source(),
-                            e
-                        )
-                    })?;
+                })?;
                 reporter.pb.inc(1);
+                if !is_remote {
+                    progress.done.fetch_add(size, Ordering::Relaxed);
+                }
 
                 Ok::<RepoDataRecord, anyhow::Error>(repodata_record)
             }

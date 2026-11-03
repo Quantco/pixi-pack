@@ -4,13 +4,14 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::{fs, io};
 use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
 
 use pixi_pack::{
     Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
-    PixiPackMetadata, UnpackOptions, unarchive,
+    PixiPackMetadata, UnpackOptions, UnpackProgress, unarchive,
 };
 use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
@@ -73,12 +74,14 @@ fn options(
             pixi_unpack_source: None,
             cache_dir: None,
             config: None,
+            download_packages: false,
         },
         unpack_options: UnpackOptions {
             pack_file,
             output_directory: output_dir.path().to_path_buf(),
             env_name,
             shell,
+            progress: None,
         },
         output_dir,
     }
@@ -180,6 +183,47 @@ async fn test_simple_python(
 
 #[rstest]
 #[tokio::test]
+async fn test_download_packages(options: Options, required_fs_objects: Vec<&'static str>) {
+    let mut pack_options = options.pack_options;
+    pack_options.download_packages = true;
+    pack_options.output_mode = OutputMode::DirectoryOnly;
+    let pack_dir = options.output_dir.path().join("environment");
+    pack_options.output_file = pack_dir.clone();
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+
+    // All packages are on conda-forge, so the pack only has their metadata.
+    let remote_packages: HashMap<String, Url> = serde_json::from_str(
+        &fs::read_to_string(pack_dir.join(pixi_pack::REMOTE_PACKAGES_PATH)).unwrap(),
+    )
+    .unwrap();
+    assert!(!remote_packages.is_empty());
+    let package_files = WalkDir::new(pack_dir.join("channel"))
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| {
+            DistArchiveIdentifier::try_from_filename(&e.file_name().to_string_lossy()).is_some()
+        })
+        .count();
+    assert_eq!(package_files, 0);
+
+    let mut unpack_options = options.unpack_options;
+    unpack_options.pack_file = pack_dir;
+    let progress = Arc::new(UnpackProgress::default());
+    unpack_options.progress = Some(progress.clone());
+    let env_dir = unpack_options.output_directory.join("env");
+    let unpack_result = pixi_pack::unpack(unpack_options).await;
+    assert!(unpack_result.is_ok(), "{:?}", unpack_result);
+    let (done, total) = progress.get();
+    assert!(total > 0);
+    assert_eq!(done, total);
+    for object in required_fs_objects {
+        assert!(env_dir.join(object).exists(), "{object} does not exist");
+    }
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
     // Pack to stdout via the pixi-pack binary
     let pack_output = Command::new(env!("CARGO_BIN_EXE_pixi-pack"))
@@ -240,13 +284,16 @@ async fn test_stdout_stdin_roundtrip(required_fs_objects: Vec<&'static str>) {
 }
 
 #[rstest]
-#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true)]
-#[case("my-webserver-0.1.0-pyh4616a5c_0.tar.bz2", true)]
-#[case("my_webserver-0.1.0-py3-none-any.whl", false)]
+#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true, false)]
+#[case("my-webserver-0.1.0-pyh4616a5c_0.tar.bz2", true, false)]
+#[case("my_webserver-0.1.0-py3-none-any.whl", false, false)]
+// the injected package is the only one in the pack
+#[case("my-webserver-0.1.0-pyh4616a5c_0.conda", true, true)]
 #[tokio::test]
 async fn test_inject(
     #[case] package_file: &str,
     #[case] is_conda: bool,
+    #[case] download_packages: bool,
     options: Options,
     mut required_fs_objects: Vec<&'static str>,
 ) {
@@ -259,6 +306,7 @@ async fn test_inject(
         .push(PathBuf::from(format!("examples/webserver/{package_file}")));
 
     pack_options.manifest_path = PathBuf::from("examples/webserver/pixi.toml");
+    pack_options.download_packages = download_packages;
 
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok(), "{:?}", pack_result);

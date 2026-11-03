@@ -19,6 +19,14 @@ fn cwd() -> PathBuf {
 /// The pixi-pack CLI.
 #[derive(Parser)]
 #[command(name = "pixi-pack", version, about = "A command line tool to pack conda environments for easy sharing", long_about = None)]
+#[cfg_attr(
+    feature = "app",
+    command(group(
+        clap::ArgGroup::new("uses_pixi_unpack")
+            .args(["create_executable", "create_app"])
+            .multiple(true)
+    ))
+)]
 struct Cli {
     /// Environment to pack
     #[arg(short, long, default_value = "default")]
@@ -62,11 +70,25 @@ struct Cli {
     #[arg(long, default_value = "false", conflicts_with = "create_executable")]
     directory_only: bool,
 
-    /// Optional path or URL to a pixi-unpack executable.
+    /// Optional path or URL to a pixi-unpack executable, for `--create-executable` and Flatpaks
+    /// created with `--create-app`.
     // Ex. /path/to/pixi-unpack/pixi-unpack.exe
     // Ex. https://example.com/pixi-unpack.exe
-    #[arg(long, requires = "create_executable")]
+    #[cfg_attr(not(feature = "app"), arg(long, requires = "create_executable"))]
+    #[cfg_attr(feature = "app", arg(long, requires = "uses_pixi_unpack"))]
     pixi_unpack_source: Option<UrlOrPath>,
+
+    /// Create an application (macOS `.app`/`.dmg`, Windows installer, Linux Flatpak)
+    /// described by the given TOML file.
+    /// `--output-file` is the directory the application is written to.
+    #[cfg(feature = "app")]
+    #[arg(long, conflicts_with_all = ["create_executable", "directory_only"])]
+    create_app: Option<PathBuf>,
+
+    /// Optional path or URL to a pixi-launcher executable to use for `--create-app`.
+    #[cfg(feature = "app")]
+    #[arg(long, requires = "create_app")]
+    pixi_launcher_source: Option<UrlOrPath>,
 
     /// Rattler config for mirror or S3 configuration.
     #[arg(long, short)]
@@ -127,6 +149,10 @@ async fn main() -> Result<()> {
         config,
         use_cache,
         command,
+        #[cfg(feature = "app")]
+        create_app,
+        #[cfg(feature = "app")]
+        pixi_launcher_source,
         ..
     } = cli;
 
@@ -137,6 +163,8 @@ async fn main() -> Result<()> {
         }
         None => {
             let output_mode = define_output_mode(create_executable, directory_only);
+            #[cfg(feature = "app")]
+            let app_out_dir = output_file.clone().unwrap_or_else(cwd);
 
             let output_file = match output_file {
                 Some(file) => file,
@@ -178,7 +206,16 @@ async fn main() -> Result<()> {
                 pixi_unpack_source,
                 cache_dir: use_cache,
                 config,
+                download_packages: false,
             };
+            #[cfg(feature = "app")]
+            if let Some(app_config) = create_app {
+                let app_config = pixi_pack::AppConfig::from_file(&app_config)?;
+                tracing::debug!("Running create-app with options: {:?}", options);
+                pixi_pack::create_app(options, app_config, pixi_launcher_source, &app_out_dir)
+                    .await?;
+                return Ok(());
+            }
             tracing::debug!("Running pack command with options: {:?}", options);
             pack(options).await?;
         }
