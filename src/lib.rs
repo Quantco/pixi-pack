@@ -12,7 +12,9 @@ pub use util::ProgressReporter;
 pub const CHANNEL_DIRECTORY_NAME: &str = "channel";
 pub const PYPI_DIRECTORY_NAME: &str = "pypi";
 pub const PIXI_PACK_METADATA_PATH: &str = "pixi-pack.json";
-pub const DEFAULT_PIXI_PACK_VERSION: &str = "1";
+/// The version of the pack format. Unpacking rejects packs with a different format version.
+pub const PACK_FORMAT_VERSION: &str = "1";
+/// The version of pixi-pack itself, recorded in the pack for informational purposes.
 pub const PIXI_PACK_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The metadata for a "pixi-pack".
@@ -59,7 +61,7 @@ mod tests {
     #[rstest]
     fn test_metadata_serialization() {
         let metadata = PixiPackMetadata {
-            version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+            version: PACK_FORMAT_VERSION.to_string(),
             pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
             platform: Subdir::Linux64,
         };

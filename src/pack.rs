@@ -44,7 +44,7 @@ use uv_distribution_types::RemoteSource;
 use walkdir::WalkDir;
 
 use crate::{
-    CHANNEL_DIRECTORY_NAME, Config, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH,
+    CHANNEL_DIRECTORY_NAME, Config, PACK_FORMAT_VERSION, PIXI_PACK_METADATA_PATH,
     PIXI_PACK_VERSION, PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, init_uv_preview,
 };
 use anyhow::anyhow;
@@ -579,7 +579,7 @@ pub async fn pack(options: PackOptions) -> Result<()> {
     // Always record the real conda subdir here, a platform name like `jetson`
     // means nothing on the machine that unpacks this.
     let metadata = PixiPackMetadata {
-        version: DEFAULT_PIXI_PACK_VERSION.to_string(),
+        version: PACK_FORMAT_VERSION.to_string(),
         pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
         platform: subdir,
     };

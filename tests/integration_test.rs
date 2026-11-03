@@ -9,8 +9,8 @@ use std::{path::PathBuf, process::Command};
 use walkdir::WalkDir;
 
 use pixi_pack::{
-    Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
-    PixiPackMetadata, UnpackOptions, unarchive,
+    Config, OutputMode, PACK_FORMAT_VERSION, PIXI_PACK_VERSION, PackOptions, PixiPackMetadata,
+    UnpackOptions, unarchive,
 };
 use rattler_conda_types::RepoData;
 use rattler_conda_types::Subdir;
@@ -584,7 +584,7 @@ async fn test_named_platform_pack(
         serde_json::from_str(&fs::read_to_string(dir_path.join("pixi-pack.json")).unwrap())
             .unwrap();
     assert_eq!(metadata.platform, expected_subdir);
-    assert_eq!(metadata.version, DEFAULT_PIXI_PACK_VERSION);
+    assert_eq!(metadata.version, PACK_FORMAT_VERSION);
     assert_eq!(
         metadata.pixi_pack_version.as_deref(),
         Some(PIXI_PACK_VERSION)

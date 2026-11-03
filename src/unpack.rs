@@ -41,7 +41,7 @@ use uv_threads::initialize_rayon_once;
 use uv_types::{HashStrategy, InFlight};
 
 use crate::{
-    CHANNEL_DIRECTORY_NAME, DEFAULT_PIXI_PACK_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
+    CHANNEL_DIRECTORY_NAME, PACK_FORMAT_VERSION, PIXI_PACK_METADATA_PATH, PIXI_PACK_VERSION,
     PYPI_DIRECTORY_NAME, PixiPackMetadata, ProgressReporter, build_context::PixiPackBuildContext,
     current_subdir, init_uv_preview,
 };
@@ -167,8 +167,8 @@ async fn validate_metadata_file(metadata_file: PathBuf) -> Result<()> {
 
     let metadata: PixiPackMetadata = serde_json::from_str(&metadata_contents)?;
 
-    if metadata.version != DEFAULT_PIXI_PACK_VERSION {
-        anyhow::bail!("Unsupported pixi-pack version: {}", metadata.version);
+    if metadata.version != PACK_FORMAT_VERSION {
+        anyhow::bail!("Unsupported pack format version: {}", metadata.version);
     }
     if metadata.platform != current_subdir()? {
         anyhow::bail!("The pack was created for a different platform");
@@ -481,7 +481,7 @@ mod tests {
 
     #[fixture]
     fn metadata_file(
-        #[default(DEFAULT_PIXI_PACK_VERSION.to_string())] version: String,
+        #[default(PACK_FORMAT_VERSION.to_string())] version: String,
         #[default(Subdir::current().unwrap())] platform: Subdir,
     ) -> NamedTempFile {
         let mut metadata_file = NamedTempFile::new().unwrap();
@@ -530,14 +530,13 @@ mod tests {
     ) {
         let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
         let error = result.unwrap_err();
-        assert_eq!(error.to_string(), "Unsupported pixi-pack version: v0");
+        assert_eq!(error.to_string(), "Unsupported pack format version: v0");
     }
 
     #[rstest]
     #[tokio::test]
     async fn test_metadata_file_wrong_platform(
-        #[with(DEFAULT_PIXI_PACK_VERSION.to_string(), other_platform())]
-        metadata_file: NamedTempFile,
+        #[with(PACK_FORMAT_VERSION.to_string(), other_platform())] metadata_file: NamedTempFile,
     ) {
         let result = validate_metadata_file(metadata_file.path().to_path_buf()).await;
         let error = result.unwrap_err();
