@@ -17,9 +17,11 @@ test = "cargo test"
 update-snapshots = "INSTA_UPDATE=always cargo test -p pixi-pack -- test_reproducible_shasum"
 
 [dependencies]
-rust = "==1.95.0"
+rust = "==1.99.1"
 openssl = "3.*"
-pixi = ">=0.72.0"
+# pixi >=0.75 refuses `pixi publish --path` for packages with source run-dependencies,
+# which pixi-pack relies on to build local source packages.
+pixi = ">=0.72.0,<0.75"
 pkg-config = "*"
 
 [target.linux.dependencies]

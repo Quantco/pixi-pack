@@ -22,7 +22,7 @@ use anyhow::Result;
 use base64::engine::{Engine, general_purpose::STANDARD};
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream};
 use rattler_conda_types::{
-    ChannelInfo, PackageRecord, Platform, RepoData,
+    ChannelInfo, PackageRecord, RepoData, Subdir,
     package::{CondaArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier},
 };
 use rattler_digest::{HashingWriter, Md5, Sha256};
@@ -45,7 +45,7 @@ use walkdir::WalkDir;
 
 use crate::{
     CHANNEL_DIRECTORY_NAME, Config, PIXI_PACK_METADATA_PATH, PYPI_DIRECTORY_NAME, PixiPackMetadata,
-    ProgressReporter,
+    ProgressReporter, init_uv_preview,
 };
 use anyhow::anyhow;
 
@@ -171,11 +171,7 @@ fn find_environment<'lock>(
 
 /// Resolve a platform name or conda subdir to the concrete subdir it points
 /// to in the lockfile of the given manifest.
-pub fn resolve_platform(
-    manifest_path: &Path,
-    environment: &str,
-    platform: &str,
-) -> Result<Platform> {
+pub fn resolve_platform(manifest_path: &Path, environment: &str, platform: &str) -> Result<Subdir> {
     let lockfile = load_lockfile(manifest_path)?;
     let env = find_environment(&lockfile, environment)?;
     Ok(find_platform(&env, platform)?.subdir())
@@ -281,6 +277,7 @@ async fn build_local_package(
 
 /// Pack a pixi environment.
 pub async fn pack(options: PackOptions) -> Result<()> {
+    init_uv_preview();
     let lockfile = load_lockfile(&options.manifest_path)?;
 
     let max_parallel_downloads = options.config.as_ref().map_or_else(
@@ -812,7 +809,7 @@ async fn archive_directory(
     archive_target: &Path,
     create_executable: bool,
     pixi_unpack_source: Option<UrlOrPath>,
-    platform: Platform,
+    platform: Subdir,
 ) -> Result<usize> {
     if create_executable {
         eprintln!("📦 Creating self-extracting executable");
@@ -977,15 +974,15 @@ fn create_tarball(input_dir: &Path, archive_target: &Path) -> Result<usize> {
 
 async fn download_pixi_unpack_executable(
     pixi_pack_source: Option<UrlOrPath>,
-    platform: Platform,
+    platform: Subdir,
 ) -> Result<Vec<u8>> {
     let (os, arch) = match platform {
-        Platform::Linux64 => ("unknown-linux-musl", "x86_64"),
-        Platform::LinuxAarch64 => ("unknown-linux-musl", "aarch64"),
-        Platform::Osx64 => ("apple-darwin", "x86_64"),
-        Platform::OsxArm64 => ("apple-darwin", "aarch64"),
-        Platform::Win64 => ("pc-windows-msvc", "x86_64"),
-        Platform::WinArm64 => ("pc-windows-msvc", "aarch64"),
+        Subdir::Linux64 => ("unknown-linux-musl", "x86_64"),
+        Subdir::LinuxAarch64 => ("unknown-linux-musl", "aarch64"),
+        Subdir::Osx64 => ("apple-darwin", "x86_64"),
+        Subdir::OsxArm64 => ("apple-darwin", "aarch64"),
+        Subdir::Win64 => ("pc-windows-msvc", "x86_64"),
+        Subdir::WinArm64 => ("pc-windows-msvc", "aarch64"),
         _ => return Err(anyhow!("Unsupported platform: {}", platform)),
     };
     let executable_name = format!("pixi-unpack-{}-{}", arch, os);
@@ -1052,7 +1049,7 @@ async fn create_self_extracting_executable(
     input_dir: &Path,
     target: &Path,
     pixi_pack_source: Option<UrlOrPath>,
-    platform: Platform,
+    platform: Subdir,
 ) -> Result<usize> {
     let line_ending = if platform.is_windows() {
         b"\r\n".to_vec()
@@ -1202,6 +1199,7 @@ async fn create_repodata_files(
                 base_url: None,
                 repodata_revisions: Default::default(),
                 channel_relations: None,
+                virtual_package_detectors: None,
             }),
             packages: Default::default(),
             conda_packages,

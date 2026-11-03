@@ -12,8 +12,8 @@ use pixi_pack::{
     Config, DEFAULT_PIXI_PACK_VERSION, OutputMode, PIXI_PACK_VERSION, PackOptions,
     PixiPackMetadata, UnpackOptions, unarchive,
 };
-use rattler_conda_types::Platform;
 use rattler_conda_types::RepoData;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_lock::UrlOrPath;
 use rattler_shell::shell::{Bash, Shell, ShellEnum};
@@ -35,7 +35,7 @@ struct Options {
 fn options(
     #[default(PathBuf::from("examples/simple-python/pixi.toml"))] manifest_path: PathBuf,
     #[default("default")] environment: String,
-    #[default(Platform::current())] platform: Platform,
+    #[default(Subdir::current().unwrap())] platform: Subdir,
     #[default(None)] auth_file: Option<PathBuf>,
     #[default(Some(ShellEnum::Bash(Bash { flavor: rattler_shell::shell::BashFlavor::Bash })))]
     shell: Option<ShellEnum>,
@@ -86,20 +86,20 @@ fn options(
 #[fixture]
 fn required_fs_objects(#[default(false)] use_pypi: bool) -> Vec<&'static str> {
     let mut required_fs_objects = vec!["conda-meta/history", "include", "share"];
-    let openssl_required_file = match Platform::current() {
-        Platform::Linux64 => "conda-meta/openssl-3.3.1-h4ab18f5_0.json",
-        Platform::LinuxAarch64 => "conda-meta/openssl-3.3.1-h68df207_0.json",
-        Platform::OsxArm64 => "conda-meta/openssl-3.3.1-hfb2fe0b_0.json",
-        Platform::Osx64 => "conda-meta/openssl-3.3.1-h87427d6_0.json",
-        Platform::Win64 => "conda-meta/openssl-3.3.1-h2466b09_0.json",
+    let openssl_required_file = match Subdir::current().unwrap() {
+        Subdir::Linux64 => "conda-meta/openssl-3.3.1-h4ab18f5_0.json",
+        Subdir::LinuxAarch64 => "conda-meta/openssl-3.3.1-h68df207_0.json",
+        Subdir::OsxArm64 => "conda-meta/openssl-3.3.1-hfb2fe0b_0.json",
+        Subdir::Osx64 => "conda-meta/openssl-3.3.1-h87427d6_0.json",
+        Subdir::Win64 => "conda-meta/openssl-3.3.1-h2466b09_0.json",
         _ => panic!("Unsupported platform"),
     };
-    let ordered_enum_required_file = match Platform::current() {
-        Platform::Linux64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::LinuxAarch64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::OsxArm64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::Osx64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
-        Platform::Win64 => "lib/site-packages/ordered_enum-0.0.9.dist-info",
+    let ordered_enum_required_file = match Subdir::current().unwrap() {
+        Subdir::Linux64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Subdir::LinuxAarch64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Subdir::OsxArm64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Subdir::Osx64 => "lib/python3.12/site-packages/ordered_enum-0.0.9.dist-info",
+        Subdir::Win64 => "lib/site-packages/ordered_enum-0.0.9.dist-info",
         _ => panic!("Unsupported platform"),
     };
     if use_pypi {
@@ -278,7 +278,7 @@ async fn test_inject(
     if is_conda {
         required_fs_objects.push("conda-meta/my-webserver-0.1.0-pyh4616a5c_0.json");
     } else {
-        let platform = Platform::current();
+        let platform = Subdir::current().unwrap();
         if platform.is_windows() {
             required_fs_objects.push("lib/site-packages/my_webserver-0.1.0.dist-info");
         } else {
@@ -318,7 +318,7 @@ async fn test_includes_repodata_patches(
     #[with(PathBuf::from("examples/repodata-patches/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.platform = Platform::Win64.to_string();
+    pack_options.platform = Subdir::Win64.to_string();
     let pack_file = options.unpack_options.pack_file.clone();
 
     let pack_result = pixi_pack::pack(pack_options).await;
@@ -457,22 +457,22 @@ fn sha256_digest_bytes(path: &PathBuf) -> String {
 }
 
 #[rstest]
-#[case(Platform::Linux64, false)]
-#[case(Platform::Linux64, true)]
-#[case(Platform::LinuxAarch64, false)]
-#[case(Platform::LinuxAarch64, true)]
-#[case(Platform::LinuxPpc64le, false)]
-#[case(Platform::LinuxPpc64le, true)]
-#[case(Platform::OsxArm64, false)]
-#[case(Platform::OsxArm64, true)]
-#[case(Platform::Osx64, false)]
-#[case(Platform::Osx64, true)]
-#[case(Platform::Win64, false)]
-#[case(Platform::Win64, true)]
-// #[case(Platform::WinArm64, false)] depends on https://github.com/regro/cf-scripts/pull/3194
+#[case(Subdir::Linux64, false)]
+#[case(Subdir::Linux64, true)]
+#[case(Subdir::LinuxAarch64, false)]
+#[case(Subdir::LinuxAarch64, true)]
+#[case(Subdir::LinuxPpc64le, false)]
+#[case(Subdir::LinuxPpc64le, true)]
+#[case(Subdir::OsxArm64, false)]
+#[case(Subdir::OsxArm64, true)]
+#[case(Subdir::Osx64, false)]
+#[case(Subdir::Osx64, true)]
+#[case(Subdir::Win64, false)]
+#[case(Subdir::Win64, true)]
+// #[case(Subdir::WinArm64, false)] depends on https://github.com/regro/cf-scripts/pull/3194
 #[tokio::test]
 async fn test_reproducible_shasum(
-    #[case] platform: Platform,
+    #[case] platform: Subdir,
     #[case] use_pypi: bool,
     #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform)]
     options: Options,
@@ -491,7 +491,7 @@ async fn test_reproducible_shasum(
         &sha256_digest
     );
 
-    if platform == Platform::LinuxPpc64le {
+    if platform == Subdir::LinuxPpc64le {
         // pixi-pack not available for ppc64le for now
         return;
     }
@@ -516,11 +516,11 @@ async fn test_reproducible_shasum(
 }
 
 #[rstest]
-#[case(Platform::Linux64)]
-#[case(Platform::Win64)]
+#[case(Subdir::Linux64)]
+#[case(Subdir::Win64)]
 #[tokio::test]
 async fn test_line_endings(
-    #[case] platform: Platform,
+    #[case] platform: Subdir,
     #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), platform, None, None, false, "env".to_string(), OutputMode::CreateExecutable)]
     options: Options,
 ) {
@@ -562,18 +562,18 @@ async fn test_no_timestamp(
     #[with(PathBuf::from("examples/no-timestamp/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
-    pack_options.platform = Platform::Osx64.to_string();
+    pack_options.platform = Subdir::Osx64.to_string();
     let pack_result = pixi_pack::pack(pack_options).await;
     assert!(pack_result.is_ok());
 }
 
 #[rstest]
-#[case::by_name("jetson", Platform::LinuxAarch64)]
-#[case::by_subdir_fallback("linux-64", Platform::Linux64)]
+#[case::by_name("jetson", Subdir::LinuxAarch64)]
+#[case::by_subdir_fallback("linux-64", Subdir::Linux64)]
 #[tokio::test]
 async fn test_named_platform_pack(
     #[case] platform: &str,
-    #[case] expected_subdir: Platform,
+    #[case] expected_subdir: Subdir,
     #[with(PathBuf::from("examples/named-platforms/pixi.toml"))] options: Options,
 ) {
     let mut pack_options = options.pack_options;
@@ -593,8 +593,8 @@ async fn test_named_platform_pack(
 
     // And it contains the packages that belong to the named platform.
     let openssl_package = match expected_subdir {
-        Platform::LinuxAarch64 => "openssl-3.3.1-h68df207_0.conda",
-        Platform::Linux64 => "openssl-3.3.1-h4ab18f5_0.conda",
+        Subdir::LinuxAarch64 => "openssl-3.3.1-h68df207_0.conda",
+        Subdir::Linux64 => "openssl-3.3.1-h4ab18f5_0.conda",
         _ => panic!("unexpected subdir"),
     };
     assert!(
@@ -893,10 +893,10 @@ async fn test_mirror_middleware(
 #[rstest]
 #[tokio::test]
 async fn test_pixi_pack_source(
-    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), Platform::Linux64)]
+    #[with(PathBuf::from("examples/simple-python/pixi.toml"), "default".to_string(), Subdir::Linux64)]
     options: Options,
 ) {
-    let platform = Platform::Linux64;
+    let platform = Subdir::Linux64;
     let temp_dir = tempfile::tempdir().unwrap();
     let mut pack_options = options.pack_options.clone();
     let output_file = options.output_dir.path().join("environment.sh");
@@ -1028,11 +1028,11 @@ async fn test_local_build_package(options: Options) {
     let unpack_result = pixi_pack::unpack(unpack_options).await;
     assert!(unpack_result.is_ok(), "{unpack_result:?}");
 
-    let curl_json = match Platform::current() {
-        Platform::Linux64 => env_dir.join("conda-meta/curl-8.17.0-h4e3cde8_1.json"),
-        Platform::LinuxAarch64 => env_dir.join("conda-meta/curl-8.17.0-h7bfdcfb_1.json"),
-        Platform::OsxArm64 => env_dir.join("conda-meta/curl-8.17.0-hdece5d2_1.json"),
-        Platform::Osx64 => env_dir.join("conda-meta/curl-8.17.0-h7dd4100_1.json"),
+    let curl_json = match Subdir::current().unwrap() {
+        Subdir::Linux64 => env_dir.join("conda-meta/curl-8.17.0-h4e3cde8_1.json"),
+        Subdir::LinuxAarch64 => env_dir.join("conda-meta/curl-8.17.0-h7bfdcfb_1.json"),
+        Subdir::OsxArm64 => env_dir.join("conda-meta/curl-8.17.0-hdece5d2_1.json"),
+        Subdir::Osx64 => env_dir.join("conda-meta/curl-8.17.0-h7dd4100_1.json"),
         _ => panic!("Unsupported platform"),
     };
     assert!(curl_json.exists(), "curl not found in conda-meta");

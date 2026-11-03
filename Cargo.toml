@@ -27,33 +27,33 @@ rustls = [
 ]
 
 [dependencies]
-anyhow = "1.0.102"
-clap = { version = "4.6.1", features = ["derive", "string"] }
-clap_complete = "4.6.5"
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive", "string"] }
+clap_complete = "4.6.11"
 clap-verbosity-flag = { version = "3.0.4", features = ["tracing"] }
-futures = "0.3.32"
-indicatif = "0.18.4"
-rattler = { version = "0.48.3", default-features = false }
-rattler_config = "0.7.0"
-rattler_digest = { version = "1.3.2", features = ["tokio"] }
-rattler_conda_types = "0.50.0"
-rattler_index = "0.31.0"
-rattler_lock = "0.32.1"
-rattler_networking = { version = "0.30.3", default-features = false, features = [
+futures = "0.3.34"
+indicatif = "0.18.6"
+rattler = { version = "0.55.5", default-features = false }
+rattler_config = "0.12.0"
+rattler_digest = { version = "2.1.0", features = ["tokio"] }
+rattler_conda_types = "0.58.1"
+rattler_index = "0.34.5"
+rattler_lock = "0.34.12"
+rattler_networking = { version = "0.34.6", default-features = false, features = [
   "s3",
   "gcs",
   "rattler_config",
   "system-integration",
 ] }
-rattler_package_streaming = { version = "0.27.0", default-features = false }
-rattler_shell = "0.27.13"
-reqwest = { version = "0.13.3", default-features = false, features = ["http2"] }
+rattler_package_streaming = { version = "0.28.3", default-features = false }
+rattler_shell = "0.29.7"
+reqwest = { version = "0.13.5", default-features = false, features = ["http2"] }
 reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1" }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 serde_yaml = "0.9.34" # todo: use a non-deprecated crate
-tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
-tokio-stream = { version = "0.1.18", features = ["fs"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread"] }
+tokio-stream = { version = "0.1.19", features = ["fs"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = [
   "default",
@@ -63,28 +63,29 @@ url = "2.5.8"
 tempfile = "3.27.0"
 walkdir = "2.5.0"
 tar = "0.4.46"
-base64 = "0.23.0"
-indexmap = "2.14.0"
+base64 = "0.23.1"
+indexmap = "2.14.2"
 ahash = "0.8.12"
-uv-build-frontend = "0.0.63"
-uv-cache = "0.0.63"
-uv-client = "0.0.63"
-uv-configuration = "0.0.63"
-uv-dispatch = "0.0.63"
-uv-distribution = "0.0.63"
-uv-distribution-filename = "0.0.63"
-uv-distribution-types = "0.0.63"
-uv-git = "0.0.63"
-uv-installer = "0.0.63"
-uv-pep508 = "0.0.63"
-uv-preview = "0.0.63"
-uv-python = "0.0.63"
-uv-types = "0.0.63"
-uv-workspace = "0.0.63"
+uv-build-frontend = "0.0.90"
+uv-cache = "0.0.90"
+uv-client = "0.0.90"
+uv-configuration = "0.0.90"
+uv-dispatch = "0.0.90"
+uv-distribution = "0.0.90"
+uv-distribution-filename = "0.0.90"
+uv-distribution-types = "0.0.90"
+uv-git = "0.0.90"
+uv-installer = "0.0.90"
+uv-pep508 = "0.0.90"
+uv-preview = "0.0.90"
+uv-python = "0.0.90"
+uv-threads = "0.0.90"
+uv-types = "0.0.90"
+uv-workspace = "0.0.90"
 
 [dev-dependencies]
 async-std = "1.13.2"
-rstest = "0.27.0"
-sha2 = "0.11.0"
-insta = "1.47.2"
+rstest = "0.28.0"
+sha2 = "0.11.1"
+insta = "1.49.0"
 serial_test = "4.0.1"

@@ -4,7 +4,7 @@ mod unpack;
 mod util;
 
 pub use pack::{OutputMode, PackOptions, pack, resolve_platform};
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use serde::{Deserialize, Serialize};
 pub use unpack::{UnpackOptions, unarchive, unpack};
 pub use util::ProgressReporter;
@@ -24,7 +24,7 @@ pub struct PixiPackMetadata {
     /// The version of pixi-pack that created the pack.
     pub pixi_pack_version: Option<String>,
     /// The platform the pack was created for.
-    pub platform: Platform,
+    pub platform: Subdir,
 }
 
 impl Default for PixiPackMetadata {
@@ -32,13 +32,30 @@ impl Default for PixiPackMetadata {
         Self {
             version: DEFAULT_PIXI_PACK_VERSION.to_string(),
             pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-            platform: Platform::current(),
+            // Overwritten with the target subdir when packing.
+            platform: Subdir::current().unwrap_or(Subdir::NoArch),
         }
     }
 }
 
 /// The configuration type for pixi-pack - just extends rattler config and can load the same TOML files as pixi.
 pub type Config = rattler_config::config::ConfigBase<rattler_config::config::NoExtension>;
+
+/// Initialize uv's global preview configuration, which uv requires before use.
+///
+/// Errors are ignored: they only occur when the embedding application has already
+/// finalized its own preview configuration, which then takes precedence.
+fn init_uv_preview() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        let _ = uv_preview::set(uv_preview::Preview::default());
+    });
+}
+
+/// The conda subdir of the machine pixi-pack is running on.
+fn current_subdir() -> anyhow::Result<Subdir> {
+    Subdir::current().ok_or_else(|| anyhow::anyhow!("the current platform has no conda subdir"))
+}
 
 /* --------------------------------------------------------------------------------------------- */
 /*                                             TESTS                                             */
@@ -55,7 +72,7 @@ mod tests {
         let metadata = PixiPackMetadata {
             version: DEFAULT_PIXI_PACK_VERSION.to_string(),
             pixi_pack_version: Some(PIXI_PACK_VERSION.to_string()),
-            platform: Platform::Linux64,
+            platform: Subdir::Linux64,
         };
         let result = json!(metadata).to_string();
         assert_eq!(
@@ -80,7 +97,7 @@ mod tests {
         let metadata = metadata.unwrap();
         assert_eq!(metadata.version, "1");
         assert!(metadata.pixi_pack_version.is_none());
-        assert_eq!(metadata.platform, Platform::Linux64);
+        assert_eq!(metadata.platform, Subdir::Linux64);
     }
 
     #[rstest]

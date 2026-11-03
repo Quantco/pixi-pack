@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use clap_verbosity_flag::Verbosity;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 
 use anyhow::Result;
 use pixi_pack::{Config, OutputMode, PackOptions, PixiPackMetadata, pack};
@@ -26,7 +26,7 @@ struct Cli {
 
     /// Platform to pack: a conda subdir (e.g. `linux-64`) or a platform name
     /// from the lockfile (e.g. `jetson`)
-    #[arg(short, long, default_value = Platform::current().as_str())]
+    #[arg(short, long, default_value = Subdir::current().map(Subdir::as_str))]
     platform: String,
 
     /// Authentication file for fetching packages
