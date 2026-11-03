@@ -4443,7 +4443,7 @@ dependencies = [
 
 [[package]]
 name = "pixi-pack"
-version = "0.7.11"
+version = "0.7.12"
 dependencies = [
  "ahash",
  "anyhow",
