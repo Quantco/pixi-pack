@@ -889,14 +889,17 @@ async fn test_corrupted_cache_entries_are_redownloaded(
     let first_sha256 = sha256_digest_bytes(&options.pack_options.output_file);
 
     // Truncate every cached conda package and wheel to simulate damaged cache entries.
+    // Packages without a hash in the lockfile cannot be verified and are therefore skipped
+    // (the linux-64 `numpy` direct URL dependency has no hash).
     let mut cached_packages = Vec::new();
     for entry in WalkDir::new(&cache_dir) {
         let entry = entry.unwrap();
         let path = entry.path().to_path_buf();
-        let is_package = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
-            n.ends_with(".conda") || n.ends_with(".tar.bz2") || n.ends_with(".whl")
+        let is_verifiable_package = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+            (n.ends_with(".conda") || n.ends_with(".tar.bz2") || n.ends_with(".whl"))
+                && !n.starts_with("numpy-")
         });
-        if entry.file_type().is_file() && is_package {
+        if entry.file_type().is_file() && is_verifiable_package {
             let len = fs::metadata(&path).unwrap().len();
             let file = fs::OpenOptions::new().write(true).open(&path).unwrap();
             file.set_len(len / 2).unwrap();
