@@ -875,6 +875,67 @@ async fn test_package_caching(
 
 #[rstest]
 #[tokio::test]
+async fn test_corrupted_cache_entries_are_redownloaded(
+    #[with(PathBuf::from("examples/pypi-wheel-packages/pixi.toml"))] options: Options,
+) {
+    let temp_cache = tempdir().expect("Couldn't create a temp cache dir");
+    let cache_dir = temp_cache.path().to_path_buf();
+
+    // First pack populates the cache.
+    let mut pack_options = options.pack_options.clone();
+    pack_options.cache_dir = Some(cache_dir.clone());
+    let pack_result = pixi_pack::pack(pack_options).await;
+    assert!(pack_result.is_ok(), "{:?}", pack_result);
+    let first_sha256 = sha256_digest_bytes(&options.pack_options.output_file);
+
+    // Truncate every cached conda package and wheel to simulate damaged cache entries.
+    let mut cached_packages = Vec::new();
+    for entry in WalkDir::new(&cache_dir) {
+        let entry = entry.unwrap();
+        let path = entry.path().to_path_buf();
+        let is_package = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+            n.ends_with(".conda") || n.ends_with(".tar.bz2") || n.ends_with(".whl")
+        });
+        if entry.file_type().is_file() && is_package {
+            let len = fs::metadata(&path).unwrap().len();
+            let file = fs::OpenOptions::new().write(true).open(&path).unwrap();
+            file.set_len(len / 2).unwrap();
+            cached_packages.push((path, len));
+        }
+    }
+    assert!(
+        cached_packages
+            .iter()
+            .any(|(p, _)| p.extension().is_some_and(|e| e == "whl")),
+        "Cache should contain at least one wheel"
+    );
+
+    // Second pack must detect the damaged entries, download them again and repair the cache.
+    let temp_dir2 = tempdir().expect("Couldn't create second temp dir");
+    let mut pack_options2 = options.pack_options.clone();
+    pack_options2.cache_dir = Some(cache_dir.clone());
+    let output_file2 = temp_dir2.path().join("environment.tar");
+    pack_options2.output_file = output_file2.clone();
+    let pack_result2 = pixi_pack::pack(pack_options2).await;
+    assert!(pack_result2.is_ok(), "{:?}", pack_result2);
+
+    assert_eq!(
+        first_sha256,
+        sha256_digest_bytes(&output_file2),
+        "Pack output should not be affected by corrupted cache entries"
+    );
+    for (path, len) in cached_packages {
+        assert_eq!(
+            fs::metadata(&path).unwrap().len(),
+            len,
+            "Cache entry {} should have been repaired",
+            path.display()
+        );
+    }
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_mirror_middleware(
     #[with(PathBuf::from("examples/mirror-middleware/pixi.toml"))] options: Options,
 ) {

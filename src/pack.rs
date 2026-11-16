@@ -25,10 +25,10 @@ use rattler_conda_types::{
     ChannelInfo, PackageRecord, RepoData, Subdir,
     package::{CondaArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier},
 };
-use rattler_digest::{HashingWriter, Md5, Sha256};
+use rattler_digest::{HashingWriter, Md5, Sha256, compute_file_digest};
 use rattler_lock::{
-    CondaBinaryData, CondaPackageData, LockFile, LockedPackage, PypiDistributionData,
-    PypiPackageData, UrlOrPath,
+    CondaBinaryData, CondaPackageData, LockFile, LockedPackage, PackageHashes,
+    PypiDistributionData, PypiPackageData, UrlOrPath,
 };
 use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware, S3Middleware,
@@ -729,6 +729,71 @@ where
     Ok(())
 }
 
+/// Check whether the file at `path` matches the expected hash.
+/// SHA-256 is preferred over MD5 when both are available.
+async fn file_matches_hash(path: &Path, expected: &PackageHashes) -> Result<bool> {
+    let path = path.to_path_buf();
+    let expected = expected.clone();
+    tokio::task::spawn_blocking(move || -> Result<bool> {
+        if let Some(sha256) = expected.sha256() {
+            Ok(compute_file_digest::<Sha256>(&path)? == *sha256)
+        } else if let Some(md5) = expected.md5() {
+            Ok(compute_file_digest::<Md5>(&path)? == *md5)
+        } else {
+            Ok(true)
+        }
+    })
+    .await?
+}
+
+/// Try to copy a package from the cache to `output_path`.
+///
+/// Returns `true` if a valid cache entry was used. If the cached file does not match the
+/// expected hash, the entry is removed and `false` is returned so the caller downloads it again.
+async fn copy_from_cache(
+    cache_path: &Path,
+    output_path: &Path,
+    expected_hash: Option<&PackageHashes>,
+) -> Result<bool> {
+    if !cache_path.exists() {
+        return Ok(false);
+    }
+    if let Some(expected_hash) = expected_hash
+        && !file_matches_hash(cache_path, expected_hash).await?
+    {
+        tracing::warn!(
+            "Cached package {} does not match the expected hash, downloading it again",
+            cache_path.display()
+        );
+        fs::remove_file(cache_path).await?;
+        return Ok(false);
+    }
+    tracing::debug!("Using cached package from {}", cache_path.display());
+    fs::copy(cache_path, output_path).await?;
+    Ok(true)
+}
+
+/// Atomically store `source` in the cache at `cache_path`.
+///
+/// The file is first copied to a temporary file in the cache directory and then renamed into
+/// place, so concurrent readers never observe a partially written cache entry.
+async fn store_in_cache(source: &Path, cache_path: &Path) -> Result<()> {
+    let cache_dir = cache_path
+        .parent()
+        .ok_or_else(|| anyhow!("invalid cache path: {}", cache_path.display()))?;
+    create_dir_all(cache_dir).await?;
+    let tmp = tempfile::NamedTempFile::new_in(cache_dir)?;
+    fs::copy(source, tmp.path()).await?;
+    tmp.persist(cache_path).map_err(|e| {
+        anyhow!(
+            "could not write cache entry {}: {}",
+            cache_path.display(),
+            e
+        )
+    })?;
+    Ok(())
+}
+
 /// Download a conda package to a given output directory.
 async fn download_package(
     client: &ClientWithMiddleware,
@@ -744,14 +809,15 @@ async fn download_package(
     let file_name = package.file_name.to_string();
     let output_path = output_dir.join(&file_name);
 
+    let expected_hash =
+        PackageHashes::from_hashes(package.package_record.md5, package.package_record.sha256);
+
     // Check cache first if enabled
     if let Some(cache_dir) = cache_dir {
         let cache_path = cache_dir
             .join(&package.package_record.subdir)
             .join(&file_name);
-        if cache_path.exists() {
-            tracing::debug!("Using cached package from {}", cache_path.display());
-            fs::copy(&cache_path, &output_path).await?;
+        if copy_from_cache(&cache_path, &output_path, expected_hash.as_ref()).await? {
             return Ok(());
         }
     }
@@ -775,6 +841,7 @@ async fn download_package(
             if let Some(expected_sha) = package.package_record.sha256 {
                 let mut dest = HashingWriter::<_, Sha256>::new(dest);
                 write_all_chunk(&mut response, &mut dest).await?;
+                dest.flush().await?;
                 let (_f, hash) = dest.finalize();
                 if hash != expected_sha {
                     anyhow::bail!("Download {file_name} failed, checksum mismatch");
@@ -782,22 +849,25 @@ async fn download_package(
             } else if let Some(expected_md5) = package.package_record.md5 {
                 let mut dest = HashingWriter::<_, Md5>::new(dest);
                 write_all_chunk(&mut response, &mut dest).await?;
+                dest.flush().await?;
                 let (_f, hash) = dest.finalize();
                 if hash != expected_md5 {
                     anyhow::bail!("Download {file_name} failed, checksum mismatch");
                 }
             } else {
                 write_all_chunk(&mut response, &mut dest).await?;
+                // Make sure all data has reached the file before it is read again.
+                dest.flush().await?;
             }
         }
     }
 
     // Save to cache if enabled
     if let Some(cache_dir) = cache_dir {
-        let cache_subdir = cache_dir.join(&package.package_record.subdir);
-        create_dir_all(&cache_subdir).await?;
-        let cache_path = cache_subdir.join(&file_name);
-        fs::copy(&output_path, &cache_path).await?;
+        let cache_path = cache_dir
+            .join(&package.package_record.subdir)
+            .join(&file_name);
+        store_in_cache(&output_path, &cache_path).await?;
     }
 
     Ok(())
@@ -1261,11 +1331,11 @@ async fn download_pypi_package(
             let file_name = url.filename()?.to_string();
             let output_path = output_dir.join(&file_name);
 
+            let expected_hash = package.as_wheel().and_then(|w| w.hash.as_ref());
+
             if let Some(cache_dir) = cache_dir {
                 let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
-                if cache_path.exists() {
-                    tracing::debug!("Using cached package from {}", cache_path.display());
-                    fs::copy(&cache_path, &output_path).await?;
+                if copy_from_cache(&cache_path, &output_path, expected_hash).await? {
                     return Ok(());
                 }
             }
@@ -1275,15 +1345,20 @@ async fn download_pypi_package(
 
             let mut response = client.get(url.clone()).send().await?.error_for_status()?;
 
-            while let Some(chunk) = response.chunk().await? {
-                dest.write_all(&chunk).await?;
+            write_all_chunk(&mut response, &mut dest).await?;
+            // Make sure all data has reached the file before it is read again.
+            dest.flush().await?;
+            drop(dest);
+
+            if let Some(expected_hash) = expected_hash
+                && !file_matches_hash(&output_path, expected_hash).await?
+            {
+                anyhow::bail!("Download {file_name} failed, checksum mismatch");
             }
 
             if let Some(cache_dir) = cache_dir {
-                let cache_subdir = cache_dir.join(PYPI_DIRECTORY_NAME);
-                create_dir_all(&cache_subdir).await?;
-                let cache_path = cache_subdir.join(&file_name);
-                fs::copy(&output_path, &cache_path).await?;
+                let cache_path = cache_dir.join(PYPI_DIRECTORY_NAME).join(&file_name);
+                store_in_cache(&output_path, &cache_path).await?;
             }
         }
     }
