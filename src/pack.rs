@@ -398,8 +398,53 @@ pub async fn pack(options: PackOptions) -> Result<()> {
                     .file_name()
                     .filter(|x| x.ends_with("whl"))
                     .is_some();
+                let is_dot = *location == UrlOrPath::Path(".".into());
+
                 if is_wheel {
                     pypi_packages_from_lockfile.push(pypi_data.clone());
+                } else if is_dot {
+                    eprintln!("building local package");
+
+                    let pkg_dir = Path::new(".");
+                    let manifest_path = pkg_dir.join("pyproject.toml");
+                    let canonical_manifest_path = manifest_path.canonicalize().map_err(|e| {
+                        anyhow!(
+                            "Cannot find manifest file {}: {}",
+                            manifest_path.display(),
+                            e
+                        )
+                    })?;
+
+                    let build_temp_dir = tempfile::tempdir().map_err(|e| {
+                        anyhow!("could not create temporary build directory: {}", e)
+                    })?;
+                    let bar = ProgressBar::new_spinner();
+
+                    bar.set_message(format!("Publishing {}", package_name));
+                    bar.enable_steady_tick(std::time::Duration::from_millis(100));
+
+                    build_local_package(
+                        &canonical_manifest_path,
+                        build_temp_dir.path(),
+                        options.platform.as_str(),
+                    )
+                    .await?;
+                    bar.finish_with_message(format!("✅ Built and published {}", package_name));
+
+                    let built_package = std::fs::read_dir(build_temp_dir.path())
+                        .map_err(|e| anyhow!("Failed to read build directory: {}", e))?
+                        .next()
+                        .ok_or_else(|| anyhow!("Build directory is empty"))?
+                        .map_err(|e| anyhow!("Failed to read directory entry: {}", e))?
+                        .path();
+
+                    anyhow::ensure!(
+                        built_package.extension().and_then(|s| s.to_str()) == Some("conda"),
+                        "Expected built package to be a .conda file, got: {}",
+                        built_package.to_string_lossy()
+                    );
+                    built_source_packages.push(built_package);
+                    _temp_dirs.push(build_temp_dir);
                 } else if options.ignore_pypi_non_wheel {
                     tracing::warn!(
                         "ignoring PyPI package {} since it is not a wheel file",
